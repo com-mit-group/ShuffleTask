@@ -45,6 +45,7 @@ namespace ShuffleTask.Views
                 {
                     var remaining = TimeSpan.FromSeconds(secs);
                     await StartCountdownForCurrentTaskAsync(remaining);
+                    await StartCountdownAsync(remaining, sendNotification: false);
                     return;
                 }
 
@@ -63,11 +64,35 @@ namespace ShuffleTask.Views
             }
 
             await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes), notify: true);
+            await StartCountdownAsync(TimeSpan.FromMinutes(minutes), sendNotification: false);
         }
 
-        public async Task BeginCountdownAsync(int minutes)
+        public Task BeginCountdownAsync(int minutes) =>
+            StartCountdownAsync(TimeSpan.FromMinutes(minutes), sendNotification: true);
+
+        private async Task StartCountdownAsync(TimeSpan remaining, bool sendNotification)
         {
             await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes), notify: true);
+            if (_vm.CurrentTask == null)
+            {
+                return;
+            }
+
+            _timer.Stop();
+            _remaining = remaining;
+            _vm.CountdownText = FormatCountdown(_remaining);
+            PersistState();
+
+            if (_remaining > TimeSpan.Zero)
+            {
+                _timer.Start();
+            }
+
+            if (sendNotification)
+            {
+                int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
+                await _vm.NotifyCurrentTaskAsync(notifyMinutes);
+            }
         }
 
         private async void OnTick(object? sender, EventArgs e)
@@ -126,6 +151,18 @@ namespace ShuffleTask.Views
                 int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
                 await _vm.NotifyCurrentTaskAsync(notifyMinutes);
             }
+        }
+
+        private static string FormatCountdown(TimeSpan remaining)
+        {
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            int minutes = Math.Max(0, (int)remaining.TotalMinutes);
+            int seconds = remaining.Seconds;
+            return $"{minutes:D2}:{seconds:D2}";
         }
 
         private void PersistState()
