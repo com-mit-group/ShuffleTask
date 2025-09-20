@@ -25,11 +25,8 @@ public partial class TasksPage : ContentPage
 
     private async void OnAddClicked(object? sender, EventArgs e)
     {
-        var page = _sp.GetRequiredService<EditTaskPage>();
-        var editVm = _sp.GetRequiredService<EditTaskViewModel>();
-        page.BindingContext = editVm;
+        var (page, editVm) = ResolveEditTaskPage();
         editVm.Task = new TaskItem();
-        editVm.Saved += async (s, e) => await _vm.LoadAsync();
         await Navigation.PushAsync(page);
     }
 
@@ -37,9 +34,7 @@ public partial class TasksPage : ContentPage
     {
         if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
         {
-            var page = _sp.GetRequiredService<EditTaskPage>();
-            var editVm = _sp.GetRequiredService<EditTaskViewModel>();
-            page.BindingContext = editVm;
+            var (page, editVm) = ResolveEditTaskPage();
             // Clone object for editing; only persist on Save
             editVm.Task = new TaskItem
             {
@@ -55,7 +50,6 @@ public partial class TasksPage : ContentPage
                 Paused = t.Paused,
                 CreatedAt = t.CreatedAt
             };
-            editVm.Saved += async (s, e) => await _vm.LoadAsync();
             await Navigation.PushAsync(page);
         }
     }
@@ -76,5 +70,24 @@ public partial class TasksPage : ContentPage
             if (!confirm) return;
             await _vm.DeleteAsync(t);
         }
+    }
+
+    private (EditTaskPage Page, EditTaskViewModel ViewModel) ResolveEditTaskPage()
+    {
+        var page = _sp.GetRequiredService<EditTaskPage>();
+        if (page.BindingContext is EditTaskViewModel existingVm)
+        {
+            existingVm.Saved -= OnEditTaskSaved;
+        }
+
+        var editVm = _sp.GetRequiredService<EditTaskViewModel>();
+        editVm.Saved += OnEditTaskSaved;
+        page.BindingContext = editVm;
+        return (page, editVm);
+    }
+
+    private async void OnEditTaskSaved(object? sender, EventArgs e)
+    {
+        await _vm.LoadAsync();
     }
 }

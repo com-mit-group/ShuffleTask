@@ -33,7 +33,7 @@ public static class MauiProgram
         // ViewModels
         builder.Services.AddSingleton<NowViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
-        builder.Services.AddSingleton<EditTaskViewModel>();
+        builder.Services.AddTransient<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views
@@ -41,7 +41,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();
-        builder.Services.AddSingleton<EditTaskPage>();
+        builder.Services.AddTransient<EditTaskPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();
