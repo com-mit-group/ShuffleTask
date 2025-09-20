@@ -43,7 +43,7 @@ namespace ShuffleTask.Views
                 if (await _vm.LoadTaskByIdAsync(id))
                 {
                     var remaining = TimeSpan.FromSeconds(secs);
-                    await StartCountdownForCurrentTaskAsync(remaining);
+                    await StartCountdownAsync(remaining, sendNotification: false);
                     return;
                 }
 
@@ -60,10 +60,13 @@ namespace ShuffleTask.Views
                 return;
             }
 
-            await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes));
+            await StartCountdownAsync(TimeSpan.FromMinutes(minutes), sendNotification: false);
         }
 
-        private async Task StartCountdownForCurrentTaskAsync(TimeSpan remaining)
+        public Task BeginCountdownAsync(int minutes) =>
+            StartCountdownAsync(TimeSpan.FromMinutes(minutes), sendNotification: true);
+
+        private async Task StartCountdownAsync(TimeSpan remaining, bool sendNotification)
         {
             if (_vm.CurrentTask == null)
             {
@@ -74,23 +77,17 @@ namespace ShuffleTask.Views
             _remaining = remaining;
             _vm.CountdownText = FormatCountdown(_remaining);
             PersistState();
-        }
-
-        public async Task BeginCountdownAsync(int minutes)
-        {
-            _remaining = TimeSpan.FromMinutes(minutes);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
-            PersistState();
-            _timer.Stop();
-            _timer.Start();
 
             if (_remaining > TimeSpan.Zero)
             {
                 _timer.Start();
             }
 
-            int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
-            await _vm.NotifyCurrentTaskAsync(notifyMinutes);
+            if (sendNotification)
+            {
+                int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
+                await _vm.NotifyCurrentTaskAsync(notifyMinutes);
+            }
         }
 
         private async void OnTick(object? sender, EventArgs e)
