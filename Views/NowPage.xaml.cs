@@ -20,6 +20,7 @@ namespace ShuffleTask.Views
 
             _timer = Application.Current?.Dispatcher.CreateTimer() ?? Dispatcher.CreateTimer();
             _timer.Interval = TimeSpan.FromSeconds(1);
+            _timer.IsRepeating = true;
             _timer.Tick += OnTick;
 
             Loaded += NowPage_Loaded;
@@ -57,40 +58,16 @@ namespace ShuffleTask.Views
             if (_vm.CurrentTask == null)
             {
                 // No task available now, do not start timer
+                ResetCountdown();
                 return;
             }
 
-            await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes));
-        }
-
-        private async Task StartCountdownForCurrentTaskAsync(TimeSpan remaining)
-        {
-            if (_vm.CurrentTask == null)
-            {
-                return;
-            }
-
-            _timer.Stop();
-            _remaining = remaining;
-            _vm.CountdownText = FormatCountdown(_remaining);
-            PersistState();
+            await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes), notify: true);
         }
 
         public async Task BeginCountdownAsync(int minutes)
         {
-            _remaining = TimeSpan.FromMinutes(minutes);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
-            PersistState();
-            _timer.Stop();
-            _timer.Start();
-
-            if (_remaining > TimeSpan.Zero)
-            {
-                _timer.Start();
-            }
-
-            int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
-            await _vm.NotifyCurrentTaskAsync(notifyMinutes);
+            await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes), notify: true);
         }
 
         private async void OnTick(object? sender, EventArgs e)
@@ -98,7 +75,7 @@ namespace ShuffleTask.Views
             if (_remaining.TotalSeconds <= 0)
             {
                 _timer.Stop();
-                Preferences.Default.Remove(PrefRemainingSecs);
+                ClearPersistedState();
                 await _vm.TimeUpAsync();
                 await StartShuffleAsync();
                 return;
@@ -121,6 +98,36 @@ namespace ShuffleTask.Views
             return $"{minutes:D2}:{seconds:D2}";
         }
 
+        private async Task StartCountdownForCurrentTaskAsync(TimeSpan remaining, bool notify = false)
+        {
+            if (_vm.CurrentTask == null)
+            {
+                ResetCountdown();
+                return;
+            }
+
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            _timer.Stop();
+            _remaining = remaining;
+            _vm.CountdownText = FormatCountdown(_remaining);
+            PersistState();
+
+            if (_remaining > TimeSpan.Zero)
+            {
+                _timer.Start();
+            }
+
+            if (notify && _remaining > TimeSpan.Zero)
+            {
+                int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
+                await _vm.NotifyCurrentTaskAsync(notifyMinutes);
+            }
+        }
+
         private void PersistState()
         {
             var id = _vm.CurrentTask?.Id ?? string.Empty;
@@ -134,13 +141,18 @@ namespace ShuffleTask.Views
             Preferences.Default.Remove(PrefRemainingSecs);
         }
 
-        private void OnCompleteOrSkip()
+        private void ResetCountdown()
         {
             _timer.Stop();
             _remaining = TimeSpan.Zero;
             _vm.CountdownText = "00:00";
-            _vm.CurrentTask = null;
             ClearPersistedState();
+        }
+
+        private void OnCompleteOrSkip()
+        {
+            _vm.CurrentTask = null;
+            ResetCountdown();
         }
     }
 }
