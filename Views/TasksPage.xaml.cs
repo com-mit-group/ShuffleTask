@@ -75,14 +75,13 @@ public partial class TasksPage : ContentPage
     private (EditTaskPage Page, EditTaskViewModel ViewModel) ResolveEditTaskPage()
     {
         var page = _sp.GetRequiredService<EditTaskPage>();
-        if (page.BindingContext is EditTaskViewModel existingVm)
+        if (page.BindingContext is not EditTaskViewModel editVm)
         {
-            existingVm.Saved -= OnEditTaskSaved;
+            throw new InvalidOperationException("EditTaskPage must have an EditTaskViewModel binding context");
         }
 
-        var editVm = _sp.GetRequiredService<EditTaskViewModel>();
+        editVm.Saved -= OnEditTaskSaved;
         editVm.Saved += OnEditTaskSaved;
-        page.BindingContext = editVm;
         return (page, editVm);
     }
 
