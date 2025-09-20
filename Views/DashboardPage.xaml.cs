@@ -4,16 +4,16 @@ using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views
 {
-    public partial class NowPage : ContentPage
+    public partial class DashboardPage : ContentPage
     {
-        private readonly NowViewModel _vm;
+        private readonly DashboardViewModel _vm;
         private readonly IDispatcherTimer _timer;
         private TimeSpan _remaining;
 
         private const string PrefTaskId = "pref.currentTaskId";
         private const string PrefRemainingSecs = "pref.remainingSecs";
 
-        public NowPage(NowViewModel vm)
+        public DashboardPage(DashboardViewModel vm)
         {
             InitializeComponent();
             BindingContext = _vm = vm;
@@ -24,7 +24,7 @@ namespace ShuffleTask.Views
 
             Loaded += NowPage_Loaded;
 
-            ShuffleButton.Clicked += async (s, e) => await StartShuffleAsync();
+            //ShuffleButton.Clicked += async (s, e) => await StartShuffleAsync();
 
             // Stop countdown and clear persisted state when user completes or skips
             _vm.DoneOccurred += (_, __) => OnCompleteOrSkip();
@@ -49,7 +49,7 @@ namespace ShuffleTask.Views
 
         private async Task StartShuffleAsync()
         {
-            var minutes = await _vm.ShuffleAsync(DateTime.Now);
+            var minutes = await _vm.Shuffle();
             if (_vm.CurrentTask == null)
             {
                 // No task available now, do not start timer

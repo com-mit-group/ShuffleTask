@@ -31,13 +31,13 @@ public static class MauiProgram
         builder.Services.AddSingleton(sp => new SchedulerService(deterministic: false));
 
         // ViewModels
-        builder.Services.AddSingleton<NowViewModel>();
+        builder.Services.AddSingleton<DashboardViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views
-        builder.Services.AddSingleton<NowPage>();
+        builder.Services.AddSingleton<DashboardPage>();
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();

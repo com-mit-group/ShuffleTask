@@ -25,5 +25,6 @@ public enum AllowedPeriod
 {
     Any,
     Work,
+    OffWork,
     Off
 }

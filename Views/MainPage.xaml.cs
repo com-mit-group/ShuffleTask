@@ -1,8 +1,8 @@
 namespace ShuffleTask.Views;
 
-public partial class MainPage : Microsoft.Maui.Controls.TabbedPage
+public partial class MainPage : TabbedPage
 {
-    public MainPage(NowPage nowPage, TasksPage tasksPage, SettingsPage settingsPage)
+    public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
     {
         InitializeComponent();
 
@@ -10,9 +10,9 @@ public partial class MainPage : Microsoft.Maui.Controls.TabbedPage
         Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific.TabbedPage.SetIsSwipePagingEnabled(this, false);
 #endif
 
-        Children.Add(nowPage);
-        Children.Add(new Microsoft.Maui.Controls.NavigationPage(tasksPage) { Title = "Tasks" });
-        Children.Add(new Microsoft.Maui.Controls.NavigationPage(settingsPage) { Title = "Settings" });
+        Children.Add(new NavigationPage(dashboardPage));
+        Children.Add(new NavigationPage(tasksPage));
+        Children.Add(new NavigationPage(settingsPage));
         Title = "ShuffleTask";
     }
 }

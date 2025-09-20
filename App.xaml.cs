@@ -7,8 +7,8 @@ namespace ShuffleTask;
 
 public partial class App : Application
 {
-    private readonly NowPage _nowPage;
-    private readonly NowViewModel _nowVm;
+    private readonly DashboardPage _nowPage;
+    private readonly DashboardViewModel _nowVm;
     private readonly StorageService _storage;
     private readonly SchedulerService _scheduler;
 
@@ -17,10 +17,10 @@ public partial class App : Application
     private const string PrefTaskId = "pref.currentTaskId";
     private const string PrefRemainingSecs = "pref.remainingSecs";
 
-    public App(MainPage mainPage, NowPage nowPage, NowViewModel nowVm, StorageService storage, SchedulerService scheduler)
+    public App(MainPage mainPage, DashboardPage nowPage, DashboardViewModel nowVm, StorageService storage, SchedulerService scheduler)
     {
         InitializeComponent();
-        MainPage = mainPage;
+        MainPage = new AppShell();
         _nowPage = nowPage;
         _nowVm = nowVm;
         _storage = storage;

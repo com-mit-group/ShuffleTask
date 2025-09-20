@@ -5,7 +5,7 @@ using ShuffleTask.Services;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class NowViewModel : ObservableObject
+public partial class DashboardViewModel : ObservableObject
 {
     private readonly StorageService _storage;
     private readonly SchedulerService _scheduler;
@@ -14,7 +14,7 @@ public partial class NowViewModel : ObservableObject
     public event EventHandler? DoneOccurred;
     public event EventHandler? SkipOccurred;
 
-    public NowViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifier)
+    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifier)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -22,13 +22,13 @@ public partial class NowViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private TaskItem? currentTask;
+    private TaskItem? _currentTask;
 
     [ObservableProperty]
-    private string countdownText = "60:00";
+    private string _countdownText = "60:00";
 
     [ObservableProperty]
-    private bool isRunning;
+    private bool _isRunning;
 
     public AppSettings? Settings { get; private set; }
 
@@ -39,11 +39,13 @@ public partial class NowViewModel : ObservableObject
         await _notifier.InitializeAsync();
     }
 
-    public async Task<int> ShuffleAsync(DateTime nowLocal)
+    [RelayCommand]
+    public async Task<int> Shuffle()
     {
+
         List<TaskItem> tasks = await _storage.GetTasksAsync();
         Settings ??= await _storage.GetSettingsAsync();
-        TaskItem? picked = _scheduler.PickNextTask(tasks, Settings, nowLocal);
+        TaskItem? picked = _scheduler.PickNextTask(tasks, Settings, DateTime.Now);
         CurrentTask = picked;
         int minutes = Settings.ReminderMinutes > 0 ? Settings.ReminderMinutes : 60;
         return minutes;
@@ -65,7 +67,7 @@ public partial class NowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public async Task DoneAsync()
+    public async Task Done()
     {
         if (CurrentTask == null) return;
         await _storage.MarkTaskDoneAsync(CurrentTask.Id);
@@ -73,16 +75,9 @@ public partial class NowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public Task SnoozeAsync()
+    public Task Snooze()
     {
         // Snooze is handled via notifications UI; here we can treat as Skip for flow
-        SkipOccurred?.Invoke(this, EventArgs.Empty);
-        return Task.CompletedTask;
-    }
-
-    [RelayCommand]
-    public Task SkipAsync()
-    {
         SkipOccurred?.Invoke(this, EventArgs.Empty);
         return Task.CompletedTask;
     }
