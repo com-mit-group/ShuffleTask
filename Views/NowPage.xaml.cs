@@ -40,10 +40,14 @@ namespace ShuffleTask.Views
             var id = Preferences.Default.Get(PrefTaskId, string.Empty);
             if (secs > 0 && !string.IsNullOrEmpty(id))
             {
-                _remaining = TimeSpan.FromSeconds(secs);
-                _vm.CountdownText = $"{_remaining:mm\\:ss}";
-                _timer.Start();
-                return;
+                if (await _vm.LoadTaskByIdAsync(id))
+                {
+                    var remaining = TimeSpan.FromSeconds(secs);
+                    await StartCountdownForCurrentTaskAsync(remaining);
+                    return;
+                }
+
+                ClearPersistedState();
             }
         }
 
@@ -56,7 +60,20 @@ namespace ShuffleTask.Views
                 return;
             }
 
-            await BeginCountdownAsync(minutes);
+            await StartCountdownForCurrentTaskAsync(TimeSpan.FromMinutes(minutes));
+        }
+
+        private async Task StartCountdownForCurrentTaskAsync(TimeSpan remaining)
+        {
+            if (_vm.CurrentTask == null)
+            {
+                return;
+            }
+
+            _timer.Stop();
+            _remaining = remaining;
+            _vm.CountdownText = FormatCountdown(_remaining);
+            PersistState();
         }
 
         public async Task BeginCountdownAsync(int minutes)
@@ -67,7 +84,13 @@ namespace ShuffleTask.Views
             _timer.Stop();
             _timer.Start();
 
-            await _vm.NotifyCurrentTaskAsync(minutes);
+            if (_remaining > TimeSpan.Zero)
+            {
+                _timer.Start();
+            }
+
+            int notifyMinutes = Math.Max(1, (int)Math.Ceiling(_remaining.TotalMinutes));
+            await _vm.NotifyCurrentTaskAsync(notifyMinutes);
         }
 
         private async void OnTick(object? sender, EventArgs e)
@@ -82,8 +105,20 @@ namespace ShuffleTask.Views
             }
 
             _remaining -= TimeSpan.FromSeconds(1);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
+            _vm.CountdownText = FormatCountdown(_remaining);
             PersistState();
+        }
+
+        private static string FormatCountdown(TimeSpan remaining)
+        {
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            int minutes = Math.Max(0, (int)remaining.TotalMinutes);
+            int seconds = remaining.Seconds;
+            return $"{minutes:D2}:{seconds:D2}";
         }
 
         private void PersistState()
