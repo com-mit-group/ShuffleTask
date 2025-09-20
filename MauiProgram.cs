@@ -8,6 +8,11 @@ namespace ShuffleTask;
 
 public static class MauiProgram
 {
+    private static IServiceProvider? _services;
+
+    public static IServiceProvider Services =>
+        _services ?? throw new InvalidOperationException("Maui services have not been initialized yet.");
+
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
@@ -47,6 +52,9 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        return builder.Build();
+        var app = builder.Build();
+        _services = app.Services;
+
+        return app;
     }
 }
