@@ -49,6 +49,19 @@ public partial class NowViewModel : ObservableObject
         return minutes;
     }
 
+    public async Task<bool> LoadTaskByIdAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            CurrentTask = null;
+            return false;
+        }
+
+        TaskItem? task = await _storage.GetTaskAsync(id);
+        CurrentTask = task;
+        return task != null;
+    }
+
     public async Task NotifyCurrentTaskAsync(int minutes)
     {
         Settings ??= await _storage.GetSettingsAsync();
