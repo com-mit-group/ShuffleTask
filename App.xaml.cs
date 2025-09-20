@@ -20,7 +20,7 @@ public partial class App : Application
     public App(MainPage mainPage, DashboardPage nowPage, DashboardViewModel nowVm, StorageService storage, SchedulerService scheduler)
     {
         InitializeComponent();
-        MainPage = new AppShell();
+        MainPage = mainPage;
         _nowPage = nowPage;
         _nowVm = nowVm;
         _storage = storage;
@@ -73,8 +73,7 @@ public partial class App : Application
         var persistedId = Preferences.Default.Get(PrefTaskId, string.Empty);
         if (persistedSecs <= 0 || string.IsNullOrEmpty(persistedId))
         {
-            if (MainPage is TabbedPage tabs)
-                tabs.CurrentPage = _nowPage;
+            EnsureDashboardTabActive();
         }
     }
 
@@ -120,11 +119,41 @@ public partial class App : Application
             return;
         }
 
-        if (MainPage is TabbedPage tabs)
-            tabs.CurrentPage = _nowPage;
+        EnsureDashboardTabActive();
 
         await _nowVm.InitializeAsync();
         _nowVm.CurrentTask = picked;
         await _nowPage.BeginCountdownAsync(settings.ReminderMinutes);
+    }
+
+    private void EnsureDashboardTabActive()
+    {
+        if (MainPage is not TabbedPage tabs)
+            return;
+
+        Page? target = null;
+
+        foreach (var child in tabs.Children)
+        {
+            if (ReferenceEquals(child, _nowPage))
+            {
+                target = child;
+                break;
+            }
+
+            if (child is NavigationPage nav)
+            {
+                if (ReferenceEquals(nav.CurrentPage, _nowPage) || ReferenceEquals(nav.RootPage, _nowPage))
+                {
+                    target = nav;
+                    break;
+                }
+            }
+        }
+
+        if (target != null)
+        {
+            tabs.CurrentPage = target;
+        }
     }
 }
