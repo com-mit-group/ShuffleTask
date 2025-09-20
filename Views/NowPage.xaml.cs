@@ -56,9 +56,15 @@ namespace ShuffleTask.Views
                 return;
             }
 
+            await BeginCountdownAsync(minutes);
+        }
+
+        public async Task BeginCountdownAsync(int minutes)
+        {
             _remaining = TimeSpan.FromMinutes(minutes);
             _vm.CountdownText = $"{_remaining:mm\\:ss}";
             PersistState();
+            _timer.Stop();
             _timer.Start();
 
             await _vm.NotifyCurrentTaskAsync(minutes);
