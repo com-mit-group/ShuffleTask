@@ -125,6 +125,6 @@ public partial class App : Application
 
         await _nowVm.InitializeAsync();
         _nowVm.CurrentTask = picked;
-        _nowVm.CountdownText = $"{TimeSpan.FromMinutes(settings.ReminderMinutes):mm\\:ss}";
+        await _nowPage.BeginCountdownAsync(settings.ReminderMinutes);
     }
 }
