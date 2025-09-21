@@ -5,11 +5,26 @@ using ShuffleTask.Models;
 namespace ShuffleTask.Services;
 
 /// <summary>
-/// Provides a lightweight in-app notification fallback that does not rely on external plugins.
+/// Provides cross-platform notifications using platform primitives with a XAML alert fallback.
 /// </summary>
-public class NotificationService
+public partial class NotificationService
 {
-    public Task InitializeAsync() => Task.CompletedTask;
+    private readonly INotificationPlatform _platform;
+
+    public NotificationService()
+    {
+        INotificationPlatform platform = new DefaultNotificationPlatform();
+        InitializePlatform(ref platform);
+        _platform = platform;
+    }
+
+    /// <summary>
+    /// Allows platform-specific partial implementations to provide an OS-backed notification engine.
+    /// </summary>
+    /// <param name="platform">Reference to the platform implementation that may be replaced.</param>
+    partial void InitializePlatform(ref INotificationPlatform platform);
+
+    public Task InitializeAsync() => _platform.InitializeAsync();
 
     public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings)
         => NotifyTaskAsync(task, minutes, settings, delay: TimeSpan.Zero);
@@ -21,19 +36,10 @@ public class NotificationService
             return;
         }
 
-        if (delay > TimeSpan.Zero)
-        {
-            try
-            {
-                await Task.Delay(delay);
-            }
-            catch (TaskCanceledException)
-            {
-                return;
-            }
-        }
+        string title = "Reminder";
+        string message = $"Time for: {task.Title}\nYou have {minutes} minutes.";
 
-        await ShowAlertAsync("Reminder", $"Time for: {task.Title}\nYou have {minutes} minutes.");
+        await _platform.NotifyAsync(title, message, delay, settings.SoundOn);
     }
 
     public async Task ShowToastAsync(string title, string message, AppSettings settings)
@@ -43,7 +49,7 @@ public class NotificationService
             return;
         }
 
-        await ShowAlertAsync(title, message);
+        await _platform.ShowToastAsync(title, message, settings.SoundOn);
     }
 
     private static async Task ShowAlertAsync(string title, string message)
@@ -65,5 +71,39 @@ public class NotificationService
                 // UI might be mid-transition; ignore notification failures.
             }
         });
+    }
+
+    private interface INotificationPlatform
+    {
+        Task InitializeAsync();
+
+        Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound);
+
+        Task ShowToastAsync(string title, string message, bool playSound);
+    }
+
+    private sealed class DefaultNotificationPlatform : INotificationPlatform
+    {
+        public Task InitializeAsync() => Task.CompletedTask;
+
+        public async Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                try
+                {
+                    await Task.Delay(delay);
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+            }
+
+            await ShowAlertAsync(title, message);
+        }
+
+        public Task ShowToastAsync(string title, string message, bool playSound)
+            => ShowAlertAsync(title, message);
     }
 }
