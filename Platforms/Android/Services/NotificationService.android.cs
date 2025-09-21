@@ -93,7 +93,7 @@ public partial class NotificationService
             .SetContentTitle(title)
             .SetContentText(message)
             .SetStyle(new NotificationCompat.BigTextStyle().BigText(message))
-            .SetSmallIcon(Resource.Mipmap.appicon)
+            .SetSmallIcon(Android.Resource.Drawable.IcDialogInfo)
             .SetAutoCancel(true)
             .SetPriority(NotificationCompat.PriorityHigh)
             .SetCategory(NotificationCompat.CategoryReminder)
