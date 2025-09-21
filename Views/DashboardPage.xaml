@@ -45,7 +45,7 @@
                 <Label Grid.Row="2"
                        FontSize="12"
                        HorizontalOptions="Center"
-                       Text="{Binding CurrentTask.Deadline, StringFormat='Deadline / Repeating schedule: {0:yyyy-MM-dd HH:mm}', TargetNullValue='No deadline'}" />
+                       Text="{Binding CurrentTaskDeadlineText}" />
             </Grid>
         </Border>
 

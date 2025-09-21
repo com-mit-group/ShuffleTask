@@ -25,6 +25,21 @@ public partial class DashboardViewModel : ObservableObject
     private TaskItem? _currentTask;
 
     [ObservableProperty]
+    private string _currentTaskDeadlineText = "No deadline";
+
+    partial void OnCurrentTaskChanged(TaskItem? value)
+    {
+        if (value?.Deadline is DateTime deadline)
+        {
+            CurrentTaskDeadlineText = $"Deadline / Repeating schedule: {deadline:yyyy-MM-dd HH:mm}";
+        }
+        else
+        {
+            CurrentTaskDeadlineText = "No deadline";
+        }
+    }
+
+    [ObservableProperty]
     private string _countdownText = "60:00";
 
     [ObservableProperty]

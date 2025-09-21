@@ -1,3 +1,4 @@
+using Microsoft.Maui.Controls;
 using ShuffleTask.Models;
 using ShuffleTask.ViewModels;
 
@@ -35,7 +36,7 @@ public partial class TasksPage : ContentPage
 
     private async void OnEditSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem t })
         {
             var page = _sp.GetRequiredService<EditTaskPage>();
             var editVm = _sp.GetRequiredService<EditTaskViewModel>();
@@ -62,7 +63,7 @@ public partial class TasksPage : ContentPage
 
     private async void OnPauseResumeSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem t })
         {
             await _vm.PauseResumeAsync(t);
         }
@@ -70,7 +71,7 @@ public partial class TasksPage : ContentPage
 
     private async void OnDeleteSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem t })
         {
             bool confirm = await DisplayAlert("Delete Task", $"Delete '{t.Title}'?", "Delete", "Cancel");
             if (!confirm) return;
