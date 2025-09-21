@@ -1,146 +1,109 @@
-using Plugin.LocalNotification;
-#if ANDROID
-using Plugin.LocalNotification.AndroidOption;
-#endif
-using ShuffleTask.Models;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
+using ShuffleTask.Models;
 
 namespace ShuffleTask.Services;
 
-public class NotificationService
+/// <summary>
+/// Provides cross-platform notifications using platform primitives with a XAML alert fallback.
+/// </summary>
+public partial class NotificationService
 {
-    private bool _initialized;
+    private readonly INotificationPlatform _platform;
 
-    public async Task InitializeAsync()
+    public NotificationService()
     {
-        if (_initialized) return;
-
-        try
-        {
-#if WINDOWS
-            // On Windows, avoid initializing Plugin.LocalNotification to prevent WinRT/Toolkit exceptions.
-            // We'll fallback to simple in-app alerts for notifications.
-#else
-            await LocalNotificationCenter.Current.RequestNotificationPermission();
-#endif
-        }
-        catch { }
-
-#if ANDROID
-        IList<NotificationChannelRequest> channels = [new NotificationChannelRequest
-        {
-            Id = "shuffletask.default",
-            Name = "ShuffleTask",
-            Importance = AndroidImportance.Default
-        }];
-        LocalNotificationCenter.CreateNotificationChannels(channels);
-#endif
-
-        _initialized = true;
+        INotificationPlatform platform = new DefaultNotificationPlatform();
+        InitializePlatform(ref platform);
+        _platform = platform;
     }
 
-    private int? _lastNotificationId;
+    /// <summary>
+    /// Allows platform-specific partial implementations to provide an OS-backed notification engine.
+    /// </summary>
+    /// <param name="platform">Reference to the platform implementation that may be replaced.</param>
+    partial void InitializePlatform(ref INotificationPlatform platform);
 
-    public Task NotifyTaskAsync(TaskItem t, int minutes, AppSettings settings)
-        => NotifyTaskAsync(t, minutes, settings, delay: TimeSpan.Zero);
+    public Task InitializeAsync() => _platform.InitializeAsync();
 
-    public async Task NotifyTaskAsync(TaskItem t, int minutes, AppSettings settings, TimeSpan delay)
+    public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings)
+        => NotifyTaskAsync(task, minutes, settings, delay: TimeSpan.Zero);
+
+    public async Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings, TimeSpan delay)
     {
-        await InitializeAsync();
-
-#if WINDOWS
-        // Fallback to an in-app alert on Windows to avoid WinRT exceptions from toast APIs.
-        if (Application.Current?.MainPage != null)
+        if (!settings.EnableNotifications)
         {
-            await MainThread.InvokeOnMainThreadAsync(async () =>
-            {
-                try
-                {
-                    await Application.Current.MainPage.DisplayAlert(
-                        "Reminder",
-                        $"Time for: {t.Title}\nYou have {minutes} minutes.",
-                        "OK");
-                }
-                catch { }
-            });
-        }
-        return;
-#else
-        // Cancel previous to avoid duplicates
-        if (_lastNotificationId.HasValue)
-        {
-            LocalNotificationCenter.Current.Cancel(_lastNotificationId.Value);
-            _lastNotificationId = null;
+            return;
         }
 
-        int id = Math.Abs(t.Id.GetHashCode());
-        var request = new NotificationRequest
-        {
-            NotificationId = id,
-            Title = $"Time for: {t.Title}",
-            Description = $"You have {minutes} minutes.",
-            ReturningData = t.Id,
-            CategoryType = NotificationCategoryType.Reminder,
-            Schedule = new NotificationRequestSchedule
-            {
-                NotifyTime = DateTime.Now.Add(delay)
-            }
-        };
+        string title = "Reminder";
+        string message = $"Time for: {task.Title}\nYou have {minutes} minutes.";
 
-        if (!settings.SoundOn)
-        {
-            request.Sound = string.Empty; // mute
-        }
-
-        await LocalNotificationCenter.Current.Show(request);
-        _lastNotificationId = id;
-#endif
+        await _platform.NotifyAsync(title, message, delay, settings.SoundOn);
     }
 
     public async Task ShowToastAsync(string title, string message, AppSettings settings)
     {
-        await InitializeAsync();
-
-#if WINDOWS
-        // Fallback to in-app alert on Windows
-        if (Application.Current?.MainPage != null)
+        if (!settings.EnableNotifications)
         {
-            await MainThread.InvokeOnMainThreadAsync(async () =>
+            return;
+        }
+
+        await _platform.ShowToastAsync(title, message, settings.SoundOn);
+    }
+
+    private static async Task ShowAlertAsync(string title, string message)
+    {
+        var page = Application.Current?.MainPage;
+        if (page == null)
+        {
+            return;
+        }
+
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            try
+            {
+                await page.DisplayAlert(title, message, "OK");
+            }
+            catch
+            {
+                // UI might be mid-transition; ignore notification failures.
+            }
+        });
+    }
+
+    private interface INotificationPlatform
+    {
+        Task InitializeAsync();
+
+        Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound);
+
+        Task ShowToastAsync(string title, string message, bool playSound);
+    }
+
+    private sealed class DefaultNotificationPlatform : INotificationPlatform
+    {
+        public Task InitializeAsync() => Task.CompletedTask;
+
+        public async Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
+        {
+            if (delay > TimeSpan.Zero)
             {
                 try
                 {
-                    await Application.Current.MainPage.DisplayAlert(title, message, "OK");
+                    await Task.Delay(delay);
                 }
-                catch { }
-            });
-        }
-        return;
-#else
-        // Cancel previous toast to avoid stacking
-        if (_lastNotificationId.HasValue)
-        {
-            LocalNotificationCenter.Current.Cancel(_lastNotificationId.Value);
-            _lastNotificationId = null;
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+            }
+
+            await ShowAlertAsync(title, message);
         }
 
-        int id = Math.Abs((title + message).GetHashCode());
-        var request = new NotificationRequest
-        {
-            NotificationId = id,
-            Title = title,
-            Description = message,
-            CategoryType = NotificationCategoryType.Reminder,
-            Schedule = new NotificationRequestSchedule { NotifyTime = DateTime.Now }
-        };
-
-        if (!settings.SoundOn)
-        {
-            request.Sound = string.Empty; // mute
-        }
-
-        await LocalNotificationCenter.Current.Show(request);
-        _lastNotificationId = id;
-#endif
+        public Task ShowToastAsync(string title, string message, bool playSound)
+            => ShowAlertAsync(title, message);
     }
 }
