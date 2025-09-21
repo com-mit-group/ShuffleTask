@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using Plugin.LocalNotification;
 using ShuffleTask.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
@@ -18,11 +17,6 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>();
-
-#if !WINDOWS
-        // Only initialize Plugin.LocalNotification on non-Windows platforms
-        builder.UseLocalNotification();
-#endif
 
         builder.ConfigureFonts(fonts =>
         {
