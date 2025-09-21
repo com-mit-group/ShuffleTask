@@ -1,38 +1,95 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              x:Class="ShuffleTask.Views.TasksPage"
+             x:DataType="vm:MainViewModel"
              Title="Tasks">
     <ContentPage.ToolbarItems>
-        <ToolbarItem x:Name="AddToolbar" Text="+" Priority="0" Order="Primary" />
+        <ToolbarItem x:Name="AddToolbar"
+                     Order="Primary"
+                     Priority="0"
+                     Text="+" />
     </ContentPage.ToolbarItems>
 
     <CollectionView x:Name="TasksList"
                     ItemsSource="{Binding TaskRows}"
                     SelectionMode="None">
         <CollectionView.EmptyView>
-            <VerticalStackLayout Padding="24" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
-                <Label Text="No tasks yet" FontSize="18" />
-                <Label Text="Tap + to add your first task" FontSize="14" />
-            </VerticalStackLayout>
+            <Grid Padding="24"
+                  RowSpacing="12"
+                  HorizontalOptions="Center"
+                  VerticalOptions="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0"
+                       FontSize="18"
+                       HorizontalTextAlignment="Center"
+                       Text="No tasks yet" />
+                <Label Grid.Row="1"
+                       FontSize="14"
+                       HorizontalTextAlignment="Center"
+                       Text="Tap + to add your first task" />
+            </Grid>
         </CollectionView.EmptyView>
         <CollectionView.ItemTemplate>
-            <DataTemplate>
+            <DataTemplate x:DataType="vm:TaskRow">
                 <SwipeView>
                     <SwipeView.RightItems>
                         <SwipeItems Mode="Reveal">
-                            <SwipeItem Text="Edit" BackgroundColor="#2d9cdb" CommandParameter="{Binding Item}" Invoked="OnEditSwipe" />
-                            <SwipeItem Text="Pause/Resume" BackgroundColor="#f2c94c" CommandParameter="{Binding Item}" Invoked="OnPauseResumeSwipe" />
-                            <SwipeItem Text="Delete" BackgroundColor="#eb5757" CommandParameter="{Binding Item}" Invoked="OnDeleteSwipe" />
+                            <SwipeItem Text="Edit"
+                                       BackgroundColor="#2d9cdb"
+                                       CommandParameter="{Binding Item}"
+                                       Invoked="OnEditSwipe" />
+                            <SwipeItem Text="Pause/Resume"
+                                       BackgroundColor="#f2c94c"
+                                       CommandParameter="{Binding Item}"
+                                       Invoked="OnPauseResumeSwipe" />
+                            <SwipeItem Text="Delete"
+                                       BackgroundColor="#eb5757"
+                                       CommandParameter="{Binding Item}"
+                                       Invoked="OnDeleteSwipe" />
                         </SwipeItems>
                     </SwipeView.RightItems>
-                    <Grid Padding="12" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" >
-                        <Label Grid.Row="0" Grid.ColumnSpan="2" Text="{Binding Item.Title}" FontSize="18" FontAttributes="Bold" />
-                        <HorizontalStackLayout Grid.Row="1" Spacing="6">
-                            <Border StrokeShape="RoundRectangle 8"><Label Margin="6,2" Text="{Binding RepeatChip}"/></Border>
-                            <Border StrokeShape="RoundRectangle 8"><Label Margin="6,2" Text="{Binding AllowedChip}"/></Border>
-                        </HorizontalStackLayout>
-                        <Label Grid.Row="2" Text="{Binding NextDue}" FontSize="12" TextColor="Gray" />
+                    <Grid Padding="12"
+                          RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Label Grid.Row="0"
+                               FontSize="18"
+                               FontAttributes="Bold"
+                               Text="{Binding Item.Title}" />
+
+                        <Grid Grid.Row="1"
+                              ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0"
+                                    StrokeShape="RoundRectangle 8">
+                                <Label Margin="6,2"
+                                       Text="{Binding RepeatChip}" />
+                            </Border>
+                            <Border Grid.Column="1"
+                                    StrokeShape="RoundRectangle 8">
+                                <Label Margin="6,2"
+                                       Text="{Binding AllowedChip}" />
+                            </Border>
+                        </Grid>
+
+                        <Label Grid.Row="2"
+                               FontSize="12"
+                               Text="{Binding NextDue}"
+                               TextColor="Gray" />
                     </Grid>
                 </SwipeView>
             </DataTemplate>

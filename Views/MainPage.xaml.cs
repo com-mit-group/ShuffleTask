@@ -9,11 +9,7 @@ public partial class MainPage : TabbedPage
     public MainPage()
     {
         InitializeComponent();
-
-        if (!TryInitializeFromServices())
-        {
-            Loaded += OnLoadedResolveServices;
-        }
+        TryInitializeFromServices();
     }
 
     public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
@@ -22,16 +18,13 @@ public partial class MainPage : TabbedPage
         ConfigureTabs(dashboardPage, tasksPage, settingsPage);
     }
 
-    private void OnLoadedResolveServices(object? sender, EventArgs e)
-    {
-        if (TryInitializeFromServices())
-        {
-            Loaded -= OnLoadedResolveServices;
-        }
-    }
-
     private bool TryInitializeFromServices()
     {
+        if (_tabsInitialized)
+        {
+            return true;
+        }
+
         IServiceProvider? services = ResolveServiceProvider();
         if (services == null)
         {
@@ -44,11 +37,23 @@ public partial class MainPage : TabbedPage
 
         if (dashboardPage == null || tasksPage == null || settingsPage == null)
         {
-            throw new InvalidOperationException("Failed to resolve required services for MainPage.");
+            return false;
         }
 
         ConfigureTabs(dashboardPage, tasksPage, settingsPage);
         return true;
+    }
+
+    protected override void OnHandlerChanged()
+    {
+        base.OnHandlerChanged();
+        TryInitializeFromServices();
+    }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        TryInitializeFromServices();
     }
 
     private static IServiceProvider? ResolveServiceProvider()

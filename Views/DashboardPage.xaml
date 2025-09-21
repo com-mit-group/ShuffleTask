@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
@@ -6,28 +7,84 @@
              x:DataType="vm:DashboardViewModel"
              Title="Dashboard">
 
-    <Grid RowDefinitions="Auto,Auto,*" Padding="24" RowSpacing="24" >
+    <Grid Padding="24"
+          RowSpacing="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <!-- Large card container -->
-        <Grid RowDefinitions="Auto,Auto,*" Grid.Row="0" Padding="18" BackgroundColor="{StaticResource Gray100}">
-            <Label Text="{Binding CurrentTask.Title}" FontSize="28" Padding="12" BackgroundColor="#E6D078" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" LineBreakMode="WordWrap" />
+        <!-- Highlight the current task inside a simple card -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Gray100}"
+                Padding="18">
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                <!-- Description block -->
-            <Label Grid.Row="1" Text="{Binding CurrentTask.Description}" FontSize="16" LineBreakMode="WordWrap" Padding="12" BackgroundColor="#E6D078" HeightRequest="160" />
+                <Label FontSize="28"
+                       LineBreakMode="WordWrap"
+                       Padding="12"
+                       Text="{Binding CurrentTask.Title}"
+                       BackgroundColor="#E6D078"
+                       HorizontalTextAlignment="Center"
+                       VerticalTextAlignment="Center" />
 
-                <!-- Deadline / schedule -->
-            <Label Grid.Row="2" Text="{Binding CurrentTask.Deadline, StringFormat='Deadline / Repeating schedule: {0:yyyy-MM-dd HH:mm}', TargetNullValue='No deadline'}" FontSize="12" HorizontalOptions="Center" />
+                <Label Grid.Row="1"
+                       FontSize="16"
+                       LineBreakMode="WordWrap"
+                       Padding="12"
+                       Text="{Binding CurrentTask.Description}"
+                       BackgroundColor="#E6D078"
+                       HeightRequest="160" />
 
+                <Label Grid.Row="2"
+                       FontSize="12"
+                       HorizontalOptions="Center"
+                       Text="{Binding CurrentTask.Deadline, StringFormat='Deadline / Repeating schedule: {0:yyyy-MM-dd HH:mm}', TargetNullValue='No deadline'}" />
+            </Grid>
+        </Border>
+
+        <Label Grid.Row="1"
+               FontSize="64"
+               HorizontalOptions="Center"
+               Text="{Binding CountdownText}" />
+
+        <Grid Grid.Row="2"
+              ColumnSpacing="12"
+              HorizontalOptions="Center"
+              Padding="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    WidthRequest="110"
+                    Command="{Binding DoneCommand}"
+                    Text="Done"
+                    BackgroundColor="#E6D078"
+                    TextColor="Black" />
+
+            <Button Grid.Column="1"
+                    WidthRequest="110"
+                    Command="{Binding SnoozeCommand}"
+                    Text="Snooze"
+                    BackgroundColor="{StaticResource Gray200}"
+                    TextColor="Black" />
+
+            <Button Grid.Column="2"
+                    WidthRequest="110"
+                    x:Name="ShuffleButton"
+                    Command="{Binding ShuffleCommand}"
+                    Text="Shuffle"
+                    BackgroundColor="{StaticResource Gray200}"
+                    TextColor="Black" />
         </Grid>
-
-        <!-- Timer centered -->
-        <Label Grid.Row="1" Text="{Binding CountdownText}" FontSize="64" HorizontalOptions="Center" />
-
-        <!-- Buttons row - Done highlighted, others neutral -->
-        <HorizontalStackLayout Grid.Row="2" Spacing="12" HorizontalOptions="Center" Padding="6">
-            <Button Text="Done" Command="{Binding DoneCommand}" BackgroundColor="#E6D078" TextColor="Black" WidthRequest="110" />
-            <Button Text="Snooze" Command="{Binding SnoozeCommand}" BackgroundColor="{StaticResource Gray200}" TextColor="Black" WidthRequest="110" />
-            <Button Text="Shuffle" x:Name="ShuffleButton" Command="{Binding ShuffleCommand}"  BackgroundColor="{StaticResource Gray200}" TextColor="Black" WidthRequest="110" />
-        </HorizontalStackLayout>
     </Grid>
 </ContentPage>
