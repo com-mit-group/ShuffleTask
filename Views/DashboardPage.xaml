@@ -26,8 +26,8 @@
         <!-- Buttons row - Done highlighted, others neutral -->
         <HorizontalStackLayout Grid.Row="2" Spacing="12" HorizontalOptions="Center" Padding="6">
             <Button Text="Done" Command="{Binding DoneCommand}" BackgroundColor="#E6D078" TextColor="Black" WidthRequest="110" />
-            <Button Text="Snooze" Command="{Binding SnoozeCommand}" BackgroundColor="{StaticResource Gray200Brush}" TextColor="Black" WidthRequest="110" />
-            <Button Text="Shuffle" x:Name="ShuffleButton" Command="{Binding ShuffleCommand}"  BackgroundColor="{StaticResource Gray200Brush}" TextColor="Black" WidthRequest="110" />
+            <Button Text="Snooze" Command="{Binding SnoozeCommand}" BackgroundColor="{StaticResource Gray200}" TextColor="Black" WidthRequest="110" />
+            <Button Text="Shuffle" x:Name="ShuffleButton" Command="{Binding ShuffleCommand}"  BackgroundColor="{StaticResource Gray200}" TextColor="Black" WidthRequest="110" />
         </HorizontalStackLayout>
     </Grid>
 </ContentPage>
