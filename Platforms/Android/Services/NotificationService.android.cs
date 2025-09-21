@@ -23,6 +23,7 @@ public partial class NotificationService
     private const string SoundChannelName = "ShuffleTask reminders";
     private const string SilentChannelName = "ShuffleTask silent reminders";
     private const string ChannelDescription = "Task reminders and timer alerts.";
+    private const int NotificationPermissionRequestCode = 0x42;
 
     private static int _nextAndroidNotificationId = 2000;
 
@@ -180,7 +181,7 @@ public partial class NotificationService
                     if (activity != null &&
                         ContextCompat.CheckSelfPermission(activity, Android.Manifest.Permission.PostNotifications) != (int)Permission.Granted)
                     {
-                        ActivityCompat.RequestPermissions(activity, new[] { Android.Manifest.Permission.PostNotifications }, 0x42);
+                        ActivityCompat.RequestPermissions(activity, new[] { Android.Manifest.Permission.PostNotifications }, NotificationPermissionRequestCode);
                     }
                 }
                 catch

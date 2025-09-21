@@ -31,6 +31,8 @@ public partial class NotificationService
         public Task ShowToastAsync(string title, string message, bool playSound)
             => ScheduleAsync(title, message, TimeSpan.Zero, playSound);
 
+        private const double MinimumTriggerDelaySeconds = 0.1;
+
         private static async Task ScheduleAsync(string title, string message, TimeSpan delay, bool playSound)
         {
             var content = new UNMutableNotificationContent
@@ -44,7 +46,7 @@ public partial class NotificationService
                 content.Sound = UNNotificationSound.Default;
             }
 
-            double seconds = Math.Max(0.1, delay.TotalSeconds);
+            double seconds = Math.Max(MinimumTriggerDelaySeconds, delay.TotalSeconds);
             var trigger = UNTimeIntervalNotificationTrigger.CreateTrigger(seconds, repeats: false);
             var request = UNNotificationRequest.FromIdentifier(Guid.NewGuid().ToString(), content, trigger);
 
