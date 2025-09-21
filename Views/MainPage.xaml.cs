@@ -4,45 +4,79 @@ namespace ShuffleTask.Views;
 
 public partial class MainPage : TabbedPage
 {
+    private bool _tabsInitialized;
+
     public MainPage()
-        : base()
     {
-        if (MauiProgram.Services == null)
+        InitializeComponent();
+
+        if (!TryInitializeFromServices())
         {
-            throw new InvalidOperationException("Service provider is not initialized. Cannot create MainPage.");
-        }
-        try
-        {
-            var dashboardPage = MauiProgram.Services.GetRequiredService<DashboardPage>();
-            var tasksPage = MauiProgram.Services.GetRequiredService<TasksPage>();
-            var settingsPage = MauiProgram.Services.GetRequiredService<SettingsPage>();
-            InitializeComponent();
-#if ANDROID
-            Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific.TabbedPage.SetIsSwipePagingEnabled(this, false);
-#endif
-            Children.Add(new NavigationPage(dashboardPage));
-            Children.Add(new NavigationPage(tasksPage));
-            Children.Add(new NavigationPage(settingsPage));
-            Title = "ShuffleTask";
-        }
-        catch (InvalidOperationException ex)
-        {
-            // Optionally log the exception or handle it as needed
-            throw new InvalidOperationException("Failed to resolve required services for MainPage.", ex);
+            Loaded += OnLoadedResolveServices;
         }
     }
 
     public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
     {
         InitializeComponent();
+        ConfigureTabs(dashboardPage, tasksPage, settingsPage);
+    }
+
+    private void OnLoadedResolveServices(object? sender, EventArgs e)
+    {
+        if (TryInitializeFromServices())
+        {
+            Loaded -= OnLoadedResolveServices;
+        }
+    }
+
+    private bool TryInitializeFromServices()
+    {
+        IServiceProvider? services = ResolveServiceProvider();
+        if (services == null)
+        {
+            return false;
+        }
+
+        var dashboardPage = services.GetService<DashboardPage>();
+        var tasksPage = services.GetService<TasksPage>();
+        var settingsPage = services.GetService<SettingsPage>();
+
+        if (dashboardPage == null || tasksPage == null || settingsPage == null)
+        {
+            throw new InvalidOperationException("Failed to resolve required services for MainPage.");
+        }
+
+        ConfigureTabs(dashboardPage, tasksPage, settingsPage);
+        return true;
+    }
+
+    private static IServiceProvider? ResolveServiceProvider()
+    {
+        if (Application.Current?.Handler?.MauiContext?.Services is IServiceProvider contextServices)
+        {
+            return contextServices;
+        }
+
+        return MauiProgram.TryGetServiceProvider();
+    }
+
+    private void ConfigureTabs(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
+    {
+        if (_tabsInitialized)
+        {
+            return;
+        }
 
 #if ANDROID
         Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific.TabbedPage.SetIsSwipePagingEnabled(this, false);
 #endif
 
+        Children.Clear();
         Children.Add(new NavigationPage(dashboardPage));
         Children.Add(new NavigationPage(tasksPage));
         Children.Add(new NavigationPage(settingsPage));
         Title = "ShuffleTask";
+        _tabsInitialized = true;
     }
 }
