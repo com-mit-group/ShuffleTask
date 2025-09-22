@@ -1,4 +1,5 @@
 using System;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Maui.Controls;
 
 namespace ShuffleTask.Controls;
@@ -7,16 +8,16 @@ public partial class NumericStepper : ContentView
 {
     public static readonly BindableProperty MinimumProperty = BindableProperty.Create(
         nameof(Minimum),
-        typeof(double),
+        typeof(double?),
         typeof(NumericStepper),
-        0d,
+        null,
         propertyChanged: OnRangePropertyChanged);
 
     public static readonly BindableProperty MaximumProperty = BindableProperty.Create(
         nameof(Maximum),
-        typeof(double),
+        typeof(double?),
         typeof(NumericStepper),
-        double.MaxValue,
+        null,
         propertyChanged: OnRangePropertyChanged);
 
     public static readonly BindableProperty IncrementProperty = BindableProperty.Create(
@@ -24,7 +25,7 @@ public partial class NumericStepper : ContentView
         typeof(double),
         typeof(NumericStepper),
         1d,
-        propertyChanged: OnIncrementPropertyChanged);
+        propertyChanged: OnIncrementChanged);
 
     public static readonly BindableProperty ValueProperty = BindableProperty.Create(
         nameof(Value),
@@ -33,7 +34,7 @@ public partial class NumericStepper : ContentView
         0d,
         BindingMode.TwoWay,
         propertyChanged: OnValuePropertyChanged,
-        coerceValue: CoerceValue);
+        coerceValue: (bindable, value) => ((NumericStepper)bindable).CoerceValue((double)value));
 
     public static readonly BindableProperty ValueStringFormatProperty = BindableProperty.Create(
         nameof(ValueStringFormat),
@@ -42,22 +43,27 @@ public partial class NumericStepper : ContentView
         "{0:0}",
         propertyChanged: OnValueStringFormatChanged);
 
+    private string displayValue = "0";
+
     public NumericStepper()
     {
+        DecreaseCommand = new RelayCommand(OnDecrease, () => CanDecrease);
+        IncreaseCommand = new RelayCommand(OnIncrease, () => CanIncrease);
+
         InitializeComponent();
-        UpdateValueLabel();
-        UpdateButtonStates();
+
+        RefreshState();
     }
 
-    public double Minimum
+    public double? Minimum
     {
-        get => (double)GetValue(MinimumProperty);
+        get => (double?)GetValue(MinimumProperty);
         set => SetValue(MinimumProperty, value);
     }
 
-    public double Maximum
+    public double? Maximum
     {
-        get => (double)GetValue(MaximumProperty);
+        get => (double?)GetValue(MaximumProperty);
         set => SetValue(MaximumProperty, value);
     }
 
@@ -79,28 +85,58 @@ public partial class NumericStepper : ContentView
         set => SetValue(ValueStringFormatProperty, value);
     }
 
+    public IRelayCommand DecreaseCommand { get; }
+
+    public IRelayCommand IncreaseCommand { get; }
+
+    public string DisplayValue
+    {
+        get => displayValue;
+        private set
+        {
+            if (displayValue == value)
+            {
+                return;
+            }
+
+            displayValue = value;
+            OnPropertyChanged(nameof(DisplayValue));
+        }
+    }
+
+    public bool CanDecrease
+    {
+        get
+        {
+            var (minimum, _) = GetOrderedRange();
+            return !minimum.HasValue || Value > minimum.Value;
+        }
+    }
+
+    public bool CanIncrease
+    {
+        get
+        {
+            var (_, maximum) = GetOrderedRange();
+            return !maximum.HasValue || Value < maximum.Value;
+        }
+    }
+
     private static void OnRangePropertyChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is NumericStepper stepper)
         {
-            stepper.Value = (double)CoerceValue(stepper, stepper.Value);
-            stepper.UpdateButtonStates();
+            stepper.Value = stepper.CoerceValue(stepper.Value);
+            stepper.RefreshState();
         }
     }
 
-    private static void OnIncrementPropertyChanged(BindableObject bindable, object oldValue, object newValue)
+    private static void OnIncrementChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is NumericStepper stepper)
         {
-            var coerced = (double)CoerceValue(stepper, stepper.Value);
-            if (!coerced.Equals(stepper.Value))
-            {
-                stepper.Value = coerced;
-            }
-            else
-            {
-                stepper.UpdateButtonStates();
-            }
+            stepper.Value = stepper.CoerceValue(stepper.Value);
+            stepper.RefreshState();
         }
     }
 
@@ -108,8 +144,7 @@ public partial class NumericStepper : ContentView
     {
         if (bindable is NumericStepper stepper)
         {
-            stepper.UpdateValueLabel();
-            stepper.UpdateButtonStates();
+            stepper.RefreshState();
         }
     }
 
@@ -117,67 +152,87 @@ public partial class NumericStepper : ContentView
     {
         if (bindable is NumericStepper stepper)
         {
-            stepper.UpdateValueLabel();
+            stepper.UpdateDisplayValue();
         }
     }
 
-    private static object CoerceValue(BindableObject bindable, object value)
+    private void RefreshState()
     {
-        if (bindable is not NumericStepper stepper)
-        {
-            return value;
-        }
+        UpdateDisplayValue();
+        OnPropertyChanged(nameof(CanDecrease));
+        OnPropertyChanged(nameof(CanIncrease));
 
-        double numericValue = (double)value;
-        double increment = stepper.Increment;
-        double minimum = stepper.Minimum;
-        double maximum = stepper.Maximum;
-
-        if (increment <= 0)
-        {
-            increment = 1d;
-        }
-
-        numericValue = Math.Max(minimum, Math.Min(maximum, numericValue));
-
-        double steps = Math.Round((numericValue - minimum) / increment, MidpointRounding.AwayFromZero);
-        double coercedValue = minimum + steps * increment;
-
-        coercedValue = Math.Max(minimum, Math.Min(maximum, coercedValue));
-
-        return coercedValue;
+        DecreaseCommand.NotifyCanExecuteChanged();
+        IncreaseCommand.NotifyCanExecuteChanged();
     }
 
-    private void UpdateValueLabel()
+    private void UpdateDisplayValue()
     {
-        string format = string.IsNullOrWhiteSpace(ValueStringFormat) ? "{0:0}" : ValueStringFormat;
+        var format = string.IsNullOrWhiteSpace(ValueStringFormat) ? "{0:0}" : ValueStringFormat;
+
         try
         {
-            ValueLabel.Text = string.Format(format, Value);
+            DisplayValue = string.Format(format, Value);
         }
         catch (FormatException)
         {
-            ValueLabel.Text = Value.ToString();
+            DisplayValue = Value.ToString();
         }
     }
 
-    private void UpdateButtonStates()
+    private void OnDecrease()
     {
-        DecreaseButton.IsEnabled = Value > Minimum + 0.000001;
-        IncreaseButton.IsEnabled = Value < Maximum - 0.000001;
+        Value = CoerceValue(Value - GetIncrement());
     }
 
-    private void OnDecreaseClicked(object sender, EventArgs e)
+    private void OnIncrease()
     {
-        double increment = Increment > 0 ? Increment : 1d;
-        double newValue = Value - increment;
-        Value = (double)CoerceValue(this, newValue);
+        Value = CoerceValue(Value + GetIncrement());
     }
 
-    private void OnIncreaseClicked(object sender, EventArgs e)
+    private double CoerceValue(double value)
     {
-        double increment = Increment > 0 ? Increment : 1d;
-        double newValue = Value + increment;
-        Value = (double)CoerceValue(this, newValue);
+        var (minimum, maximum) = GetOrderedRange();
+        var increment = GetIncrement();
+
+        if (minimum.HasValue)
+        {
+            value = minimum.Value + Math.Round((value - minimum.Value) / increment, MidpointRounding.AwayFromZero) * increment;
+        }
+        else
+        {
+            value = Math.Round(value / increment, MidpointRounding.AwayFromZero) * increment;
+        }
+
+        if (minimum.HasValue && value < minimum.Value)
+        {
+            value = minimum.Value;
+        }
+
+        if (maximum.HasValue && value > maximum.Value)
+        {
+            value = maximum.Value;
+        }
+
+        return value;
+    }
+
+    private (double? Minimum, double? Maximum) GetOrderedRange()
+    {
+        var minimum = Minimum;
+        var maximum = Maximum;
+
+        if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
+        {
+            return (maximum, minimum);
+        }
+
+        return (minimum, maximum);
+    }
+
+    private double GetIncrement()
+    {
+        var increment = Increment;
+        return increment > 0 ? increment : 1d;
     }
 }
