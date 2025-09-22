@@ -78,10 +78,29 @@ public partial class MainPage : TabbedPage
 #endif
 
         Children.Clear();
-        Children.Add(new NavigationPage(dashboardPage));
-        Children.Add(new NavigationPage(tasksPage));
-        Children.Add(new NavigationPage(settingsPage));
+
+        var dashboardTab = CreateTab(dashboardPage);
+        var tasksTab = CreateTab(tasksPage);
+        var settingsTab = CreateTab(settingsPage);
+
+        Children.Add(dashboardTab);
+        Children.Add(tasksTab);
+        Children.Add(settingsTab);
+
+        CurrentPage = dashboardTab;
         Title = "ShuffleTask";
         _tabsInitialized = true;
+    }
+
+    private static NavigationPage CreateTab(ContentPage page)
+    {
+        string? title = page.Title;
+        var navigationPage = new NavigationPage(page)
+        {
+            Title = string.IsNullOrWhiteSpace(title) ? page.GetType().Name : title,
+            IconImageSource = page.IconImageSource
+        };
+
+        return navigationPage;
     }
 }
