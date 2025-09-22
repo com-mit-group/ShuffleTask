@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<?xaml-comp compile="true"?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ShuffleTask.Controls.NumericStepper"
+             x:Name="Root">
+    <Border StrokeShape="RoundRectangle 8"
+            StrokeThickness="1"
+            Stroke="{AppThemeBinding Light=#C6C6C6, Dark=#555555}"
+            BackgroundColor="Transparent"
+            Padding="8,4">
+        <Grid BindingContext="{x:Reference Root}"
+              ColumnDefinitions="Auto,Auto,Auto"
+              ColumnSpacing="12"
+              VerticalOptions="Center"
+              HorizontalOptions="Center">
+            <Button Text="-"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Command="{Binding DecreaseCommand}"
+                    IsEnabled="{Binding CanDecrease}" />
+            <Label Grid.Column="1"
+                   VerticalOptions="Center"
+                   HorizontalOptions="Center"
+                   InputTransparent="True"
+                   MinimumWidthRequest="40"
+                   HorizontalTextAlignment="Center"
+                   Text="{Binding DisplayValue}" />
+            <Button Grid.Column="2"
+                    Text="+"
+                    WidthRequest="36"
+                    HeightRequest="36"
+                    Command="{Binding IncreaseCommand}"
+                    IsEnabled="{Binding CanIncrease}" />
+        </Grid>
+    </Border>
+</ContentView>
