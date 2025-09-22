@@ -15,6 +15,24 @@ public partial class EditTaskPage : ContentPage
         BindingContext = vm;
     }
 
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+
+        if (BindingContext is EditTaskViewModel vm)
+        {
+            _viewModel = vm;
+
+            // Ensure the page stays subscribed when it is reused from the service provider.
+            _viewModel.Saved -= OnSaved;
+            _viewModel.Saved += OnSaved;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+            Title = _viewModel.IsNew ? "New Task" : "Edit Task";
+        }
+    }
+
     protected override void OnBindingContextChanged()
     {
         if (_viewModel != null)
