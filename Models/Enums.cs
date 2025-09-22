@@ -23,7 +23,8 @@ public enum Weekdays
 
 public enum AllowedPeriod
 {
-    Any,
-    Work,
-    Off
+    Any = 0,
+    Work = 1,
+    Off = 2,
+    OffWork = 3
 }

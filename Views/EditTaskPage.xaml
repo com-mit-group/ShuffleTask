@@ -1,84 +1,174 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:conv="clr-namespace:ShuffleTask.Converters"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              x:Class="ShuffleTask.Views.EditTaskPage"
-             Title="Edit Task">
-    <ContentPage.Resources>
-        <conv:WeekdaysConverter x:Key="WeekdaysConverter" />
-    </ContentPage.Resources>
+             x:DataType="vm:EditTaskViewModel"
+             Title="Task">
     <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <Entry Placeholder="Title" Text="{Binding Task.Title}" />
+        <Grid Padding="20"
+              RowSpacing="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
-                <Label Text="Importance" />
-                <Stepper Grid.Column="1" Minimum="1" Maximum="5" Increment="1" Value="{Binding Task.Importance}" />
+            <Entry Grid.Row="0"
+                   Text="{Binding Title}"
+                   Placeholder="Title" />
+
+            <Editor Grid.Row="1"
+                    HeightRequest="120"
+                    Placeholder="Description"
+                    Text="{Binding Description}" />
+
+            <Grid Grid.Row="2"
+                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="12">
+                <Label Text="Importance"
+                       VerticalOptions="Center" />
+                <Stepper Grid.Column="1"
+                         Minimum="1"
+                         Maximum="5"
+                         Increment="1"
+                         Value="{Binding Importance}" />
+                <Label Grid.Column="2"
+                       Text="{Binding Importance, StringFormat='{0:0}'}"
+                       VerticalOptions="Center" />
             </Grid>
 
-            <VerticalStackLayout Spacing="6">
-                <HorizontalStackLayout Spacing="12" VerticalOptions="Center">
-                    <Label Text="Deadline" VerticalTextAlignment="Center" />
-                    <Switch IsToggled="{Binding HasDeadline}" />
-                </HorizontalStackLayout>
-                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto">
-                    <DatePicker Grid.Column="0" Date="{Binding DeadlineDate, Mode=TwoWay}" IsEnabled="{Binding HasDeadline}" />
-                    <TimePicker Grid.Column="1" Time="{Binding DeadlineTime, Mode=TwoWay}" IsEnabled="{Binding HasDeadline}" />
+            <Grid Grid.Row="3"
+                  RowDefinitions="Auto,Auto,Auto"
+                  RowSpacing="8">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="Auto,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Deadline"
+                           VerticalOptions="Center" />
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding HasDeadline}" />
                 </Grid>
-                <Button Text="Clear deadline" IsEnabled="{Binding HasDeadline}" Clicked="OnClearDeadline" />
-            </VerticalStackLayout>
 
-            <Picker Title="Repeat Type" ItemsSource="{Binding RepeatTypes}" SelectedItem="{Binding Task.Repeat}" />
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <DatePicker Grid.Column="0"
+                                Date="{Binding DeadlineDate}"
+                                IsEnabled="{Binding HasDeadline}" />
+                    <TimePicker Grid.Column="1"
+                                Time="{Binding DeadlineTime}"
+                                IsEnabled="{Binding HasDeadline}" />
+                </Grid>
 
-            <ContentView>
-                <ContentView.Triggers>
-                    <DataTrigger TargetType="ContentView" Binding="{Binding Task.Repeat}" Value="Weekly">
-                        <Setter Property="Content">
-                            <Setter.Value>
-                                <VerticalStackLayout Spacing="6">
-                                    <Label Text="Weekdays"/>
-                                    <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                                        <CheckBox Grid.Row="0" Grid.Column="0" IsChecked="{Binding Sun}"/><Label Grid.Row="0" Grid.Column="1" Text="Sun"/>
-                                        <CheckBox Grid.Row="0" Grid.Column="2" IsChecked="{Binding Mon}"/><Label Grid.Row="0" Grid.Column="3" Text="Mon"/>
-                                        <CheckBox Grid.Row="1" Grid.Column="0" IsChecked="{Binding Tue}"/><Label Grid.Row="1" Grid.Column="1" Text="Tue"/>
-                                        <CheckBox Grid.Row="1" Grid.Column="2" IsChecked="{Binding Wed}"/><Label Grid.Row="1" Grid.Column="3" Text="Wed"/>
-                                        <CheckBox Grid.Row="2" Grid.Column="0" IsChecked="{Binding Thu}"/><Label Grid.Row="2" Grid.Column="1" Text="Thu"/>
-                                        <CheckBox Grid.Row="2" Grid.Column="2" IsChecked="{Binding Fri}"/><Label Grid.Row="2" Grid.Column="3" Text="Fri"/>
-                                        <CheckBox Grid.Row="3" Grid.Column="0" IsChecked="{Binding Sat}"/><Label Grid.Row="3" Grid.Column="1" Text="Sat"/>
-                                    </Grid>
-                                </VerticalStackLayout>
-                            </Setter.Value>
-                        </Setter>
-                    </DataTrigger>
-                </ContentView.Triggers>
-            </ContentView>
-
-            <ContentView>
-                <ContentView.Triggers>
-                    <DataTrigger TargetType="ContentView" Binding="{Binding Task.Repeat}" Value="Interval">
-                        <Setter Property="Content">
-                            <Setter.Value>
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
-                                    <Label Text="Interval (days)" />
-                                    <Entry Grid.Column="1" Keyboard="Numeric" Text="{Binding Task.IntervalDays}" />
-                                </Grid>
-                            </Setter.Value>
-                        </Setter>
-                    </DataTrigger>
-                </ContentView.Triggers>
-            </ContentView>
-
-            <Picker Title="Allowed Period" ItemsSource="{Binding AllowedPeriods}" SelectedItem="{Binding Task.AllowedPeriod}" />
-
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
-                <Label Text="Paused" />
-                <Switch Grid.Column="1" IsToggled="{Binding Task.Paused}" />
+                <Button Grid.Row="2"
+                        Text="Clear deadline"
+                        IsEnabled="{Binding HasDeadline}"
+                        Clicked="OnClearDeadline" />
             </Grid>
 
-            <HorizontalStackLayout>
-                <Button Text="Save" Command="{Binding SaveCommand}" />
-                <Button x:Name="CancelButton" Text="Cancel" Clicked="CancelButton_Clicked" />
-            </HorizontalStackLayout>
-        </VerticalStackLayout>
+            <Picker Grid.Row="4"
+                    Title="Repeat"
+                    ItemsSource="{Binding RepeatOptions}"
+                    SelectedItem="{Binding Repeat}" />
+
+            <Grid Grid.Row="5"
+                  IsVisible="False"
+                  RowSpacing="8">
+                <Grid.Triggers>
+                    <DataTrigger TargetType="Grid"
+                                Binding="{Binding Repeat}"
+                                Value="Weekly">
+                        <Setter Property="IsVisible" Value="True" />
+                    </DataTrigger>
+                </Grid.Triggers>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Label Grid.Row="0"
+                       Text="Weekdays" />
+                <Grid Grid.Row="1"
+                      RowDefinitions="Auto,Auto"
+                      ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                      ColumnSpacing="8">
+                    <CheckBox Grid.Row="0" Grid.Column="0" IsChecked="{Binding Sunday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding Monday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="2" IsChecked="{Binding Tuesday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="3" IsChecked="{Binding Wednesday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="4" IsChecked="{Binding Thursday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="5" IsChecked="{Binding Friday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="6" IsChecked="{Binding Saturday}" />
+                    <Label Grid.Row="1" Grid.Column="0" Text="Sun" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="1" Text="Mon" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="2" Text="Tue" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="3" Text="Wed" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="4" Text="Thu" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="5" Text="Fri" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="6" Text="Sat" HorizontalOptions="Center" />
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="6"
+                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="12"
+                  IsVisible="False">
+                <Grid.Triggers>
+                    <DataTrigger TargetType="Grid"
+                                Binding="{Binding Repeat}"
+                                Value="Interval">
+                        <Setter Property="IsVisible" Value="True" />
+                    </DataTrigger>
+                </Grid.Triggers>
+                <Label Text="Every"
+                       VerticalOptions="Center" />
+                <Stepper Grid.Column="1"
+                         Minimum="1"
+                         Maximum="30"
+                         Increment="1"
+                         Value="{Binding IntervalDays}" />
+                <Label Grid.Column="2"
+                       Text="{Binding IntervalDays, StringFormat='{0:0}'}" />
+            </Grid>
+
+            <Picker Grid.Row="7"
+                    Title="Allowed period"
+                    ItemsSource="{Binding AllowedPeriodOptions}"
+                    SelectedItem="{Binding AllowedPeriod}" />
+
+            <Grid Grid.Row="8"
+                  ColumnDefinitions="Auto,Auto"
+                  ColumnSpacing="12">
+                <Label Text="Paused"
+                       VerticalOptions="Center" />
+                <Switch Grid.Column="1"
+                        IsToggled="{Binding IsPaused}" />
+            </Grid>
+
+            <Grid Grid.Row="9"
+                  ColumnDefinitions="*,*"
+                  ColumnSpacing="16">
+                <Button Grid.Column="0"
+                        Text="Save"
+                        Command="{Binding SaveCommand}" />
+                <Button Grid.Column="1"
+                        Text="Cancel"
+                        Clicked="OnCancelClicked" />
+            </Grid>
+
+            <ActivityIndicator Grid.Row="10"
+                               IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               HorizontalOptions="Center" />
+        </Grid>
     </ScrollView>
 </ContentPage>

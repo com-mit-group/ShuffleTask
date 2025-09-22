@@ -1,3 +1,6 @@
+using System;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.Controls;
 using ShuffleTask.Models;
 using ShuffleTask.ViewModels;
 
@@ -6,75 +9,87 @@ namespace ShuffleTask.Views;
 public partial class TasksPage : ContentPage
 {
     private readonly MainViewModel _vm;
-    private readonly IServiceProvider _sp;
+    private readonly IServiceProvider _services;
 
-    public TasksPage(MainViewModel vm, IServiceProvider sp)
+    public TasksPage(MainViewModel vm, IServiceProvider services)
     {
         InitializeComponent();
         _vm = vm;
-        _sp = sp;
+        _services = services;
         BindingContext = _vm;
 
-        Appearing += async (s, e) => await _vm.LoadAsync();
+        Appearing += OnAppearing;
+    }
 
-        if (this.FindByName("AddToolbar") is ToolbarItem add)
-        {
-            add.Clicked += OnAddClicked;
-        }
+    private async void OnAppearing(object? sender, EventArgs e)
+    {
+        await _vm.LoadAsync();
     }
 
     private async void OnAddClicked(object? sender, EventArgs e)
     {
-        var page = _sp.GetRequiredService<EditTaskPage>();
-        var editVm = _sp.GetRequiredService<EditTaskViewModel>();
-        page.BindingContext = editVm;
-        editVm.Task = new TaskItem();
-        editVm.Saved += async (s, e) => await _vm.LoadAsync();
-        await Navigation.PushAsync(page);
+        await OpenEditorAsync(new TaskItem());
     }
 
     private async void OnEditSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
         {
-            var page = _sp.GetRequiredService<EditTaskPage>();
-            var editVm = _sp.GetRequiredService<EditTaskViewModel>();
-            page.BindingContext = editVm;
-            // Clone object for editing; only persist on Save
-            editVm.Task = new TaskItem
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Importance = t.Importance,
-                Deadline = t.Deadline,
-                Repeat = t.Repeat,
-                Weekdays = t.Weekdays,
-                IntervalDays = t.IntervalDays,
-                LastDoneAt = t.LastDoneAt,
-                AllowedPeriod = t.AllowedPeriod,
-                Paused = t.Paused,
-                CreatedAt = t.CreatedAt
-            };
-            editVm.Saved += async (s, e) => await _vm.LoadAsync();
-            await Navigation.PushAsync(page);
+            await OpenEditorAsync(MainViewModel.Clone(task));
         }
     }
 
-    private async void OnPauseResumeSwipe(object sender, EventArgs e)
+    private async void OnTogglePauseSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
         {
-            await _vm.PauseResumeAsync(t);
+            await _vm.TogglePauseAsync(task);
         }
     }
 
     private async void OnDeleteSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem si && si.CommandParameter is TaskItem t)
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
         {
-            bool confirm = await DisplayAlert("Delete Task", $"Delete '{t.Title}'?", "Delete", "Cancel");
-            if (!confirm) return;
-            await _vm.DeleteAsync(t);
+            bool confirm = await DisplayAlert("Delete Task", $"Delete '{task.Title}'?", "Delete", "Cancel");
+            if (!confirm)
+            {
+                return;
+            }
+
+            await _vm.DeleteAsync(task);
         }
+    }
+
+    private async Task OpenEditorAsync(TaskItem task)
+    {
+        var page = _services.GetRequiredService<EditTaskPage>();
+        var editorVm = _services.GetRequiredService<EditTaskViewModel>();
+        editorVm.Load(task);
+        editorVm.Saved -= OnEditorSaved;
+        editorVm.Saved += OnEditorSaved;
+
+        void OnEditorPageDisappearing(object? s, EventArgs e)
+        {
+            editorVm.Saved -= OnEditorSaved;
+            page.Disappearing -= OnEditorPageDisappearing;
+        }
+
+        page.Disappearing -= OnEditorPageDisappearing;
+        page.Disappearing += OnEditorPageDisappearing;
+
+        page.BindingContext = editorVm;
+        page.Title = editorVm.IsNew ? "New Task" : "Edit Task";
+        await Navigation.PushAsync(page);
+    }
+
+    private async void OnEditorSaved(object? sender, EventArgs e)
+    {
+        if (sender is EditTaskViewModel vm)
+        {
+            vm.Saved -= OnEditorSaved;
+        }
+
+        await _vm.LoadAsync();
     }
 }

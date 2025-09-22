@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
+             x:Class="ShuffleTask.Views.DashboardPage"
+             x:DataType="vm:DashboardViewModel"
+             Title="Dashboard">
+    <Grid Padding="24"
+          RowSpacing="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                StrokeShape="RoundRectangle 18"
+                BackgroundColor="{AppThemeBinding Light=#f7f2d3, Dark=#5a4f1a}"
+                StrokeThickness="0"
+                Padding="16">
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light=#ead46a, Dark=#b39b34}"
+                        Padding="16">
+                    <Label Text="{Binding Title}"
+                           FontSize="28"
+                           FontAttributes="Bold"
+                           LineBreakMode="WordWrap" />
+                </Border>
+
+                <Border Grid.Row="1"
+                        StrokeShape="RoundRectangle 12"
+                        BackgroundColor="{AppThemeBinding Light=#ead46a, Dark=#b39b34}"
+                        Padding="16">
+                    <Label Text="{Binding Description}"
+                           FontSize="16"
+                           LineBreakMode="WordWrap" />
+                </Border>
+
+                <Label Grid.Row="2"
+                       Margin="0,4,0,0"
+                       FontSize="12"
+                       HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light=#3a3a3a, Dark=#f5f5f5}"
+                       Text="{Binding Schedule}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1"
+              RowSpacing="4"
+              HorizontalOptions="Center">
+            <Label Grid.Row="0"
+                   Text="Timer"
+                   FontSize="16"
+                   HorizontalTextAlignment="Center" />
+            <Label Grid.Row="1"
+                   Text="{Binding TimerText}"
+                   FontSize="64"
+                   FontAttributes="Bold"
+                   HorizontalTextAlignment="Center" />
+        </Grid>
+
+        <Grid Grid.Row="2"
+              ColumnSpacing="12"
+              HorizontalOptions="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    WidthRequest="110"
+                    HeightRequest="44"
+                    Text="Done"
+                    Command="{Binding DoneCommand}"
+                    IsEnabled="{Binding HasTask}"
+                    BackgroundColor="{AppThemeBinding Light=#ead46a, Dark=#b39b34}"
+                    TextColor="{AppThemeBinding Light=Black, Dark=Black}" />
+
+            <Button Grid.Column="1"
+                    WidthRequest="110"
+                    HeightRequest="44"
+                    Text="Snooze"
+                    Command="{Binding SnoozeCommand}"
+                    IsEnabled="{Binding HasTask}"
+                    BackgroundColor="{AppThemeBinding Light=#e5e5e5, Dark=#444444}"
+                    TextColor="{AppThemeBinding Light=Black, Dark=White}" />
+
+            <Button Grid.Column="2"
+                    WidthRequest="110"
+                    HeightRequest="44"
+                    Text="Shuffle"
+                    Command="{Binding ShuffleCommand}"
+                    BackgroundColor="{AppThemeBinding Light=#e5e5e5, Dark=#444444}"
+                    TextColor="{AppThemeBinding Light=Black, Dark=White}" />
+        </Grid>
+
+        <ActivityIndicator Grid.Row="3"
+                           HorizontalOptions="Center"
+                           IsVisible="{Binding IsBusy}"
+                           IsRunning="{Binding IsBusy}" />
+    </Grid>
+</ContentPage>

@@ -32,6 +32,7 @@ public static class TimeWindowService
         {
             AllowedPeriod.Any => true,
             AllowedPeriod.Work => IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.OffWork => !IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
             AllowedPeriod.Off => !IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
             _ => true,
         };

@@ -9,6 +9,7 @@ public class TaskItem
 
     [Indexed]
     public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 
     public int Importance { get; set; } // 1..5
 
@@ -22,7 +23,7 @@ public class TaskItem
 
     public DateTime? LastDoneAt { get; set; }
 
-    public AllowedPeriod AllowedPeriod { get; set; } // Any/Work/Off
+    public AllowedPeriod AllowedPeriod { get; set; } // Any/Work/Off/OffWork
 
     public bool Paused { get; set; }
 

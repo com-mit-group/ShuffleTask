@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using Plugin.LocalNotification;
 using ShuffleTask.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
@@ -8,16 +7,18 @@ namespace ShuffleTask;
 
 public static class MauiProgram
 {
+    private static IServiceProvider? _services;
+
+    public static IServiceProvider Services =>
+        _services ?? throw new InvalidOperationException("Maui services have not been initialized yet.");
+
+    public static IServiceProvider? TryGetServiceProvider() => _services;
+
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>();
-
-#if !WINDOWS
-        // Only initialize Plugin.LocalNotification on non-Windows platforms
-        builder.UseLocalNotification();
-#endif
 
         builder.ConfigureFonts(fonts =>
         {
@@ -31,13 +32,13 @@ public static class MauiProgram
         builder.Services.AddSingleton(sp => new SchedulerService(deterministic: false));
 
         // ViewModels
-        builder.Services.AddSingleton<NowViewModel>();
+        builder.Services.AddSingleton<DashboardViewModel>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views
-        builder.Services.AddSingleton<NowPage>();
+        builder.Services.AddSingleton<DashboardPage>();
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();
@@ -47,6 +48,9 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        return builder.Build();
+        var app = builder.Build();
+        _services = app.Services;
+
+        return app;
     }
 }
