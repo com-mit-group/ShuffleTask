@@ -31,6 +31,14 @@ public partial class TasksPage : ContentPage
         await OpenEditorAsync(new TaskItem());
     }
 
+    private async void OnEditButtonClicked(object sender, EventArgs e)
+    {
+        if (sender is Button { CommandParameter: TaskItem task })
+        {
+            await OpenEditorAsync(MainViewModel.Clone(task));
+        }
+    }
+
     private async void OnEditSwipe(object sender, EventArgs e)
     {
         if (sender is SwipeItem { CommandParameter: TaskItem task })
