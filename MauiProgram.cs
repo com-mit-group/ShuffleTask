@@ -33,7 +33,7 @@ public static class MauiProgram
 
         // ViewModels
         builder.Services.AddSingleton<DashboardViewModel>();
-        builder.Services.AddSingleton<MainViewModel>();
+        builder.Services.AddSingleton<TasksViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 

@@ -8,10 +8,10 @@ namespace ShuffleTask.Views;
 
 public partial class TasksPage : ContentPage
 {
-    private readonly MainViewModel _vm;
+    private readonly TasksViewModel _vm;
     private readonly IServiceProvider _services;
 
-    public TasksPage(MainViewModel vm, IServiceProvider services)
+    public TasksPage(TasksViewModel vm, IServiceProvider services)
     {
         InitializeComponent();
         _vm = vm;
@@ -35,7 +35,7 @@ public partial class TasksPage : ContentPage
     {
         if (sender is Button { CommandParameter: TaskItem task })
         {
-            await OpenEditorAsync(MainViewModel.Clone(task));
+            await OpenEditorAsync(TasksViewModel.Clone(task));
         }
     }
 
@@ -43,7 +43,7 @@ public partial class TasksPage : ContentPage
     {
         if (sender is SwipeItem { CommandParameter: TaskItem task })
         {
-            await OpenEditorAsync(MainViewModel.Clone(task));
+            await OpenEditorAsync(TasksViewModel.Clone(task));
         }
     }
 
