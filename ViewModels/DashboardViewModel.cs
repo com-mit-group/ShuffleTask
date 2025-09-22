@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Models;
@@ -74,7 +75,11 @@ public partial class DashboardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ShuffleAsync()
+    private Task ShuffleAsync() => ShuffleInternalAsync(allowRepeat: false);
+
+    public Task ShuffleAfterTimeoutAsync() => ShuffleInternalAsync(allowRepeat: true);
+
+    private async Task ShuffleInternalAsync(bool allowRepeat)
     {
         if (IsBusy)
         {
@@ -94,10 +99,19 @@ public partial class DashboardViewModel : ObservableObject
             }
 
             var tasks = await _storage.GetTasksAsync();
-            var next = _scheduler.PickNextTask(tasks, settings, DateTime.Now);
+            var now = DateTime.Now;
+            string? previousId = _activeTask?.Id;
+
+            var next = PickNextCandidate(tasks, settings, now, previousId);
             if (next == null)
             {
                 ShowMessage("No tasks ready", "Add a task or adjust filters to get started.");
+                return;
+            }
+
+            bool isSameTask = !string.IsNullOrEmpty(previousId) && next.Id == previousId;
+            if (isSameTask && !allowRepeat)
+            {
                 return;
             }
 
@@ -214,6 +228,27 @@ public partial class DashboardViewModel : ObservableObject
         TimerText = "--:--";
         HasTask = false;
         CountdownCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTime now, string? previousId)
+    {
+        var chosen = _scheduler.PickNextTask(tasks, settings, now);
+        if (chosen == null || string.IsNullOrEmpty(previousId) || !string.Equals(chosen.Id, previousId, StringComparison.Ordinal))
+        {
+            return chosen;
+        }
+
+        var alternatives = tasks
+            .Where(t => !string.Equals(t.Id, previousId, StringComparison.Ordinal))
+            .ToList();
+
+        if (alternatives.Count == 0)
+        {
+            return chosen;
+        }
+
+        var alternative = _scheduler.PickNextTask(alternatives, settings, now);
+        return alternative ?? chosen;
     }
 
     private static string BuildScheduleText(TaskItem task)

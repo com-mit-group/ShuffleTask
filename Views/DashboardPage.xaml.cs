@@ -122,7 +122,7 @@ public partial class DashboardPage : ContentPage
             _vm.UpdateTimer(TimeSpan.Zero);
             StopCountdown();
             await _vm.NotifyTimeUpAsync();
-            await _vm.ShuffleCommand.ExecuteAsync(null);
+            await _vm.ShuffleAfterTimeoutAsync();
             return;
         }
 
