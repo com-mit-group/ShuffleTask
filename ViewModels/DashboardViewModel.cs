@@ -119,7 +119,7 @@ public partial class DashboardViewModel : ObservableObject
 
             int minutes = Math.Max(1, settings.ReminderMinutes);
             var duration = TimeSpan.FromMinutes(minutes);
-            UpdateTimer(duration);
+            TimerText = FormatTimerText(duration);
             CountdownRequested?.Invoke(this, duration);
 
             if (settings.EnableNotifications)
@@ -171,7 +171,7 @@ public partial class DashboardViewModel : ObservableObject
         BindTask(task);
         if (remaining.HasValue)
         {
-            UpdateTimer(remaining.Value);
+            TimerText = FormatTimerText(remaining.Value);
         }
 
         return true;
@@ -186,16 +186,14 @@ public partial class DashboardViewModel : ObservableObject
         }
     }
 
-    public void UpdateTimer(TimeSpan remaining)
+    internal static string FormatTimerText(TimeSpan remaining)
     {
         if (remaining <= TimeSpan.Zero)
         {
-            TimerText = "00:00";
+            return "00:00";
         }
-        else
-        {
-            TimerText = remaining.ToString(@"mm\:ss");
-        }
+
+        return remaining.ToString(@"mm\:ss");
     }
 
     public void ClearActiveTask()

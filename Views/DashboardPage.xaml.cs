@@ -63,7 +63,7 @@ public partial class DashboardPage : ContentPage
     private void StartCountdown(TimeSpan duration)
     {
         _remaining = duration;
-        _vm.UpdateTimer(_remaining);
+        _vm.TimerText = DashboardViewModel.FormatTimerText(_remaining);
         PersistState();
 
         var timer = EnsureTimer();
@@ -119,7 +119,7 @@ public partial class DashboardPage : ContentPage
     {
         if (_remaining <= TimeSpan.Zero)
         {
-            _vm.UpdateTimer(TimeSpan.Zero);
+            _vm.TimerText = DashboardViewModel.FormatTimerText(TimeSpan.Zero);
             StopCountdown();
             await _vm.NotifyTimeUpAsync();
             await _vm.ShuffleAfterTimeoutAsync();
@@ -132,7 +132,7 @@ public partial class DashboardPage : ContentPage
             _remaining = TimeSpan.Zero;
         }
 
-        _vm.UpdateTimer(_remaining);
+        _vm.TimerText = DashboardViewModel.FormatTimerText(_remaining);
         PersistState();
     }
 

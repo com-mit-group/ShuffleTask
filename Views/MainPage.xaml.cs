@@ -18,17 +18,17 @@ public partial class MainPage : TabbedPage
         ConfigureTabs(dashboardPage, tasksPage, settingsPage);
     }
 
-    private bool TryInitializeFromServices()
+    private void TryInitializeFromServices()
     {
         if (_tabsInitialized)
         {
-            return true;
+            return;
         }
 
         IServiceProvider? services = ResolveServiceProvider();
         if (services == null)
         {
-            return false;
+            return;
         }
 
         var dashboardPage = services.GetService<DashboardPage>();
@@ -37,11 +37,10 @@ public partial class MainPage : TabbedPage
 
         if (dashboardPage == null || tasksPage == null || settingsPage == null)
         {
-            return false;
+            return;
         }
 
         ConfigureTabs(dashboardPage, tasksPage, settingsPage);
-        return true;
     }
 
     protected override void OnHandlerChanged()

@@ -71,46 +71,51 @@ public partial class EditTaskViewModel : ObservableObject
 
     public AllowedPeriod[] AllowedPeriodOptions { get; } = Enum.GetValues<AllowedPeriod>();
 
+    private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
+    {
+        return enabled ? current | day : current & ~day;
+    }
+
     public bool Sunday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Sun);
-        set => UpdateWeekday(Weekdays.Sun, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Sun, value);
     }
 
     public bool Monday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Mon);
-        set => UpdateWeekday(Weekdays.Mon, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Mon, value);
     }
 
     public bool Tuesday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Tue);
-        set => UpdateWeekday(Weekdays.Tue, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Tue, value);
     }
 
     public bool Wednesday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Wed);
-        set => UpdateWeekday(Weekdays.Wed, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Wed, value);
     }
 
     public bool Thursday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Thu);
-        set => UpdateWeekday(Weekdays.Thu, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Thu, value);
     }
 
     public bool Friday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Fri);
-        set => UpdateWeekday(Weekdays.Fri, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Fri, value);
     }
 
     public bool Saturday
     {
         get => SelectedWeekdays.HasFlag(Weekdays.Sat);
-        set => UpdateWeekday(Weekdays.Sat, value);
+        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Sat, value);
     }
 
     public event EventHandler? Saved;
@@ -200,21 +205,6 @@ public partial class EditTaskViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-        }
-    }
-
-    public void ResetDeadline()
-    {
-        HasDeadline = false;
-    }
-
-    private void UpdateWeekday(Weekdays day, bool enabled)
-    {
-        Weekdays current = SelectedWeekdays;
-        Weekdays updated = enabled ? current | day : current & ~day;
-        if (updated != current)
-        {
-            SelectedWeekdays = updated;
         }
     }
 

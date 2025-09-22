@@ -57,7 +57,10 @@ public partial class EditTaskPage : ContentPage
 
     private void OnClearDeadline(object sender, EventArgs e)
     {
-        _viewModel?.ResetDeadline();
+        if (_viewModel != null)
+        {
+            _viewModel.HasDeadline = false;
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
