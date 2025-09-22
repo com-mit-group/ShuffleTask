@@ -12,15 +12,25 @@ public partial class EditTaskViewModel : ObservableObject
 
     private TaskItem _workingCopy = new();
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Sunday))]
-    [NotifyPropertyChangedFor(nameof(Monday))]
-    [NotifyPropertyChangedFor(nameof(Tuesday))]
-    [NotifyPropertyChangedFor(nameof(Wednesday))]
-    [NotifyPropertyChangedFor(nameof(Thursday))]
-    [NotifyPropertyChangedFor(nameof(Friday))]
-    [NotifyPropertyChangedFor(nameof(Saturday))]
-    private Weekdays selectedWeekdays;
+    private Weekdays _selectedWeekdays;
+
+    public Weekdays SelectedWeekdays
+    {
+        get => _selectedWeekdays;
+        set
+        {
+            if (SetProperty(ref _selectedWeekdays, value))
+            {
+                OnPropertyChanged(nameof(Sunday));
+                OnPropertyChanged(nameof(Monday));
+                OnPropertyChanged(nameof(Tuesday));
+                OnPropertyChanged(nameof(Wednesday));
+                OnPropertyChanged(nameof(Thursday));
+                OnPropertyChanged(nameof(Friday));
+                OnPropertyChanged(nameof(Saturday));
+            }
+        }
+    }
 
     [ObservableProperty]
     private string title = string.Empty;
@@ -82,46 +92,53 @@ public partial class EditTaskViewModel : ObservableObject
         return enabled ? current | day : current & ~day;
     }
 
+    private bool GetWeekday(Weekdays day) => _selectedWeekdays.HasFlag(day);
+
+    private void SetWeekday(Weekdays day, bool isSelected)
+    {
+        SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, day, isSelected);
+    }
+
     public bool Sunday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Sun);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Sun, value);
+        get => GetWeekday(Weekdays.Sun);
+        set => SetWeekday(Weekdays.Sun, value);
     }
 
     public bool Monday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Mon);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Mon, value);
+        get => GetWeekday(Weekdays.Mon);
+        set => SetWeekday(Weekdays.Mon, value);
     }
 
     public bool Tuesday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Tue);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Tue, value);
+        get => GetWeekday(Weekdays.Tue);
+        set => SetWeekday(Weekdays.Tue, value);
     }
 
     public bool Wednesday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Wed);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Wed, value);
+        get => GetWeekday(Weekdays.Wed);
+        set => SetWeekday(Weekdays.Wed, value);
     }
 
     public bool Thursday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Thu);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Thu, value);
+        get => GetWeekday(Weekdays.Thu);
+        set => SetWeekday(Weekdays.Thu, value);
     }
 
     public bool Friday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Fri);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Fri, value);
+        get => GetWeekday(Weekdays.Fri);
+        set => SetWeekday(Weekdays.Fri, value);
     }
 
     public bool Saturday
     {
-        get => SelectedWeekdays.HasFlag(Weekdays.Sat);
-        set => SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, Weekdays.Sat, value);
+        get => GetWeekday(Weekdays.Sat);
+        set => SetWeekday(Weekdays.Sat, value);
     }
 
     public event EventHandler? Saved;
