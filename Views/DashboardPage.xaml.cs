@@ -1,111 +1,144 @@
+using System;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
 using ShuffleTask.ViewModels;
 
-namespace ShuffleTask.Views
+namespace ShuffleTask.Views;
+
+public partial class DashboardPage : ContentPage
 {
-    public partial class DashboardPage : ContentPage
+    private const string PrefTaskId = "pref.currentTaskId";
+    private const string PrefRemainingSecs = "pref.remainingSecs";
+
+    private readonly DashboardViewModel _vm;
+
+    private IDispatcherTimer? _timer;
+    private TimeSpan _remaining;
+
+    public DashboardPage(DashboardViewModel vm)
     {
-        private readonly DashboardViewModel _vm;
-        private readonly IDispatcherTimer _timer;
-        private TimeSpan _remaining;
+        InitializeComponent();
+        BindingContext = _vm = vm;
 
-        private const string PrefTaskId = "pref.currentTaskId";
-        private const string PrefRemainingSecs = "pref.remainingSecs";
+        Loaded += OnLoaded;
+        _vm.CountdownRequested += OnCountdownRequested;
+        _vm.CountdownCleared += OnCountdownCleared;
+    }
 
-        public DashboardPage(DashboardViewModel vm)
+    private async void OnLoaded(object? sender, EventArgs e)
+    {
+        await _vm.InitializeAsync();
+
+        string taskId = Preferences.Default.Get(PrefTaskId, string.Empty);
+        int seconds = Preferences.Default.Get(PrefRemainingSecs, -1);
+
+        if (seconds > 0)
         {
-            InitializeComponent();
-            BindingContext = _vm = vm;
-
-            _timer = Application.Current?.Dispatcher.CreateTimer() ?? Dispatcher.CreateTimer();
-            _timer.Interval = TimeSpan.FromSeconds(1);
-            _timer.Tick += OnTick;
-
-            Loaded += NowPage_Loaded;
-
-            //ShuffleButton.Clicked += async (s, e) => await StartShuffleAsync();
-
-            // Stop countdown and clear persisted state when user completes or skips
-            _vm.DoneOccurred += (_, __) => OnCompleteOrSkip();
-            _vm.SkipOccurred += (_, __) => OnCompleteOrSkip();
-        }
-
-        private async void NowPage_Loaded(object? sender, EventArgs e)
-        {
-            await _vm.InitializeAsync();
-
-            // If no task picked/persisted, don't start timer
-            var secs = Preferences.Default.Get(PrefRemainingSecs, -1);
-            var id = Preferences.Default.Get(PrefTaskId, string.Empty);
-            if (secs > 0 && !string.IsNullOrEmpty(id))
+            TimeSpan remaining = TimeSpan.FromSeconds(seconds);
+            bool restored = await _vm.RestoreTaskAsync(taskId, remaining);
+            if (restored)
             {
-                _remaining = TimeSpan.FromSeconds(secs);
-                _vm.CountdownText = $"{_remaining:mm\\:ss}";
-                _timer.Start();
+                _remaining = remaining;
+                var timer = EnsureTimer();
+                timer.Stop();
+                timer.Start();
                 return;
             }
         }
 
-        private async Task StartShuffleAsync()
-        {
-            var minutes = await _vm.Shuffle();
-            if (_vm.CurrentTask == null)
-            {
-                // No task available now, do not start timer
-                return;
-            }
+        ClearPersistedState();
+    }
 
-            await BeginCountdownAsync(minutes);
-        }
+    private void OnCountdownRequested(object? sender, TimeSpan duration)
+    {
+        StartCountdown(duration);
+    }
 
-        public async Task BeginCountdownAsync(int minutes)
-        {
-            _remaining = TimeSpan.FromMinutes(minutes);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
-            PersistState();
-            _timer.Stop();
-            _timer.Start();
+    private void OnCountdownCleared(object? sender, EventArgs e)
+    {
+        StopCountdown();
+    }
 
-            await _vm.NotifyCurrentTaskAsync(minutes);
-        }
+    private void StartCountdown(TimeSpan duration)
+    {
+        _remaining = duration;
+        _vm.UpdateTimer(_remaining);
+        PersistState();
 
-        private async void OnTick(object? sender, EventArgs e)
-        {
-            if (_remaining.TotalSeconds <= 0)
-            {
-                _timer.Stop();
-                Preferences.Default.Remove(PrefRemainingSecs);
-                await _vm.TimeUpAsync();
-                await StartShuffleAsync();
-                return;
-            }
+        var timer = EnsureTimer();
+        timer.Stop();
+        timer.Start();
+    }
 
-            _remaining -= TimeSpan.FromSeconds(1);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
-            PersistState();
-        }
-
-        private void PersistState()
-        {
-            var id = _vm.CurrentTask?.Id ?? string.Empty;
-            Preferences.Default.Set(PrefTaskId, id);
-            Preferences.Default.Set(PrefRemainingSecs, (int)_remaining.TotalSeconds);
-        }
-
-        private void ClearPersistedState()
-        {
-            Preferences.Default.Remove(PrefTaskId);
-            Preferences.Default.Remove(PrefRemainingSecs);
-        }
-
-        private void OnCompleteOrSkip()
+    private void StopCountdown()
+    {
+        if (_timer != null)
         {
             _timer.Stop();
-            _remaining = TimeSpan.Zero;
-            _vm.CountdownText = "00:00";
-            _vm.CurrentTask = null;
+        }
+
+        _remaining = TimeSpan.Zero;
+        ClearPersistedState();
+    }
+
+    private void PersistState()
+    {
+        string? taskId = _vm.ActiveTaskId;
+        if (string.IsNullOrEmpty(taskId) || _remaining <= TimeSpan.Zero)
+        {
             ClearPersistedState();
+            return;
         }
+
+        Preferences.Default.Set(PrefTaskId, taskId);
+        Preferences.Default.Set(PrefRemainingSecs, (int)Math.Ceiling(_remaining.TotalSeconds));
+    }
+
+    private static void ClearPersistedState()
+    {
+        Preferences.Default.Remove(PrefTaskId);
+        Preferences.Default.Remove(PrefRemainingSecs);
+    }
+
+    private IDispatcherTimer EnsureTimer()
+    {
+        if (_timer != null)
+        {
+            return _timer;
+        }
+
+        var timer = Application.Current?.Dispatcher?.CreateTimer() ?? Dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(1);
+        timer.Tick += OnTick;
+        _timer = timer;
+        return timer;
+    }
+
+    private async void OnTick(object? sender, EventArgs e)
+    {
+        if (_remaining <= TimeSpan.Zero)
+        {
+            _vm.UpdateTimer(TimeSpan.Zero);
+            StopCountdown();
+            await _vm.NotifyTimeUpAsync();
+            await _vm.ShuffleAfterTimeoutAsync();
+            return;
+        }
+
+        _remaining = _remaining.Subtract(TimeSpan.FromSeconds(1));
+        if (_remaining < TimeSpan.Zero)
+        {
+            _remaining = TimeSpan.Zero;
+        }
+
+        _vm.UpdateTimer(_remaining);
+        PersistState();
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        PersistState();
     }
 }

@@ -1,6 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
 
@@ -15,23 +16,29 @@ public partial class MainViewModel : ObservableObject
         _storage = storage;
     }
 
-    public ObservableCollection<TaskRow> TaskRows { get; } = new();
+    public ObservableCollection<TaskListItem> Tasks { get; } = new();
 
     [ObservableProperty]
     private bool isBusy;
 
-    [RelayCommand]
     public async Task LoadAsync()
     {
-        if (IsBusy) return;
+        if (IsBusy)
+        {
+            return;
+        }
+
         IsBusy = true;
         try
         {
             await _storage.InitializeAsync();
-            List<TaskItem> list = await _storage.GetTasksAsync();
-            TaskRows.Clear();
-            foreach (TaskItem t in list)
-                TaskRows.Add(TaskRow.From(t));
+            var items = await _storage.GetTasksAsync();
+
+            Tasks.Clear();
+            foreach (var task in items)
+            {
+                Tasks.Add(TaskListItem.From(task));
+            }
         }
         finally
         {
@@ -39,53 +46,102 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    public async Task PauseResumeAsync(TaskItem t)
+    public async Task TogglePauseAsync(TaskItem task)
     {
-        t.Paused = !t.Paused;
-        await _storage.UpdateTaskAsync(t);
+        task.Paused = !task.Paused;
+        await _storage.UpdateTaskAsync(task);
         await LoadAsync();
     }
 
-    [RelayCommand]
-    public async Task DeleteAsync(TaskItem t)
+    public async Task DeleteAsync(TaskItem task)
     {
-        await _storage.DeleteTaskAsync(t.Id);
+        await _storage.DeleteTaskAsync(task.Id);
         await LoadAsync();
+    }
+
+    public static TaskItem Clone(TaskItem task)
+    {
+        return new TaskItem
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Description = task.Description,
+            Importance = task.Importance,
+            Deadline = task.Deadline,
+            Repeat = task.Repeat,
+            Weekdays = task.Weekdays,
+            IntervalDays = task.IntervalDays,
+            LastDoneAt = task.LastDoneAt,
+            AllowedPeriod = task.AllowedPeriod,
+            Paused = task.Paused,
+            CreatedAt = task.CreatedAt
+        };
     }
 }
 
-public class TaskRow
+public class TaskListItem
 {
-    public TaskItem Item { get; init; } = default!;
-    public string RepeatChip { get; init; } = "";
-    public string AllowedChip { get; init; } = "";
-    public string NextDue { get; init; } = "";
+    public TaskItem Task { get; }
 
-    public static TaskRow From(TaskItem t)
+    public string Title => string.IsNullOrWhiteSpace(Task.Title) ? "Untitled" : Task.Title;
+
+    public string Description => string.IsNullOrWhiteSpace(Task.Description) ? "No description" : Task.Description;
+
+    public string RepeatText { get; }
+
+    public string ScheduleText { get; }
+
+    public string StatusText => Task.Paused ? "Paused" : "Active";
+
+    private TaskListItem(TaskItem task, string repeatText, string scheduleText)
     {
-        string repeat = t.Repeat switch
+        Task = task;
+        RepeatText = repeatText;
+        ScheduleText = scheduleText;
+    }
+
+    public static TaskListItem From(TaskItem task)
+    {
+        string repeat = task.Repeat switch
         {
             RepeatType.None => "One-off",
             RepeatType.Daily => "Daily",
-            RepeatType.Weekly => $"Weekly({t.Weekdays})",
-            RepeatType.Interval => $"Every {Math.Max(1, t.IntervalDays)}d",
-            _ => t.Repeat.ToString()
+            RepeatType.Weekly => $"Weekly ({FormatWeekdays(task.Weekdays)})",
+            RepeatType.Interval => $"Every {Math.Max(1, task.IntervalDays)} day(s)",
+            _ => task.Repeat.ToString()
         };
-        string allowed = t.AllowedPeriod switch
+
+        string schedule = task.Deadline.HasValue
+            ? $"Due {task.Deadline:MMM d, yyyy HH:mm}"
+            : "No deadline";
+
+        return new TaskListItem(task, repeat, schedule);
+    }
+
+    private static string FormatWeekdays(Weekdays weekdays)
+    {
+        if (weekdays == Weekdays.None)
         {
-            AllowedPeriod.Any => "Any",
-            AllowedPeriod.Work => "Work",
-            AllowedPeriod.Off => "Off",
-            _ => t.AllowedPeriod.ToString()
-        };
-        string nextDue = t.Deadline.HasValue ? $"Due {t.Deadline:yyyy-MM-dd HH:mm}" : string.Empty;
-        return new TaskRow
+            return "--";
+        }
+
+        var names = new List<string>();
+        void Add(Weekdays day, string label)
         {
-            Item = t,
-            RepeatChip = repeat,
-            AllowedChip = allowed,
-            NextDue = nextDue
-        };
+            if (weekdays.HasFlag(day))
+            {
+                names.Add(label);
+            }
+        }
+
+        Add(Weekdays.Mon, "Mon");
+        Add(Weekdays.Tue, "Tue");
+        Add(Weekdays.Wed, "Wed");
+        Add(Weekdays.Thu, "Thu");
+        Add(Weekdays.Fri, "Fri");
+        Add(Weekdays.Sat, "Sat");
+        Add(Weekdays.Sun, "Sun");
+
+        return string.Join(", ", names);
     }
 }

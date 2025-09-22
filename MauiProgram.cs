@@ -12,6 +12,8 @@ public static class MauiProgram
     public static IServiceProvider Services =>
         _services ?? throw new InvalidOperationException("Maui services have not been initialized yet.");
 
+    public static IServiceProvider? TryGetServiceProvider() => _services;
+
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();

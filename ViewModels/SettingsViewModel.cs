@@ -1,3 +1,4 @@
+using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Models;
@@ -9,46 +10,83 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly StorageService _storage;
     private readonly SchedulerService _scheduler;
-    private readonly NotificationService _notifier;
-
-    public SettingsViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifier)
-    {
-        _storage = storage;
-        _scheduler = scheduler;
-        _notifier = notifier;
-    }
+    private readonly NotificationService _notifications;
 
     [ObservableProperty]
     private AppSettings settings = new();
 
-    [RelayCommand]
-    public async Task LoadAsync()
+    [ObservableProperty]
+    private bool isBusy;
+
+    public SettingsViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications)
     {
-        await _storage.InitializeAsync();
-        Settings = await _storage.GetSettingsAsync();
-        await _notifier.InitializeAsync();
+        _storage = storage;
+        _scheduler = scheduler;
+        _notifications = notifications;
     }
 
     [RelayCommand]
-    public async Task SaveAsync()
+    private async Task LoadAsync()
     {
-        await _storage.SetSettingsAsync(Settings);
-    }
-
-    [RelayCommand]
-    public async Task ShuffleNowAsync()
-    {
-        // Guard: load settings and tasks
-        await _storage.InitializeAsync();
-        var currentSettings = await _storage.GetSettingsAsync();
-        var tasks = await _storage.GetTasksAsync();
-        var t = _scheduler.PickNextTask(tasks, currentSettings, DateTime.Now);
-        if (t != null)
+        if (IsBusy)
         {
-            if (currentSettings.EnableNotifications)
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await _storage.InitializeAsync();
+            Settings = await _storage.GetSettingsAsync();
+            await _notifications.InitializeAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await _storage.SetSettingsAsync(Settings);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ShufflePreviewAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await _storage.InitializeAsync();
+            var items = await _storage.GetTasksAsync();
+            var next = _scheduler.PickNextTask(items, Settings, DateTime.Now);
+            if (next != null && Settings.EnableNotifications)
             {
-                await _notifier.NotifyTaskAsync(t, currentSettings.ReminderMinutes, currentSettings);
+                await _notifications.NotifyTaskAsync(next, Settings.ReminderMinutes, Settings);
             }
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 }

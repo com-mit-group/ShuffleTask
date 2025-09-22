@@ -1,49 +1,152 @@
-<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              x:Class="ShuffleTask.Views.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
              Title="Settings">
     <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="12">
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-                <Label Grid.Row="0" Text="Work Start" />
-                <TimePicker Grid.Row="0" Grid.Column="1" Time="{Binding Settings.WorkStart}" />
+        <Grid Padding="20"
+              ColumnDefinitions="Auto,*"
+              RowSpacing="18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-                <Label Grid.Row="1" Text="Work End" />
-                <TimePicker Grid.Row="1" Grid.Column="1" Time="{Binding Settings.WorkEnd}" />
+            <Label Grid.Row="0"
+                   Text="Work start"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="0"
+                        Grid.Column="1"
+                        Time="{Binding Settings.WorkStart}" />
 
-                <Label Grid.Row="2" Text="Reminder (min)" />
-                <Stepper Grid.Row="2" Grid.Column="1" Minimum="5" Maximum="240" Increment="5" Value="{Binding Settings.ReminderMinutes}" />
+            <Label Grid.Row="1"
+                   Text="Work end"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="1"
+                        Grid.Column="1"
+                        Time="{Binding Settings.WorkEnd}" />
 
-                <Label Grid.Row="3" Text="Min Gap (min)" />
-                <Stepper Grid.Row="3" Grid.Column="1" Minimum="5" Maximum="240" Increment="5" Value="{Binding Settings.MinGapMinutes}" />
-
-                <Label Grid.Row="4" Text="Max Gap (min)" />
-                <Stepper Grid.Row="4" Grid.Column="1" Minimum="5" Maximum="480" Increment="5" Value="{Binding Settings.MaxGapMinutes}" />
-
-                <Label Grid.Row="5" Text="Notifications" />
-                <Switch Grid.Row="5" Grid.Column="1" IsToggled="{Binding Settings.EnableNotifications}" />
-
-                <Label Grid.Row="6" Text="Sound On" />
-                <Switch Grid.Row="6" Grid.Column="1" IsToggled="{Binding Settings.SoundOn}" />
-
-                <Label Grid.Row="7" Text="Active" />
-                <Switch Grid.Row="7" Grid.Column="1" IsToggled="{Binding Settings.Active}" />
-
-                <Label Grid.Row="8" Text="Streak Bias" />
-                <Grid Grid.Row="8" Grid.Column="1" ColumnDefinitions="*,Auto">
-                    <Slider x:Name="StreakSlider" Minimum="0" Maximum="1" Value="{Binding Settings.StreakBias}" />
-                    <Label Grid.Column="1" Margin="8,0,0,0" VerticalOptions="Center" Text="{Binding Source={x:Reference StreakSlider}, Path=Value, StringFormat='{}{0:0.00}'}" />
-                </Grid>
-
-                <Label Grid.Row="9" Text="Stable randomness per day" />
-                <Switch Grid.Row="9" Grid.Column="1" IsToggled="{Binding Settings.StableRandomnessPerDay}" />
+            <Label Grid.Row="2"
+                   Text="Reminder (min)"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="2"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Stepper Minimum="5"
+                         Maximum="240"
+                         Increment="5"
+                         Value="{Binding Settings.ReminderMinutes}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.ReminderMinutes}"
+                       VerticalOptions="Center" />
             </Grid>
 
-            <HorizontalStackLayout>
-                <Button Text="Save" Command="{Binding SaveCommand}" />
-                <Button Text="Shuffle Now" Command="{Binding ShuffleNowCommand}" />
-            </HorizontalStackLayout>
-        </VerticalStackLayout>
+            <Label Grid.Row="3"
+                   Text="Min gap (min)"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="3"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Stepper Minimum="5"
+                         Maximum="240"
+                         Increment="5"
+                         Value="{Binding Settings.MinGapMinutes}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.MinGapMinutes}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="4"
+                   Text="Max gap (min)"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="4"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Stepper Minimum="5"
+                         Maximum="480"
+                         Increment="5"
+                         Value="{Binding Settings.MaxGapMinutes}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.MaxGapMinutes}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="5"
+                   Text="Notifications"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="5"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.EnableNotifications}" />
+
+            <Label Grid.Row="6"
+                   Text="Sound"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="6"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.SoundOn}" />
+
+            <Label Grid.Row="7"
+                   Text="Active"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="7"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.Active}" />
+
+            <Label Grid.Row="8"
+                   Text="Streak bias"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="8"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Slider Minimum="0"
+                        Maximum="1"
+                        Value="{Binding Settings.StreakBias}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.StreakBias, StringFormat='{0:F2}'}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="9"
+                   Text="Stable randomness"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="9"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.StableRandomnessPerDay}" />
+
+            <Grid Grid.Row="10"
+                  Grid.ColumnSpan="2"
+                  ColumnDefinitions="*,*"
+                  ColumnSpacing="16">
+                <Button Grid.Column="0"
+                        Text="Save"
+                        Command="{Binding SaveCommand}" />
+                <Button Grid.Column="1"
+                        Text="Shuffle preview"
+                        Command="{Binding ShufflePreviewCommand}" />
+            </Grid>
+
+            <ActivityIndicator Grid.Row="11"
+                               Grid.ColumnSpan="2"
+                               HorizontalOptions="Center"
+                               IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}" />
+        </Grid>
     </ScrollView>
 </ContentPage>

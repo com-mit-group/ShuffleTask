@@ -6,6 +6,10 @@ public class SchedulerService
 {
     private readonly bool _deterministic;
 
+    private static readonly object _stableSampleLock = new();
+    private static int _stableSampleSeed = int.MinValue;
+    private static int _stableSampleIndex;
+
     public SchedulerService(bool deterministic = false)
     {
         _deterministic = deterministic;
@@ -119,19 +123,18 @@ public class SchedulerService
             cumulative[i] = acc;
         }
 
-        Random sampler;
+        double sample;
         if (s.StableRandomnessPerDay)
         {
             int daySeed = nowLocal.Year * 10000 + nowLocal.Month * 100 + nowLocal.Day;
-            int seeded = unchecked(daySeed ^ (int)0x9e3779b9);
-            sampler = new Random(seeded);
+            sample = NextStableSample(daySeed);
         }
         else
         {
-            sampler = new Random();
+            sample = Random.Shared.NextDouble();
         }
 
-        double r = sampler.NextDouble() * sum;
+        double r = sample * sum;
 
         for (int i = 0; i < cumulative.Length; i++)
         {
@@ -229,4 +232,22 @@ public class SchedulerService
 
     private static double Clamp(double v, double min, double max) => Math.Max(min, Math.Min(max, v));
     private static double Clamp01(double v) => Math.Max(0, Math.Min(1, v));
+
+    private static double NextStableSample(int daySeed)
+    {
+        lock (_stableSampleLock)
+        {
+            if (_stableSampleSeed != daySeed)
+            {
+                _stableSampleSeed = daySeed;
+                _stableSampleIndex = 0;
+            }
+
+            int combined = unchecked(daySeed * 397) ^ _stableSampleIndex++;
+            combined &= int.MaxValue;
+
+            var rng = new Random(combined);
+            return rng.NextDouble();
+        }
+    }
 }
