@@ -3,6 +3,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
+             xmlns:controls="clr-namespace:ShuffleTask.Controls"
              x:Class="ShuffleTask.Views.EditTaskPage"
              x:DataType="vm:EditTaskViewModel"
              Title="Task">
@@ -33,18 +34,16 @@
                     Text="{Binding Description}" />
 
             <Grid Grid.Row="2"
-                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnDefinitions="Auto,*"
                   ColumnSpacing="12">
                 <Label Text="Importance"
                        VerticalOptions="Center" />
-                <Stepper Grid.Column="1"
-                         Minimum="1"
-                         Maximum="5"
-                         Increment="1"
-                         Value="{Binding Importance}" />
-                <Label Grid.Column="2"
-                       Text="{Binding Importance, StringFormat='{0:0}'}"
-                       VerticalOptions="Center" />
+                <controls:NumericStepper Grid.Column="1"
+                                         Minimum="1"
+                                         Maximum="5"
+                                         Increment="1"
+                                         Value="{Binding Importance}"
+                                         HorizontalOptions="Start" />
             </Grid>
 
             <Grid Grid.Row="3"
@@ -119,7 +118,7 @@
             </Grid>
 
             <Grid Grid.Row="6"
-                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnDefinitions="Auto,*"
                   ColumnSpacing="12"
                   IsVisible="False">
                 <Grid.Triggers>
@@ -131,13 +130,12 @@
                 </Grid.Triggers>
                 <Label Text="Every"
                        VerticalOptions="Center" />
-                <Stepper Grid.Column="1"
-                         Minimum="1"
-                         Maximum="30"
-                         Increment="1"
-                         Value="{Binding IntervalDays}" />
-                <Label Grid.Column="2"
-                       Text="{Binding IntervalDays, StringFormat='{0:0}'}" />
+                <controls:NumericStepper Grid.Column="1"
+                                         Minimum="1"
+                                         Maximum="30"
+                                         Increment="1"
+                                         Value="{Binding IntervalDays}"
+                                         HorizontalOptions="Start" />
             </Grid>
 
             <Picker Grid.Row="7"
