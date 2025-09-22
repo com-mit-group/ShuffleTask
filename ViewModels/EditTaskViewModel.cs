@@ -1,3 +1,4 @@
+using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Models;
@@ -9,145 +10,243 @@ public partial class EditTaskViewModel : ObservableObject
 {
     private readonly StorageService _storage;
 
+    private TaskItem _workingCopy = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Sunday))]
+    [NotifyPropertyChangedFor(nameof(Monday))]
+    [NotifyPropertyChangedFor(nameof(Tuesday))]
+    [NotifyPropertyChangedFor(nameof(Wednesday))]
+    [NotifyPropertyChangedFor(nameof(Thursday))]
+    [NotifyPropertyChangedFor(nameof(Friday))]
+    [NotifyPropertyChangedFor(nameof(Saturday))]
+    private Weekdays selectedWeekdays;
+
+    [ObservableProperty]
+    private string title = string.Empty;
+
+    [ObservableProperty]
+    private string description = string.Empty;
+
+    [ObservableProperty]
+    private double importance = 1;
+
+    [ObservableProperty]
+    private bool hasDeadline;
+
+    [ObservableProperty]
+    private DateTime deadlineDate = DateTime.Today;
+
+    [ObservableProperty]
+    private TimeSpan deadlineTime = new(9, 0, 0);
+
+    [ObservableProperty]
+    private RepeatType repeat;
+
+    [ObservableProperty]
+    private double intervalDays = 1;
+
+    [ObservableProperty]
+    private AllowedPeriod allowedPeriod;
+
+    [ObservableProperty]
+    private bool isPaused;
+
+    [ObservableProperty]
+    private bool isBusy;
+
+    private bool _isNew = true;
+    public bool IsNew
+    {
+        get => _isNew;
+        private set => SetProperty(ref _isNew, value);
+    }
+
     public EditTaskViewModel(StorageService storage)
     {
         _storage = storage;
-        Task = new TaskItem();
-        if (Task.Importance < 1) Task.Importance = 1;
-
-        // Initialize split date/time properties from Task.Deadline or defaults
-        var d = Task.Deadline ?? DateTime.Now;
-        _deadlineDate = d.Date;
-        _deadlineTime = d.TimeOfDay;
-        _hasDeadline = Task.Deadline.HasValue;
     }
 
-    [ObservableProperty]
-    private TaskItem task;
+    public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
 
-    partial void OnTaskChanged(TaskItem value)
+    public AllowedPeriod[] AllowedPeriodOptions { get; } = Enum.GetValues<AllowedPeriod>();
+
+    public bool Sunday
     {
-        // Sync split fields when Task instance is replaced (new or editing existing)
-        var d = value?.Deadline ?? DateTime.Now;
-        _deadlineDate = d.Date;
-        _deadlineTime = d.TimeOfDay;
-        OnPropertyChanged(nameof(DeadlineDate));
-        OnPropertyChanged(nameof(DeadlineTime));
-        HasDeadline = value?.Deadline != null;
-        if (Task.Importance < 1) Task.Importance = 1;
-        // Refresh weekday flags bindings
-        OnPropertyChanged(nameof(Sun));
-        OnPropertyChanged(nameof(Mon));
-        OnPropertyChanged(nameof(Tue));
-        OnPropertyChanged(nameof(Wed));
-        OnPropertyChanged(nameof(Thu));
-        OnPropertyChanged(nameof(Fri));
-        OnPropertyChanged(nameof(Sat));
+        get => SelectedWeekdays.HasFlag(Weekdays.Sun);
+        set => UpdateWeekday(Weekdays.Sun, value);
     }
 
-    // Toggle to control whether a deadline is set
-    private bool _hasDeadline;
-    public bool HasDeadline
+    public bool Monday
     {
-        get => _hasDeadline;
-        set
-        {
-            if (_hasDeadline != value)
-            {
-                _hasDeadline = value;
-                if (!_hasDeadline)
-                {
-                    Task.Deadline = null;
-                }
-                else
-                {
-                    Task.Deadline = DeadlineDate.Date + DeadlineTime;
-                }
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(Task));
-            }
-        }
+        get => SelectedWeekdays.HasFlag(Weekdays.Mon);
+        set => UpdateWeekday(Weekdays.Mon, value);
     }
 
-    // Backing fields for Deadline split bindings
-    private DateTime _deadlineDate;
-    public DateTime DeadlineDate
+    public bool Tuesday
     {
-        get => _deadlineDate;
-        set
-        {
-            if (SetProperty(ref _deadlineDate, value))
-            {
-                UpdateTaskDeadline();
-            }
-        }
+        get => SelectedWeekdays.HasFlag(Weekdays.Tue);
+        set => UpdateWeekday(Weekdays.Tue, value);
     }
 
-    private TimeSpan _deadlineTime;
-    public TimeSpan DeadlineTime
+    public bool Wednesday
     {
-        get => _deadlineTime;
-        set
-        {
-            if (SetProperty(ref _deadlineTime, value))
-            {
-                UpdateTaskDeadline();
-            }
-        }
+        get => SelectedWeekdays.HasFlag(Weekdays.Wed);
+        set => UpdateWeekday(Weekdays.Wed, value);
     }
 
-    private void UpdateTaskDeadline()
+    public bool Thursday
     {
-        // Combine date and time into a single DateTime when enabled; otherwise keep null
-        if (HasDeadline)
-            Task.Deadline = DeadlineDate.Date + DeadlineTime;
-        else
-            Task.Deadline = null;
-        OnPropertyChanged(nameof(Task));
+        get => SelectedWeekdays.HasFlag(Weekdays.Thu);
+        set => UpdateWeekday(Weekdays.Thu, value);
     }
 
-    public RepeatType[] RepeatTypes { get; } = Enum.GetValues<RepeatType>();
-    public AllowedPeriod[] AllowedPeriods { get; } = Enum.GetValues<AllowedPeriod>();
-
-    // Weekday flag helpers for checkbox bindings
-    private bool HasFlag(Weekdays f) => (Task.Weekdays & f) == f;
-    private void SetFlag(Weekdays f, bool on)
+    public bool Friday
     {
-        if (on)
-            Task.Weekdays |= f;
-        else
-            Task.Weekdays &= ~f;
-        OnPropertyChanged(nameof(Task));
+        get => SelectedWeekdays.HasFlag(Weekdays.Fri);
+        set => UpdateWeekday(Weekdays.Fri, value);
     }
 
-    public bool Sun { get => HasFlag(Weekdays.Sun); set { if (value != Sun) { SetFlag(Weekdays.Sun, value); OnPropertyChanged(); } } }
-    public bool Mon { get => HasFlag(Weekdays.Mon); set { if (value != Mon) { SetFlag(Weekdays.Mon, value); OnPropertyChanged(); } } }
-    public bool Tue { get => HasFlag(Weekdays.Tue); set { if (value != Tue) { SetFlag(Weekdays.Tue, value); OnPropertyChanged(); } } }
-    public bool Wed { get => HasFlag(Weekdays.Wed); set { if (value != Wed) { SetFlag(Weekdays.Wed, value); OnPropertyChanged(); } } }
-    public bool Thu { get => HasFlag(Weekdays.Thu); set { if (value != Thu) { SetFlag(Weekdays.Thu, value); OnPropertyChanged(); } } }
-    public bool Fri { get => HasFlag(Weekdays.Fri); set { if (value != Fri) { SetFlag(Weekdays.Fri, value); OnPropertyChanged(); } } }
-    public bool Sat { get => HasFlag(Weekdays.Sat); set { if (value != Sat) { SetFlag(Weekdays.Sat, value); OnPropertyChanged(); } } }
+    public bool Saturday
+    {
+        get => SelectedWeekdays.HasFlag(Weekdays.Sat);
+        set => UpdateWeekday(Weekdays.Sat, value);
+    }
 
     public event EventHandler? Saved;
 
-    [RelayCommand]
-    public async Task SaveAsync()
+    public void Load(TaskItem? task)
     {
-        await _storage.InitializeAsync();
-        // Basic validation
-        if (string.IsNullOrWhiteSpace(Task.Title))
-            return;
-        if (Task.Importance < 1) Task.Importance = 1;
+        IsBusy = false;
+        _workingCopy = task != null ? Clone(task) : new TaskItem();
+        IsNew = task == null || string.IsNullOrWhiteSpace(task.Id);
 
-        // Ensure Task.Deadline reflects latest split fields and toggle
-        UpdateTaskDeadline();
+        Title = _workingCopy.Title;
+        Description = _workingCopy.Description;
+        Importance = Math.Max(1, _workingCopy.Importance);
+        Repeat = _workingCopy.Repeat;
+        IntervalDays = _workingCopy.IntervalDays > 0 ? _workingCopy.IntervalDays : 1;
+        AllowedPeriod = _workingCopy.AllowedPeriod;
+        IsPaused = _workingCopy.Paused;
+        SelectedWeekdays = _workingCopy.Weekdays;
 
-        var existing = await _storage.GetTaskAsync(Task.Id);
-        if (existing == null)
-            await _storage.AddTaskAsync(Task);
+        if (_workingCopy.Deadline.HasValue)
+        {
+            HasDeadline = true;
+            DeadlineDate = _workingCopy.Deadline.Value.Date;
+            DeadlineTime = _workingCopy.Deadline.Value.TimeOfDay;
+        }
         else
-            await _storage.UpdateTaskAsync(Task);
+        {
+            HasDeadline = false;
+            DeadlineDate = DateTime.Today;
+            DeadlineTime = new TimeSpan(9, 0, 0);
+        }
+    }
 
-        Saved?.Invoke(this, EventArgs.Empty);
+    [RelayCommand]
+    private async Task SaveAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Title))
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await _storage.InitializeAsync();
+
+            _workingCopy.Title = Title.Trim();
+            _workingCopy.Description = Description?.Trim() ?? string.Empty;
+            _workingCopy.Importance = (int)Math.Max(1, Math.Round(Importance));
+            _workingCopy.Repeat = Repeat;
+            _workingCopy.Weekdays = Repeat == RepeatType.Weekly ? SelectedWeekdays : Weekdays.None;
+            int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
+            _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
+            _workingCopy.AllowedPeriod = AllowedPeriod;
+            _workingCopy.Paused = IsPaused;
+
+            if (HasDeadline)
+            {
+                _workingCopy.Deadline = DeadlineDate.Date + DeadlineTime;
+            }
+            else
+            {
+                _workingCopy.Deadline = null;
+            }
+
+            if (string.IsNullOrWhiteSpace(_workingCopy.Id))
+            {
+                _workingCopy.Id = Guid.NewGuid().ToString("n");
+            }
+
+            if (IsNew)
+            {
+                await _storage.AddTaskAsync(_workingCopy);
+            }
+            else
+            {
+                await _storage.UpdateTaskAsync(_workingCopy);
+            }
+
+            Saved?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    public void ResetDeadline()
+    {
+        HasDeadline = false;
+    }
+
+    private void UpdateWeekday(Weekdays day, bool enabled)
+    {
+        Weekdays current = SelectedWeekdays;
+        Weekdays updated = enabled ? current | day : current & ~day;
+        if (updated != current)
+        {
+            SelectedWeekdays = updated;
+        }
+    }
+
+    partial void OnRepeatChanged(RepeatType value)
+    {
+        if (value != RepeatType.Weekly && SelectedWeekdays != Weekdays.None)
+        {
+            SelectedWeekdays = Weekdays.None;
+        }
+
+        if (value != RepeatType.Interval)
+        {
+            IntervalDays = 1;
+        }
+    }
+
+    private static TaskItem Clone(TaskItem task)
+    {
+        return new TaskItem
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Description = task.Description,
+            Importance = task.Importance,
+            Deadline = task.Deadline,
+            Repeat = task.Repeat,
+            Weekdays = task.Weekdays,
+            IntervalDays = task.IntervalDays,
+            LastDoneAt = task.LastDoneAt,
+            AllowedPeriod = task.AllowedPeriod,
+            Paused = task.Paused,
+            CreatedAt = task.CreatedAt
+        };
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Models;
@@ -9,91 +11,263 @@ public partial class DashboardViewModel : ObservableObject
 {
     private readonly StorageService _storage;
     private readonly SchedulerService _scheduler;
-    private readonly NotificationService _notifier;
+    private readonly NotificationService _notifications;
 
-    public event EventHandler? DoneOccurred;
-    public event EventHandler? SkipOccurred;
+    private TaskItem? _activeTask;
+    private AppSettings? _settings;
 
-    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifier)
+    private const string DefaultTitle = "Shuffle a task";
+    private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
+    private const string DefaultSchedule = "No schedule yet.";
+
+    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications)
     {
         _storage = storage;
         _scheduler = scheduler;
-        _notifier = notifier;
+        _notifications = notifications;
+
+        Title = DefaultTitle;
+        Description = DefaultDescription;
+        Schedule = DefaultSchedule;
+        TimerText = "--:--";
     }
 
-    [ObservableProperty]
-    private TaskItem? _currentTask;
+    public event EventHandler<TimeSpan>? CountdownRequested;
+    public event EventHandler? CountdownCleared;
 
     [ObservableProperty]
-    private string _currentTaskDeadlineText = "No deadline";
-
-    partial void OnCurrentTaskChanged(TaskItem? value)
-    {
-        if (value?.Deadline is DateTime deadline)
-        {
-            CurrentTaskDeadlineText = $"Deadline / Repeating schedule: {deadline:yyyy-MM-dd HH:mm}";
-        }
-        else
-        {
-            CurrentTaskDeadlineText = "No deadline";
-        }
-    }
+    private string title;
 
     [ObservableProperty]
-    private string _countdownText = "60:00";
+    private string description;
 
     [ObservableProperty]
-    private bool _isRunning;
+    private string schedule;
 
-    public AppSettings? Settings { get; private set; }
+    [ObservableProperty]
+    private string timerText;
+
+    [ObservableProperty]
+    private bool hasTask;
+
+    [ObservableProperty]
+    private bool isBusy;
+
+    public string? ActiveTaskId => _activeTask?.Id;
 
     public async Task InitializeAsync()
     {
         await _storage.InitializeAsync();
-        Settings = await _storage.GetSettingsAsync();
-        await _notifier.InitializeAsync();
-    }
-
-    [RelayCommand]
-    public async Task<int> Shuffle()
-    {
-
-        List<TaskItem> tasks = await _storage.GetTasksAsync();
-        Settings ??= await _storage.GetSettingsAsync();
-        TaskItem? picked = _scheduler.PickNextTask(tasks, Settings, DateTime.Now);
-        CurrentTask = picked;
-        int minutes = Settings.ReminderMinutes > 0 ? Settings.ReminderMinutes : 60;
-        return minutes;
-    }
-
-    public async Task NotifyCurrentTaskAsync(int minutes)
-    {
-        Settings ??= await _storage.GetSettingsAsync();
-        if (Settings.EnableNotifications && CurrentTask != null)
+        if (_settings == null)
         {
-            await _notifier.NotifyTaskAsync(CurrentTask, minutes, Settings);
+            _settings = await _storage.GetSettingsAsync();
+        }
+        await _notifications.InitializeAsync();
+    }
+
+    private async Task EnsureSettingsAsync()
+    {
+        if (_settings == null)
+        {
+            await InitializeAsync();
         }
     }
 
-    public async Task TimeUpAsync()
+    [RelayCommand]
+    private async Task ShuffleAsync()
     {
-        Settings ??= await _storage.GetSettingsAsync();
-        await _notifier.ShowToastAsync("Time's up", "Shuffling a new task...", Settings);
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await EnsureSettingsAsync();
+            var settings = _settings ?? throw new InvalidOperationException("Settings unavailable.");
+
+            if (!settings.Active)
+            {
+                ShowMessage("Scheduling paused", "Enable the scheduler from Settings to shuffle tasks.");
+                return;
+            }
+
+            var tasks = await _storage.GetTasksAsync();
+            var next = _scheduler.PickNextTask(tasks, settings, DateTime.Now);
+            if (next == null)
+            {
+                ShowMessage("No tasks ready", "Add a task or adjust filters to get started.");
+                return;
+            }
+
+            BindTask(next);
+
+            int minutes = Math.Max(1, settings.ReminderMinutes);
+            var duration = TimeSpan.FromMinutes(minutes);
+            UpdateTimer(duration);
+            CountdownRequested?.Invoke(this, duration);
+
+            if (settings.EnableNotifications)
+            {
+                await _notifications.NotifyTaskAsync(next, minutes, settings);
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
-    public async Task Done()
+    private async Task DoneAsync()
     {
-        if (CurrentTask == null) return;
-        await _storage.MarkTaskDoneAsync(CurrentTask.Id);
-        DoneOccurred?.Invoke(this, EventArgs.Empty);
+        if (_activeTask == null)
+        {
+            return;
+        }
+
+        await _storage.MarkTaskDoneAsync(_activeTask.Id);
+        ShowMessage("Task complete", "Shuffle another task when you're ready.");
     }
 
     [RelayCommand]
-    public Task Snooze()
+    private Task SnoozeAsync()
     {
-        // Snooze is handled via notifications UI; here we can treat as Skip for flow
-        SkipOccurred?.Invoke(this, EventArgs.Empty);
+        ShowMessage("Task snoozed", "Shuffle another task when you're ready.");
         return Task.CompletedTask;
+    }
+
+    public async Task<bool> RestoreTaskAsync(string? taskId, TimeSpan? remaining)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            ShowDefaultState();
+            return false;
+        }
+
+        await EnsureSettingsAsync();
+        var task = await _storage.GetTaskAsync(taskId);
+        if (task == null)
+        {
+            ShowDefaultState();
+            return false;
+        }
+
+        BindTask(task);
+        if (remaining.HasValue)
+        {
+            UpdateTimer(remaining.Value);
+        }
+
+        return true;
+    }
+
+    public async Task NotifyTimeUpAsync()
+    {
+        await EnsureSettingsAsync();
+        if (_settings != null)
+        {
+            await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", _settings);
+        }
+    }
+
+    public void UpdateTimer(TimeSpan remaining)
+    {
+        if (remaining <= TimeSpan.Zero)
+        {
+            TimerText = "00:00";
+        }
+        else
+        {
+            TimerText = remaining.ToString(@"mm\:ss");
+        }
+    }
+
+    public void ClearActiveTask()
+    {
+        ShowDefaultState();
+    }
+
+    private void BindTask(TaskItem task)
+    {
+        _activeTask = task;
+        Title = string.IsNullOrWhiteSpace(task.Title) ? "Untitled task" : task.Title;
+        Description = string.IsNullOrWhiteSpace(task.Description)
+            ? "No description provided."
+            : task.Description;
+        Schedule = BuildScheduleText(task);
+        HasTask = true;
+    }
+
+    private void ShowDefaultState()
+    {
+        ShowMessage(DefaultTitle, DefaultDescription);
+    }
+
+    private void ShowMessage(string title, string description)
+    {
+        _activeTask = null;
+        Title = title;
+        Description = description;
+        Schedule = DefaultSchedule;
+        TimerText = "--:--";
+        HasTask = false;
+        CountdownCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static string BuildScheduleText(TaskItem task)
+    {
+        string deadline = task.Deadline.HasValue
+            ? $"Deadline {task.Deadline:MMM d, yyyy HH:mm}"
+            : "No deadline";
+
+        string repeat = task.Repeat switch
+        {
+            RepeatType.None => "One-off task",
+            RepeatType.Daily => "Repeats daily",
+            RepeatType.Weekly => $"Weekly on {FormatWeekdays(task.Weekdays)}",
+            RepeatType.Interval => $"Every {Math.Max(1, task.IntervalDays)} day(s)",
+            _ => "Schedule unknown"
+        };
+
+        string allowed = task.AllowedPeriod switch
+        {
+            AllowedPeriod.Any => "Any time",
+            AllowedPeriod.Work => "Work hours",
+            AllowedPeriod.OffWork => "Off hours",
+            AllowedPeriod.Off => "Off days",
+            _ => "Any time"
+        };
+
+        return $"{deadline} • {repeat} • {allowed}";
+    }
+
+    private static string FormatWeekdays(Weekdays weekdays)
+    {
+        if (weekdays == Weekdays.None)
+        {
+            return "no specific days";
+        }
+
+        var names = new List<string>();
+
+        void Add(Weekdays day, string name)
+        {
+            if (weekdays.HasFlag(day))
+            {
+                names.Add(name);
+            }
+        }
+
+        Add(Weekdays.Mon, "Mon");
+        Add(Weekdays.Tue, "Tue");
+        Add(Weekdays.Wed, "Wed");
+        Add(Weekdays.Thu, "Thu");
+        Add(Weekdays.Fri, "Fri");
+        Add(Weekdays.Sat, "Sat");
+        Add(Weekdays.Sun, "Sun");
+
+        return string.Join(", ", names);
     }
 }

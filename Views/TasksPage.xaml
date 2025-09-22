@@ -7,18 +7,17 @@
              x:DataType="vm:MainViewModel"
              Title="Tasks">
     <ContentPage.ToolbarItems>
-        <ToolbarItem x:Name="AddToolbar"
-                     Order="Primary"
+        <ToolbarItem Text="+"
                      Priority="0"
-                     Text="+" />
+                     Order="Primary"
+                     Clicked="OnAddClicked" />
     </ContentPage.ToolbarItems>
 
-    <CollectionView x:Name="TasksList"
-                    ItemsSource="{Binding TaskRows}"
+    <CollectionView ItemsSource="{Binding Tasks}"
                     SelectionMode="None">
         <CollectionView.EmptyView>
-            <Grid Padding="24"
-                  RowSpacing="12"
+            <Grid Padding="32"
+                  RowSpacing="8"
                   HorizontalOptions="Center"
                   VerticalOptions="Center">
                 <Grid.RowDefinitions>
@@ -27,70 +26,93 @@
                 </Grid.RowDefinitions>
 
                 <Label Grid.Row="0"
+                       Text="No tasks yet"
                        FontSize="18"
-                       HorizontalTextAlignment="Center"
-                       Text="No tasks yet" />
+                       HorizontalTextAlignment="Center" />
                 <Label Grid.Row="1"
+                       Text="Tap + to add your first task"
                        FontSize="14"
                        HorizontalTextAlignment="Center"
-                       Text="Tap + to add your first task" />
+                       TextColor="Gray" />
             </Grid>
         </CollectionView.EmptyView>
+
         <CollectionView.ItemTemplate>
-            <DataTemplate x:DataType="vm:TaskRow">
+            <DataTemplate x:DataType="vm:TaskListItem">
                 <SwipeView>
                     <SwipeView.RightItems>
                         <SwipeItems Mode="Reveal">
                             <SwipeItem Text="Edit"
                                        BackgroundColor="#2d9cdb"
-                                       CommandParameter="{Binding Item}"
+                                       CommandParameter="{Binding Task}"
                                        Invoked="OnEditSwipe" />
-                            <SwipeItem Text="Pause/Resume"
+                            <SwipeItem Text="Toggle Pause"
                                        BackgroundColor="#f2c94c"
-                                       CommandParameter="{Binding Item}"
-                                       Invoked="OnPauseResumeSwipe" />
+                                       CommandParameter="{Binding Task}"
+                                       Invoked="OnTogglePauseSwipe" />
                             <SwipeItem Text="Delete"
                                        BackgroundColor="#eb5757"
-                                       CommandParameter="{Binding Item}"
+                                       CommandParameter="{Binding Task}"
                                        Invoked="OnDeleteSwipe" />
                         </SwipeItems>
                     </SwipeView.RightItems>
-                    <Grid Padding="12"
-                          RowSpacing="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
 
-                        <Label Grid.Row="0"
-                               FontSize="18"
-                               FontAttributes="Bold"
-                               Text="{Binding Item.Title}" />
+                    <Border StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="12,8"
+                            BackgroundColor="{AppThemeBinding Light=#ffffff, Dark=#1f1f1f}"
+                            Stroke="{AppThemeBinding Light=#e0e0e0, Dark=#2c2c2c}"
+                            StrokeThickness="1">
+                        <Grid RowSpacing="8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="1"
-                              ColumnSpacing="6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0"
-                                    StrokeShape="RoundRectangle 8">
-                                <Label Margin="6,2"
-                                       Text="{Binding RepeatChip}" />
-                            </Border>
-                            <Border Grid.Column="1"
-                                    StrokeShape="RoundRectangle 8">
-                                <Label Margin="6,2"
-                                       Text="{Binding AllowedChip}" />
-                            </Border>
+                            <Label Grid.Row="0"
+                                   Text="{Binding Title}"
+                                   FontSize="18"
+                                   FontAttributes="Bold" />
+
+                            <Label Grid.Row="1"
+                                   Text="{Binding Description}"
+                                   FontSize="14"
+                                   TextColor="{AppThemeBinding Light=#4f4f4f, Dark=#d0d0d0}"
+                                   LineBreakMode="WordWrap" />
+
+                            <Grid Grid.Row="2"
+                                  ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="12">
+                                <Grid Grid.Column="0"
+                                      RowDefinitions="Auto,Auto"
+                                      RowSpacing="2">
+                                    <Label Grid.Row="0"
+                                           Text="{Binding RepeatText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                    <Label Grid.Row="1"
+                                           Text="{Binding ScheduleText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                </Grid>
+
+                                <Label Grid.Column="1"
+                                       Text="{Binding StatusText}"
+                                       FontSize="12"
+                                       VerticalOptions="Start"
+                                       TextColor="{AppThemeBinding Light=#2f855a, Dark=#9ae6b4}">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label"
+                                                    Binding="{Binding Task.Paused}"
+                                                    Value="True">
+                                            <Setter Property="TextColor" Value="#c53030" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+                            </Grid>
                         </Grid>
-
-                        <Label Grid.Row="2"
-                               FontSize="12"
-                               Text="{Binding NextDue}"
-                               TextColor="Gray" />
-                    </Grid>
+                    </Border>
                 </SwipeView>
             </DataTemplate>
         </CollectionView.ItemTemplate>

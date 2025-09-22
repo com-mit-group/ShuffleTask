@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
@@ -7,111 +8,97 @@ namespace ShuffleTask.Views;
 
 public partial class DashboardPage : ContentPage
 {
-    private readonly DashboardViewModel _vm;
-    private IDispatcherTimer? _timer;
-    private TimeSpan _remaining;
-
     private const string PrefTaskId = "pref.currentTaskId";
     private const string PrefRemainingSecs = "pref.remainingSecs";
+
+    private readonly DashboardViewModel _vm;
+
+    private IDispatcherTimer? _timer;
+    private TimeSpan _remaining;
 
     public DashboardPage(DashboardViewModel vm)
     {
         InitializeComponent();
         BindingContext = _vm = vm;
 
-        Loaded += NowPage_Loaded;
-
-        //ShuffleButton.Clicked += async (s, e) => await StartShuffleAsync();
-
-        // Stop countdown and clear persisted state when user completes or skips
-        _vm.DoneOccurred += (_, __) => OnCompleteOrSkip();
-        _vm.SkipOccurred += (_, __) => OnCompleteOrSkip();
+        Loaded += OnLoaded;
+        _vm.CountdownRequested += OnCountdownRequested;
+        _vm.CountdownCleared += OnCountdownCleared;
     }
 
-    private async void NowPage_Loaded(object? sender, EventArgs e)
+    private async void OnLoaded(object? sender, EventArgs e)
     {
-        var timer = EnsureTimer();
         await _vm.InitializeAsync();
 
-        // If no task picked/persisted, don't start timer
-        var secs = Preferences.Default.Get(PrefRemainingSecs, -1);
-        var id = Preferences.Default.Get(PrefTaskId, string.Empty);
-        if (secs > 0 && !string.IsNullOrEmpty(id))
-        {
-            _remaining = TimeSpan.FromSeconds(secs);
-            _vm.CountdownText = $"{_remaining:mm\\:ss}";
-            timer.Start();
-        }
-    }
+        string taskId = Preferences.Default.Get(PrefTaskId, string.Empty);
+        int seconds = Preferences.Default.Get(PrefRemainingSecs, -1);
 
-    private async Task StartShuffleAsync()
-    {
-        var timer = EnsureTimer();
-        var minutes = await _vm.Shuffle();
-        if (_vm.CurrentTask == null)
+        if (seconds > 0)
         {
-            // No task available now, do not start timer
-            return;
+            TimeSpan remaining = TimeSpan.FromSeconds(seconds);
+            bool restored = await _vm.RestoreTaskAsync(taskId, remaining);
+            if (restored)
+            {
+                _remaining = remaining;
+                var timer = EnsureTimer();
+                timer.Stop();
+                timer.Start();
+                return;
+            }
         }
 
-        await BeginCountdownAsync(minutes, timer);
+        ClearPersistedState();
     }
 
-    public async Task BeginCountdownAsync(int minutes)
-        => await BeginCountdownAsync(minutes, EnsureTimer());
-
-    private async Task BeginCountdownAsync(int minutes, IDispatcherTimer timer)
+    private void OnCountdownRequested(object? sender, TimeSpan duration)
     {
-        _remaining = TimeSpan.FromMinutes(minutes);
-        _vm.CountdownText = $"{_remaining:mm\\:ss}";
+        StartCountdown(duration);
+    }
+
+    private void OnCountdownCleared(object? sender, EventArgs e)
+    {
+        StopCountdown();
+    }
+
+    private void StartCountdown(TimeSpan duration)
+    {
+        _remaining = duration;
+        _vm.UpdateTimer(_remaining);
         PersistState();
+
+        var timer = EnsureTimer();
         timer.Stop();
         timer.Start();
-
-        await _vm.NotifyCurrentTaskAsync(minutes);
     }
 
-    private async void OnTick(object? sender, EventArgs e)
+    private void StopCountdown()
     {
-        if (_timer == null)
-        {
-            return;
-        }
-
-        if (_remaining.TotalSeconds <= 0)
+        if (_timer != null)
         {
             _timer.Stop();
-            Preferences.Default.Remove(PrefRemainingSecs);
-            await _vm.TimeUpAsync();
-            await StartShuffleAsync();
-            return;
         }
 
-        _remaining -= TimeSpan.FromSeconds(1);
-        _vm.CountdownText = $"{_remaining:mm\\:ss}";
-        PersistState();
+        _remaining = TimeSpan.Zero;
+        ClearPersistedState();
     }
 
     private void PersistState()
     {
-        var id = _vm.CurrentTask?.Id ?? string.Empty;
-        Preferences.Default.Set(PrefTaskId, id);
-        Preferences.Default.Set(PrefRemainingSecs, (int)_remaining.TotalSeconds);
+        string? taskId = _vm.ActiveTaskId;
+        if (string.IsNullOrEmpty(taskId) || _remaining <= TimeSpan.Zero)
+        {
+            ClearPersistedState();
+            return;
+        }
+
+        Preferences.Default.Set(PrefTaskId, taskId);
+        Preferences.Default.Set(PrefRemainingSecs, (int)Math.Ceiling(_remaining.TotalSeconds));
     }
 
-    private void ClearPersistedState()
+    private static void ClearPersistedState()
     {
         Preferences.Default.Remove(PrefTaskId);
         Preferences.Default.Remove(PrefRemainingSecs);
-    }
-
-    private void OnCompleteOrSkip()
-    {
-        _timer?.Stop();
-        _remaining = TimeSpan.Zero;
-        _vm.CountdownText = "00:00";
-        _vm.CurrentTask = null;
-        ClearPersistedState();
     }
 
     private IDispatcherTimer EnsureTimer()
@@ -126,5 +113,32 @@ public partial class DashboardPage : ContentPage
         timer.Tick += OnTick;
         _timer = timer;
         return timer;
+    }
+
+    private async void OnTick(object? sender, EventArgs e)
+    {
+        if (_remaining <= TimeSpan.Zero)
+        {
+            _vm.UpdateTimer(TimeSpan.Zero);
+            StopCountdown();
+            await _vm.NotifyTimeUpAsync();
+            await _vm.ShuffleCommand.ExecuteAsync(null);
+            return;
+        }
+
+        _remaining = _remaining.Subtract(TimeSpan.FromSeconds(1));
+        if (_remaining < TimeSpan.Zero)
+        {
+            _remaining = TimeSpan.Zero;
+        }
+
+        _vm.UpdateTimer(_remaining);
+        PersistState();
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        PersistState();
     }
 }
