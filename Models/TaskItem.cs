@@ -23,7 +23,7 @@ public class TaskItem
 
     public DateTime? LastDoneAt { get; set; }
 
-    public AllowedPeriod AllowedPeriod { get; set; } // Any/Work/OffWork/Off
+    public AllowedPeriod AllowedPeriod { get; set; } // Any/Work/Off/OffWork
 
     public bool Paused { get; set; }
 

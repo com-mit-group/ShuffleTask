@@ -68,6 +68,16 @@ public partial class TasksPage : ContentPage
         editorVm.Load(task);
         editorVm.Saved -= OnEditorSaved;
         editorVm.Saved += OnEditorSaved;
+
+        void OnEditorPageDisappearing(object? s, EventArgs e)
+        {
+            editorVm.Saved -= OnEditorSaved;
+            page.Disappearing -= OnEditorPageDisappearing;
+        }
+
+        page.Disappearing -= OnEditorPageDisappearing;
+        page.Disappearing += OnEditorPageDisappearing;
+
         page.BindingContext = editorVm;
         page.Title = editorVm.IsNew ? "New Task" : "Edit Task";
         await Navigation.PushAsync(page);

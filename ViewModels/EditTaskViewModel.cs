@@ -69,7 +69,13 @@ public partial class EditTaskViewModel : ObservableObject
 
     public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
 
-    public AllowedPeriod[] AllowedPeriodOptions { get; } = Enum.GetValues<AllowedPeriod>();
+    public AllowedPeriod[] AllowedPeriodOptions { get; } = new[]
+    {
+        AllowedPeriod.Any,
+        AllowedPeriod.Work,
+        AllowedPeriod.OffWork,
+        AllowedPeriod.Off
+    };
 
     private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
     {

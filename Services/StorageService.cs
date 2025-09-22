@@ -57,6 +57,7 @@ public class StorageService
             await AddCol("AllowedPeriod", "INTEGER", "0");
             await AddCol("Paused", "INTEGER", "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
+            await AddCol("Description", "TEXT", "''");
         }
         catch
         {
