@@ -91,13 +91,19 @@ public class TaskListItem
 
     public string ScheduleText { get; }
 
+    public string ImportanceText { get; }
+
+    public string AllowedPeriodText { get; }
+
     public string StatusText => Task.Paused ? "Paused" : "Active";
 
-    private TaskListItem(TaskItem task, string repeatText, string scheduleText)
+    private TaskListItem(TaskItem task, string repeatText, string scheduleText, string importanceText, string allowedPeriodText)
     {
         Task = task;
         RepeatText = repeatText;
         ScheduleText = scheduleText;
+        ImportanceText = importanceText;
+        AllowedPeriodText = allowedPeriodText;
     }
 
     public static TaskListItem From(TaskItem task)
@@ -115,7 +121,20 @@ public class TaskListItem
             ? $"Due {task.Deadline:MMM d, yyyy HH:mm}"
             : "No deadline";
 
-        return new TaskListItem(task, repeat, schedule);
+        int importance = Math.Clamp(task.Importance, 1, 5);
+        string importanceStars = new string('★', importance).PadRight(5, '☆');
+        string importanceText = $"Importance: {importanceStars} ({importance}/5)";
+
+        string allowedPeriodText = task.AllowedPeriod switch
+        {
+            AllowedPeriod.Any => "Auto shuffle: Any time",
+            AllowedPeriod.Work => "Auto shuffle: Work hours",
+            AllowedPeriod.OffWork => "Auto shuffle: Off hours",
+            AllowedPeriod.Off => "Auto shuffle: Off days",
+            _ => "Auto shuffle: Any time"
+        };
+
+        return new TaskListItem(task, repeat, schedule, importanceText, allowedPeriodText);
     }
 
     private static string FormatWeekdays(Weekdays weekdays)
