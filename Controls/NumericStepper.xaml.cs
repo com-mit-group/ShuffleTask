@@ -1,4 +1,6 @@
 using System;
+using System.Buffers;
+using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Maui.Controls;
 
@@ -170,13 +172,17 @@ public partial class NumericStepper : ContentView
     {
         var format = string.IsNullOrWhiteSpace(ValueStringFormat) ? "{0:0}" : ValueStringFormat;
 
-        try
+        if (ContainsFormatPlaceholder(format))
         {
-            DisplayValue = string.Format(format, Value);
+            DisplayValue = FormatWithPlaceholder(format);
         }
-        catch (FormatException)
+        else if (!ContainsUnescapedBraces(format) && TryFormatValue(format, out var formattedValue))
         {
-            DisplayValue = Value.ToString();
+            DisplayValue = formattedValue;
+        }
+        else
+        {
+            DisplayValue = Value.ToString(CultureInfo.CurrentCulture);
         }
     }
 
@@ -194,27 +200,165 @@ public partial class NumericStepper : ContentView
     {
         var (minimum, maximum) = GetOrderedRange();
         var increment = GetIncrement();
+        var incrementDecimal = ToDecimal(increment);
+        if (incrementDecimal <= 0m)
+        {
+            incrementDecimal = 0.0000000000000000000000000001m;
+        }
+        var valueDecimal = ToDecimal(value);
+
+        decimal coerced;
 
         if (minimum.HasValue)
         {
-            value = minimum.Value + Math.Round((value - minimum.Value) / increment, MidpointRounding.AwayFromZero) * increment;
+            var minimumDecimal = ToDecimal(minimum.Value);
+            var steps = decimal.Round((valueDecimal - minimumDecimal) / incrementDecimal, 0, MidpointRounding.AwayFromZero);
+            coerced = minimumDecimal + steps * incrementDecimal;
         }
         else
         {
-            value = Math.Round(value / increment, MidpointRounding.AwayFromZero) * increment;
+            var steps = decimal.Round(valueDecimal / incrementDecimal, 0, MidpointRounding.AwayFromZero);
+            coerced = steps * incrementDecimal;
         }
 
-        if (minimum.HasValue && value < minimum.Value)
+        var coercedValue = (double)coerced;
+
+        if (minimum.HasValue && coercedValue < minimum.Value)
         {
-            value = minimum.Value;
+            coercedValue = minimum.Value;
         }
 
-        if (maximum.HasValue && value > maximum.Value)
+        if (maximum.HasValue && coercedValue > maximum.Value)
         {
-            value = maximum.Value;
+            coercedValue = maximum.Value;
         }
 
-        return value;
+        return coercedValue;
+    }
+
+    private static bool ContainsFormatPlaceholder(string format)
+    {
+        for (var index = 0; index < format.Length; index++)
+        {
+            if (format[index] != '{')
+            {
+                continue;
+            }
+
+            index++;
+
+            if (index >= format.Length)
+            {
+                break;
+            }
+
+            if (format[index] == '{')
+            {
+                continue;
+            }
+
+            while (index < format.Length && char.IsWhiteSpace(format[index]))
+            {
+                index++;
+            }
+
+            if (index < format.Length && format[index] == '0')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUnescapedBraces(string format)
+    {
+        for (var index = 0; index < format.Length; index++)
+        {
+            if (format[index] == '{' || format[index] == '}')
+            {
+                if (index + 1 < format.Length && format[index + 1] == format[index])
+                {
+                    index++;
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private string FormatWithPlaceholder(string format)
+    {
+        try
+        {
+            return string.Format(CultureInfo.CurrentCulture, format, Value);
+        }
+        catch (FormatException)
+        {
+            return Value.ToString(CultureInfo.CurrentCulture);
+        }
+    }
+
+    private bool TryFormatValue(string format, out string formatted)
+    {
+        Span<char> stackBuffer = stackalloc char[64];
+
+        if (TryFormatCore(stackBuffer, format, out formatted))
+        {
+            return true;
+        }
+
+        var poolBuffer = ArrayPool<char>.Shared.Rent(Math.Max(128, format.Length * 4));
+        try
+        {
+            return TryFormatCore(poolBuffer.AsSpan(), format, out formatted);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(poolBuffer);
+        }
+    }
+
+    private bool TryFormatCore(Span<char> destination, string format, out string formatted)
+    {
+        try
+        {
+            if (Value.TryFormat(destination, out var charsWritten, format.AsSpan(), CultureInfo.CurrentCulture))
+            {
+                formatted = new string(destination[..charsWritten]);
+                return true;
+            }
+        }
+        catch (FormatException)
+        {
+            // Ignore invalid format strings and fall back to culture-based default formatting.
+        }
+
+        formatted = string.Empty;
+        return false;
+    }
+
+    private static decimal ToDecimal(double value)
+    {
+        if (double.IsNaN(value))
+        {
+            return 0m;
+        }
+
+        if (value >= (double)decimal.MaxValue)
+        {
+            return decimal.MaxValue;
+        }
+
+        if (value <= (double)decimal.MinValue)
+        {
+            return decimal.MinValue;
+        }
+
+        return (decimal)value;
     }
 
     private (double? Minimum, double? Maximum) GetOrderedRange()
