@@ -85,7 +85,7 @@
                                   ColumnDefinitions="*,Auto"
                                   ColumnSpacing="12">
                                 <Grid Grid.Column="0"
-                                      RowDefinitions="Auto,Auto,Auto,Auto"
+                                      RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                       RowSpacing="2">
                                     <Label Grid.Row="0"
                                            Text="{Binding RepeatText}"
@@ -103,6 +103,10 @@
                                            Text="{Binding AllowedPeriodText}"
                                            FontSize="12"
                                            TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                    <Label Grid.Row="4"
+                                           Text="{Binding ScoreText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
                                 </Grid>
 
                                 <VerticalStackLayout Grid.Column="1"

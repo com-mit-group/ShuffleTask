@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Models/Enums.cs" Link="Models/Enums.cs" />
+    <Compile Include="../Models/AppSettings.cs" Link="Models/AppSettings.cs" />
+    <Compile Include="../Models/TaskItem.cs" Link="Models/TaskItem.cs" />
+    <Compile Include="../Services/ImportanceUrgencyCalculator.cs" Link="Services/ImportanceUrgencyCalculator.cs" />
+    <Compile Include="../Services/SchedulerService.cs" Link="Services/SchedulerService.cs" />
+    <Compile Include="../Services/TimeWindowService.cs" Link="Services/TimeWindowService.cs" />
+  </ItemGroup>
+</Project>
