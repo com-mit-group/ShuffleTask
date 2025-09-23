@@ -3,8 +3,8 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
-             x:Class="ShuffleTask.Views.TasksPage"
-             x:DataType="vm:MainViewModel"
+            x:Class="ShuffleTask.Views.TasksPage"
+            x:DataType="vm:TasksViewModel"
              Title="Tasks">
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="+"
@@ -85,7 +85,7 @@
                                   ColumnDefinitions="*,Auto"
                                   ColumnSpacing="12">
                                 <Grid Grid.Column="0"
-                                      RowDefinitions="Auto,Auto"
+                                      RowDefinitions="Auto,Auto,Auto,Auto"
                                       RowSpacing="2">
                                     <Label Grid.Row="0"
                                            Text="{Binding RepeatText}"
@@ -95,21 +95,42 @@
                                            Text="{Binding ScheduleText}"
                                            FontSize="12"
                                            TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                    <Label Grid.Row="2"
+                                           Text="{Binding ImportanceText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                    <Label Grid.Row="3"
+                                           Text="{Binding AllowedPeriodText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
                                 </Grid>
 
-                                <Label Grid.Column="1"
-                                       Text="{Binding StatusText}"
-                                       FontSize="12"
-                                       VerticalOptions="Start"
-                                       TextColor="{AppThemeBinding Light=#2f855a, Dark=#9ae6b4}">
-                                    <Label.Triggers>
-                                        <DataTrigger TargetType="Label"
-                                                    Binding="{Binding Task.Paused}"
-                                                    Value="True">
-                                            <Setter Property="TextColor" Value="#c53030" />
-                                        </DataTrigger>
-                                    </Label.Triggers>
-                                </Label>
+                                <VerticalStackLayout Grid.Column="1"
+                                                     Spacing="6"
+                                                     HorizontalOptions="End"
+                                                     VerticalOptions="Start">
+                                    <Button Text="Edit"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="Transparent"
+                                            TextColor="#2d9cdb"
+                                            BorderColor="Transparent"
+                                            HorizontalOptions="End"
+                                            Clicked="OnEditButtonClicked"
+                                            CommandParameter="{Binding Task}" />
+                                    <Label Text="{Binding StatusText}"
+                                           FontSize="12"
+                                           HorizontalOptions="End"
+                                           TextColor="{AppThemeBinding Light=#2f855a, Dark=#9ae6b4}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label"
+                                                        Binding="{Binding Task.Paused}"
+                                                        Value="True">
+                                                <Setter Property="TextColor" Value="#c53030" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                </VerticalStackLayout>
                             </Grid>
                         </Grid>
                     </Border>
