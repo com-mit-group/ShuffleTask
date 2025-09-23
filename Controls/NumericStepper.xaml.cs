@@ -238,31 +238,35 @@ public partial class NumericStepper : ContentView
 
     private static bool ContainsFormatPlaceholder(string format)
     {
+        var skipNext = false;
+
         for (var index = 0; index < format.Length; index++)
         {
+            if (skipNext)
+            {
+                skipNext = false;
+                continue;
+            }
+
             if (format[index] != '{')
             {
                 continue;
             }
 
-            index++;
-
-            if (index >= format.Length)
+            if (index + 1 < format.Length && format[index + 1] == '{')
             {
-                break;
-            }
-
-            if (format[index] == '{')
-            {
+                skipNext = true;
                 continue;
             }
 
-            while (index < format.Length && char.IsWhiteSpace(format[index]))
+            var scanIndex = index + 1;
+
+            while (scanIndex < format.Length && char.IsWhiteSpace(format[scanIndex]))
             {
-                index++;
+                scanIndex++;
             }
 
-            if (index < format.Length && format[index] == '0')
+            if (scanIndex < format.Length && format[scanIndex] == '0')
             {
                 return true;
             }
@@ -273,18 +277,30 @@ public partial class NumericStepper : ContentView
 
     private static bool ContainsUnescapedBraces(string format)
     {
+        var skipNext = false;
+
         for (var index = 0; index < format.Length; index++)
         {
-            if (format[index] == '{' || format[index] == '}')
+            if (skipNext)
             {
-                if (index + 1 < format.Length && format[index + 1] == format[index])
-                {
-                    index++;
-                    continue;
-                }
-
-                return true;
+                skipNext = false;
+                continue;
             }
+
+            var current = format[index];
+
+            if (current != '{' && current != '}')
+            {
+                continue;
+            }
+
+            if (index + 1 < format.Length && format[index + 1] == current)
+            {
+                skipNext = true;
+                continue;
+            }
+
+            return true;
         }
 
         return false;
