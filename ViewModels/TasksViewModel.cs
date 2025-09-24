@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Models;
@@ -24,12 +22,12 @@ public partial class TasksViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
-        if (IsBusy)
+        if (isBusy)
         {
             return;
         }
 
-        IsBusy = true;
+        isBusy = true;
         try
         {
             await _storage.InitializeAsync();
@@ -47,7 +45,7 @@ public partial class TasksViewModel : ObservableObject
         }
         finally
         {
-            IsBusy = false;
+            isBusy = false;
         }
     }
 
@@ -182,7 +180,7 @@ public class TaskListItem
         };
 
         var status = BuildStatusPresentation(task);
-        var score = ImportanceUrgencyScore.Calculate(task, settings, nowLocal);
+        var score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
 
         return new TaskListItem(
             task,
