@@ -72,6 +72,7 @@ public partial class MainViewModel : ObservableObject
             Title = task.Title,
             Description = task.Description,
             Importance = task.Importance,
+            SizePoints = task.SizePoints,
             Deadline = task.Deadline,
             Repeat = task.Repeat,
             Weekdays = task.Weekdays,
