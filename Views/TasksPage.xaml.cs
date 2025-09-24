@@ -28,7 +28,7 @@ public partial class TasksPage : ContentPage
 
     private async void OnAddClicked(object? sender, EventArgs e)
     {
-        await OpenEditorAsync(new TaskItem());
+        await OpenEditorAsync(null);
     }
 
     private async void OnEditButtonClicked(object sender, EventArgs e)
@@ -36,6 +36,14 @@ public partial class TasksPage : ContentPage
         if (sender is Button { CommandParameter: TaskItem task })
         {
             await OpenEditorAsync(TasksViewModel.Clone(task));
+        }
+    }
+
+    private async void OnResumeButtonClicked(object sender, EventArgs e)
+    {
+        if (sender is Button { CommandParameter: TaskItem task })
+        {
+            await _vm.ResumeAsync(task);
         }
     }
 
@@ -57,19 +65,28 @@ public partial class TasksPage : ContentPage
 
     private async void OnDeleteSwipe(object sender, EventArgs e)
     {
-        if (sender is SwipeItem { CommandParameter: TaskItem task })
+        var task = sender switch
         {
-            bool confirm = await DisplayAlert("Delete Task", $"Delete '{task.Title}'?", "Delete", "Cancel");
-            if (!confirm)
-            {
-                return;
-            }
+            SwipeItem { CommandParameter: TaskItem swipeTask } => swipeTask,
+            Button { CommandParameter: TaskItem buttonTask } => buttonTask,
+            _ => null
+        };
 
-            await _vm.DeleteAsync(task);
+        if (task is null)
+        {
+            return;
         }
+
+        bool confirm = await DisplayAlert("Delete Task", $"Delete '{task.Title}'?", "Delete", "Cancel");
+        if (!confirm)
+        {
+            return;
+        }
+
+        await _vm.DeleteAsync(task);
     }
 
-    private async Task OpenEditorAsync(TaskItem task)
+    private async Task OpenEditorAsync(TaskItem? task)
     {
         var page = _services.GetRequiredService<EditTaskPage>();
         var editorVm = _services.GetRequiredService<EditTaskViewModel>();

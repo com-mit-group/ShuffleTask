@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Models/Enums.cs" Link="Models/Enums.cs" />
+    <Compile Include="../Models/AppSettings.cs" Link="Models/AppSettings.cs" />
+    <Compile Include="../Models/TaskItem.cs" Link="Models/TaskItem.cs" />
+    <Compile Include="../Services/ImportanceUrgencyCalculator.cs" Link="Services/ImportanceUrgencyCalculator.cs" />
+    <Compile Include="../Services/SchedulerService.cs" Link="Services/SchedulerService.cs" />
+    <Compile Include="../Services/TimeWindowService.cs" Link="Services/TimeWindowService.cs" />
+    <Compile Include="../ViewModels/TasksViewModel.cs" Link="Viewodels/TasksViewModel.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+</Project>

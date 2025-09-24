@@ -14,6 +14,10 @@ public partial class EditTaskViewModel : ObservableObject
 
     private Weekdays _selectedWeekdays;
 
+    private const double MinSizePoints = 0.5;
+    private const double MaxSizePoints = 13.0;
+    private const double DefaultSizePoints = 3.0;
+
     public Weekdays SelectedWeekdays
     {
         get => _selectedWeekdays;
@@ -40,6 +44,9 @@ public partial class EditTaskViewModel : ObservableObject
 
     [ObservableProperty]
     private double importance = 1;
+
+    [ObservableProperty]
+    private double sizePoints = DefaultSizePoints;
 
     [ObservableProperty]
     private bool hasDeadline;
@@ -152,6 +159,7 @@ public partial class EditTaskViewModel : ObservableObject
         Title = _workingCopy.Title;
         Description = _workingCopy.Description;
         Importance = Math.Max(1, _workingCopy.Importance);
+        SizePoints = SanitizeSizePoints(_workingCopy.SizePoints);
         Repeat = _workingCopy.Repeat;
         IntervalDays = _workingCopy.IntervalDays > 0 ? _workingCopy.IntervalDays : 1;
         AllowedPeriod = _workingCopy.AllowedPeriod;
@@ -193,6 +201,7 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.Title = Title.Trim();
             _workingCopy.Description = Description?.Trim() ?? string.Empty;
             _workingCopy.Importance = (int)Math.Max(1, Math.Round(Importance));
+            _workingCopy.SizePoints = SanitizeSizePoints(SizePoints);
             _workingCopy.Repeat = Repeat;
             _workingCopy.Weekdays = Repeat == RepeatType.Weekly ? SelectedWeekdays : Weekdays.None;
             int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
@@ -231,6 +240,28 @@ public partial class EditTaskViewModel : ObservableObject
         }
     }
 
+    private static double SanitizeSizePoints(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+        {
+            return DefaultSizePoints;
+        }
+
+        if (value < MinSizePoints)
+        {
+            return MinSizePoints;
+        }
+
+        if (value > MaxSizePoints)
+        {
+            return MaxSizePoints;
+        }
+
+        // Stepper may return values like 2.4999999997, round to 0.5 increments
+        double rounded = Math.Round(value * 2.0, MidpointRounding.AwayFromZero) / 2.0;
+        return Math.Max(MinSizePoints, Math.Min(MaxSizePoints, rounded));
+    }
+
     partial void OnRepeatChanged(RepeatType value)
     {
         if (value != RepeatType.Weekly && SelectedWeekdays != Weekdays.None)
@@ -252,6 +283,7 @@ public partial class EditTaskViewModel : ObservableObject
             Title = task.Title,
             Description = task.Description,
             Importance = task.Importance,
+            SizePoints = task.SizePoints,
             Deadline = task.Deadline,
             Repeat = task.Repeat,
             Weekdays = task.Weekdays,
@@ -259,7 +291,11 @@ public partial class EditTaskViewModel : ObservableObject
             LastDoneAt = task.LastDoneAt,
             AllowedPeriod = task.AllowedPeriod,
             Paused = task.Paused,
-            CreatedAt = task.CreatedAt
+            CreatedAt = task.CreatedAt,
+            Status = task.Status,
+            SnoozedUntil = task.SnoozedUntil,
+            CompletedAt = task.CompletedAt,
+            NextEligibleAt = task.NextEligibleAt
         };
     }
 }

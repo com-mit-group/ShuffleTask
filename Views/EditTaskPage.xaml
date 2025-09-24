@@ -22,6 +22,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -47,6 +48,21 @@
             </Grid>
 
             <Grid Grid.Row="3"
+                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="12">
+                <Label Text="Size (pts)"
+                       VerticalOptions="Center" />
+                <Stepper Grid.Column="1"
+                         Minimum="0.5"
+                         Maximum="13"
+                         Increment="0.5"
+                         Value="{Binding SizePoints}" />
+                <Label Grid.Column="2"
+                       Text="{Binding SizePoints, StringFormat='{0:0.#}'}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Grid Grid.Row="4"
                   RowDefinitions="Auto,Auto,Auto"
                   RowSpacing="8">
                 <Grid Grid.Row="0"
@@ -75,12 +91,12 @@
                         Clicked="OnClearDeadline" />
             </Grid>
 
-            <Picker Grid.Row="4"
+            <Picker Grid.Row="5"
                     Title="Repeat"
                     ItemsSource="{Binding RepeatOptions}"
                     SelectedItem="{Binding Repeat}" />
 
-            <Grid Grid.Row="5"
+            <Grid Grid.Row="6"
                   IsVisible="False"
                   RowSpacing="8">
                 <Grid.Triggers>
@@ -117,7 +133,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="6"
+            <Grid Grid.Row="7"
                   ColumnDefinitions="Auto,*"
                   ColumnSpacing="12"
                   IsVisible="False">
@@ -138,12 +154,12 @@
                                          HorizontalOptions="Start" />
             </Grid>
 
-            <Picker Grid.Row="7"
+            <Picker Grid.Row="8"
                     Title="Allowed period"
                     ItemsSource="{Binding AllowedPeriodOptions}"
                     SelectedItem="{Binding AllowedPeriod}" />
 
-            <Grid Grid.Row="8"
+            <Grid Grid.Row="9"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
                 <Label Text="Paused"
@@ -152,7 +168,7 @@
                         IsToggled="{Binding IsPaused}" />
             </Grid>
 
-            <Grid Grid.Row="9"
+            <Grid Grid.Row="10"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -163,7 +179,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="10"
+            <ActivityIndicator Grid.Row="11"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />

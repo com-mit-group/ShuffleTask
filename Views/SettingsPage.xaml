@@ -4,14 +4,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              xmlns:controls="clr-namespace:ShuffleTask.Controls"
+             xmlns:converters="clr-namespace:ShuffleTask.Converters"
              x:Class="ShuffleTask.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel"
              Title="Settings">
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:ComplementPercentageConverter x:Key="ComplementPercentageConverter" />
+        </ResourceDictionary>
+    </ContentPage.Resources>
     <ScrollView>
         <Grid Padding="20"
               ColumnDefinitions="Auto,*"
               RowSpacing="18">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -116,7 +127,87 @@
                     Grid.Column="1"
                     IsToggled="{Binding Settings.StableRandomnessPerDay}" />
 
+            <Label Grid.Row="10"
+                   Text="Importance vs urgency"
+                   VerticalOptions="Center" />
             <Grid Grid.Row="10"
+                  Grid.Column="1"
+                  RowDefinitions="Auto,Auto"
+                  ColumnDefinitions="*,Auto"
+                  RowSpacing="4"
+                  ColumnSpacing="8">
+                <Slider Grid.Row="0"
+                        Grid.ColumnSpan="2"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="{Binding Settings.ImportanceWeight}" />
+                <Label Grid.Row="1"
+                       Grid.Column="0"
+                       Text="{Binding Settings.ImportanceWeight, StringFormat='Importance: {0:0}%'}"
+                       VerticalOptions="Center" />
+                <Label Grid.Row="1"
+                       Grid.Column="1"
+                       Text="{Binding Settings.ImportanceWeight, Converter={StaticResource ComplementPercentageConverter}, StringFormat='Urgency: {0:0}%'}"
+                       HorizontalTextAlignment="End"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="11"
+                   Text="Deadline share"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="11"
+                  Grid.Column="1"
+                  RowDefinitions="Auto,Auto"
+                  ColumnDefinitions="*,Auto"
+                  RowSpacing="4"
+                  ColumnSpacing="8">
+                <Slider Grid.Row="0"
+                        Grid.ColumnSpan="2"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="{Binding Settings.UrgencyDeadlineShare}" />
+                <Label Grid.Row="1"
+                       Grid.Column="0"
+                       Text="{Binding Settings.UrgencyDeadlineShare, StringFormat='Deadlines: {0:0}%'}"
+                       VerticalOptions="Center" />
+                <Label Grid.Row="1"
+                       Grid.Column="1"
+                       Text="{Binding Settings.UrgencyDeadlineShare, Converter={StaticResource ComplementPercentageConverter}, StringFormat='Repeats: {0:0}%'}"
+                       HorizontalTextAlignment="End"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="12"
+                   Text="Repeat penalty"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="12"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Slider Minimum="0"
+                        Maximum="1"
+                        Value="{Binding Settings.RepeatUrgencyPenalty}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.RepeatUrgencyPenalty, StringFormat='{0:F2}'}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Label Grid.Row="13"
+                   Text="Size bias strength"
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="13"
+                  Grid.Column="1"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8">
+                <Slider Minimum="0"
+                        Maximum="1"
+                        Value="{Binding Settings.SizeBiasStrength}" />
+                <Label Grid.Column="1"
+                       Text="{Binding Settings.SizeBiasStrength, StringFormat='{0:F2}'}"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Grid Grid.Row="14"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -128,7 +219,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="11"
+            <ActivityIndicator Grid.Row="15"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"

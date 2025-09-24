@@ -85,7 +85,7 @@
                                   ColumnDefinitions="*,Auto"
                                   ColumnSpacing="12">
                                 <Grid Grid.Column="0"
-                                      RowDefinitions="Auto,Auto,Auto,Auto"
+                                      RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                       RowSpacing="2">
                                     <Label Grid.Row="0"
                                            Text="{Binding RepeatText}"
@@ -103,6 +103,10 @@
                                            Text="{Binding AllowedPeriodText}"
                                            FontSize="12"
                                            TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                    <Label Grid.Row="4"
+                                           Text="{Binding ScoreText}"
+                                           FontSize="12"
+                                           TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
                                 </Grid>
 
                                 <VerticalStackLayout Grid.Column="1"
@@ -118,6 +122,17 @@
                                             HorizontalOptions="End"
                                             Clicked="OnEditButtonClicked"
                                             CommandParameter="{Binding Task}" />
+                                    <Button Text="Delete"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="#eb5757"
+                                            TextColor="White"
+                                            BorderColor="#eb5757"
+                                            CornerRadius="8"
+                                            HorizontalOptions="End"
+                                            Clicked="OnDeleteSwipe"
+                                            CommandParameter="{Binding Task}"
+                                            SemanticProperties.Description="{Binding Title, StringFormat='Delete task {0}'}" />
                                     <Label Text="{Binding StatusText}"
                                            FontSize="12"
                                            HorizontalOptions="End"
@@ -130,6 +145,26 @@
                                             </DataTrigger>
                                         </Label.Triggers>
                                     </Label>
+                                    <Button Text="Resume"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="Transparent"
+                                            TextColor="#2f855a"
+                                            BorderColor="Transparent"
+                                            HorizontalOptions="End"
+                                            IsVisible="{Binding CanResume}"
+                                            Clicked="OnResumeButtonClicked"
+                                            CommandParameter="{Binding Task}" />
+                                    <Border StrokeThickness="0"
+                                            Padding="8,4"
+                                            StrokeShape="RoundRectangle 8"
+                                            BackgroundColor="{Binding StatusBackgroundColor}"
+                                            IsVisible="{Binding HasStatusBadge}"
+                                            HorizontalOptions="End">
+                                        <Label Text="{Binding StatusText}"
+                                               FontSize="12"
+                                               TextColor="{Binding StatusTextColor}" />
+                                    </Border>
                                 </VerticalStackLayout>
                             </Grid>
                         </Grid>

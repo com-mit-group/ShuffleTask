@@ -13,6 +13,8 @@ public class TaskItem
 
     public int Importance { get; set; } // 1..5
 
+    public double SizePoints { get; set; } = 3.0; // story points style estimate
+
     public DateTime? Deadline { get; set; }
 
     public RepeatType Repeat { get; set; }
@@ -28,4 +30,12 @@ public class TaskItem
     public bool Paused { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
+
+    public DateTime? SnoozedUntil { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
+    public DateTime? NextEligibleAt { get; set; }
 }
