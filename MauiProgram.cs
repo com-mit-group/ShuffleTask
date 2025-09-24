@@ -28,8 +28,8 @@ public static class MauiProgram
 
         // DI registrations
         builder.Services.AddSingleton<IStorageService, StorageService>();
-        builder.Services.AddSingleton<NotificationService>();
-        builder.Services.AddSingleton(sp => new SchedulerService(deterministic: false));
+        builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
 
         // ViewModels
         builder.Services.AddSingleton<DashboardViewModel>();

@@ -12,8 +12,8 @@ namespace ShuffleTask.ViewModels;
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
-    private readonly SchedulerService _scheduler;
-    private readonly NotificationService _notifications;
+    private readonly ISchedulerService _scheduler;
+    private readonly INotificationService _notifications;
 
     private TaskItem? _activeTask;
     private AppSettings? _settings;
@@ -22,7 +22,7 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, SchedulerService scheduler, NotificationService notifications)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
     {
         _storage = storage;
         _scheduler = scheduler;
