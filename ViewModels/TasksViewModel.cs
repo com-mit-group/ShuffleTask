@@ -138,22 +138,18 @@ public class TaskListItem
         string scheduleText,
         string importanceText,
         string allowedPeriodText,
-        string statusText,
-        bool hasStatusBadge,
-        string statusBackgroundColor,
-        string statusTextColor,
-        bool canResume, ImportanceUrgencyScore score)
+        TaskStatusPresentation status, ImportanceUrgencyScore score)
     {
         Task = task;
         RepeatText = repeatText;
         ScheduleText = scheduleText;
         ImportanceText = importanceText;
         AllowedPeriodText = allowedPeriodText;
-        StatusText = statusText;
-        HasStatusBadge = hasStatusBadge;
-        StatusBackgroundColor = statusBackgroundColor;
-        StatusTextColor = statusTextColor;
-        CanResume = canResume;
+        StatusText = status.Text;
+        HasStatusBadge = status.HasBadge;
+        StatusBackgroundColor = status.BackgroundColor;
+        StatusTextColor = status.TextColor;
+        CanResume = status.CanResume;
         Score = score;
     }
 
@@ -194,42 +190,44 @@ public class TaskListItem
             schedule,
             importanceText,
             allowedPeriodText,
-            status.Text,
-            status.HasBadge,
-            status.BackgroundColor,
-            status.TextColor,
-            status.CanResume, score);
+            status, score);
     }
 
-    private static (string Text, bool HasBadge, string BackgroundColor, string TextColor, bool CanResume) BuildStatusPresentation(TaskItem task)
+    private static TaskStatusPresentation BuildStatusPresentation(TaskItem task)
     {
         if (task.Paused)
         {
-            return ("Paused", true, "#FEE2E2", "#C53030", false);
+            return new TaskStatusPresentation("Paused", true, "#FEE2E2", "#C53030", false);
         }
 
-        switch (task.Status)
+        return task.Status switch
         {
-            case TaskLifecycleStatus.Active:
-                return ("Active", false, "#E2E8F0", "#2D3748", false);
-            case TaskLifecycleStatus.Snoozed:
-            {
-                string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt);
-                string text = string.IsNullOrEmpty(until) ? "Snoozed" : $"Snoozed until {until}";
-                return (text, true, "#FEF3C7", "#975A16", true);
-            }
-            case TaskLifecycleStatus.Completed:
-            {
-                bool oneOff = task.Repeat == RepeatType.None;
-                string next = FormatRelative(task.NextEligibleAt);
-                string text = oneOff
-                    ? "Completed"
-                    : (string.IsNullOrEmpty(next) ? "Completed" : $"Completed • next at {next}");
-                return (text, true, "#C6F6D5", "#276749", true);
-            }
-            default:
-                return ("Active", false, "#E2E8F0", "#2D3748", false);
+            TaskLifecycleStatus.Active => TaskStatusPresentation.Active,
+            TaskLifecycleStatus.Snoozed => BuildSnoozedPresentation(task),
+            TaskLifecycleStatus.Completed => BuildCompletedPresentation(task),
+            _ => TaskStatusPresentation.Active
+        };
+    }
+
+    private static TaskStatusPresentation BuildSnoozedPresentation(TaskItem task)
+    {
+        string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt);
+        string text = string.IsNullOrEmpty(until) ? "Snoozed" : $"Snoozed until {until}";
+        return new TaskStatusPresentation(text, true, "#FEF3C7", "#975A16", true);
+    }
+
+    private static TaskStatusPresentation BuildCompletedPresentation(TaskItem task)
+    {
+        bool oneOff = task.Repeat == RepeatType.None;
+        string next = FormatRelative(task.NextEligibleAt);
+        string text = "Completed";
+
+        if (!oneOff && !string.IsNullOrEmpty(next))
+        {
+            text = $"Completed • next at {next}";
         }
+
+        return new TaskStatusPresentation(text, true, "#C6F6D5", "#276749", true);
     }
 
     private static string FormatRelative(DateTime? value)
@@ -286,5 +284,15 @@ public class TaskListItem
         Add(Weekdays.Sun, "Sun");
 
         return string.Join(", ", names);
+    }
+
+    private sealed record TaskStatusPresentation(
+        string Text,
+        bool HasBadge,
+        string BackgroundColor,
+        string TextColor,
+        bool CanResume)
+    {
+        public static TaskStatusPresentation Active { get; } = new("Active", false, "#E2E8F0", "#2D3748", false);
     }
 }
