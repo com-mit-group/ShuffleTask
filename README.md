@@ -14,3 +14,14 @@ ShuffleTask ranks tasks by combining weighted importance, urgency, and a size-aw
   - The final score is `(importancePoints + deadlinePoints + repeatPoints) * sizeMultiplier`.
 
 Story point estimates default to 3 and can be adjusted between 0.5 and 13 in the task editor. Smaller estimates start boosting urgency closer to the deadline, while larger estimates surface earlier in the shuffle.
+
+### Tune the balance
+
+Open **Settings → Weighting** to tailor how the shuffle behaves:
+
+- Adjust the **importance** and **urgency** point pools (defaults remain the 60/40 split described above).
+- Split the urgency pool between **deadlines** and **repeating work** with a single slider.
+- Control the **repeat penalty** to soften or remove the dampening on routine tasks.
+- Dial the **size bias strength** down to zero to make scores size-agnostic or up to favor quick wins.
+
+Changes are saved to your profile and take effect immediately in the next shuffle preview.

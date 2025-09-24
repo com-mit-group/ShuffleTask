@@ -167,4 +167,116 @@ public class ImportanceUrgencyCalculatorTests
         Assert.That(highScore.CombinedScore, Is.GreaterThan(lowScore.CombinedScore),
             "Higher importance should translate into a larger combined score when all else is equal.");
     }
+
+    [Test]
+    public void Calculate_CanFavorUrgencyThroughSettings()
+    {
+        var urgencyFavored = new AppSettings
+        {
+            ImportanceWeight = 0,
+            UrgencyWeight = 100,
+            UrgencyDeadlineShare = 100,
+            RepeatUrgencyPenalty = 1.0
+        };
+
+        var importantProject = new TaskItem
+        {
+            Title = "Strategic plan",
+            Importance = 5,
+            SizePoints = 3,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var urgentDeadline = new TaskItem
+        {
+            Title = "Production fix",
+            Importance = 1,
+            SizePoints = 3,
+            Deadline = DefaultNow.AddHours(1),
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var importantScore = ImportanceUrgencyCalculator.Calculate(importantProject, DefaultNow, urgencyFavored);
+        var urgentScore = ImportanceUrgencyCalculator.Calculate(urgentDeadline, DefaultNow, urgencyFavored);
+
+        Assert.That(importantScore.WeightedImportance, Is.EqualTo(0).Within(1e-6),
+            "Setting the importance weight to zero should remove the importance contribution.");
+        Assert.That(urgentScore.CombinedScore, Is.GreaterThan(importantScore.CombinedScore),
+            "With the pool shifted to urgency, imminent deadlines should outscore strategic work.");
+    }
+
+    [Test]
+    public void Calculate_UrgencyDeadlineShareAdjustsDistribution()
+    {
+        var settings = new AppSettings
+        {
+            UrgencyWeight = 40,
+            ImportanceWeight = 60,
+            UrgencyDeadlineShare = 10,
+            RepeatUrgencyPenalty = 1.0
+        };
+
+        var repeatingTask = new TaskItem
+        {
+            Title = "Daily backup",
+            Importance = 2,
+            Repeat = RepeatType.Daily,
+            LastDoneAt = DefaultNow.AddDays(-1),
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var deadlineTask = new TaskItem
+        {
+            Title = "Status deck",
+            Importance = 2,
+            Deadline = DefaultNow.AddHours(2),
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var repeatScore = ImportanceUrgencyCalculator.Calculate(repeatingTask, DefaultNow, settings);
+        var deadlineScore = ImportanceUrgencyCalculator.Calculate(deadlineTask, DefaultNow, settings);
+
+        Assert.That(repeatScore.WeightedRepeatUrgency, Is.GreaterThan(deadlineScore.WeightedDeadlineUrgency),
+            "Emphasizing repeats should send more of the urgency pool toward repeating work.");
+    }
+
+    [Test]
+    public void Calculate_SizeBiasStrengthCanBeDisabled()
+    {
+        var settings = new AppSettings
+        {
+            SizeBiasStrength = 0.0
+        };
+
+        var smallTask = new TaskItem
+        {
+            Title = "Quick tidy",
+            Importance = 3,
+            SizePoints = 1,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var largeTask = new TaskItem
+        {
+            Title = "Major refactor",
+            Importance = 3,
+            SizePoints = 8,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var smallScore = ImportanceUrgencyCalculator.Calculate(smallTask, DefaultNow, settings);
+        var largeScore = ImportanceUrgencyCalculator.Calculate(largeTask, DefaultNow, settings);
+
+        Assert.That(smallScore.SizeMultiplier, Is.EqualTo(1.0).Within(1e-6),
+            "Zeroing the size bias should neutralize the multiplier for small work.");
+        Assert.That(largeScore.SizeMultiplier, Is.EqualTo(1.0).Within(1e-6),
+            "Zeroing the size bias should neutralize the multiplier for large work as well.");
+        Assert.That(smallScore.SizeMultiplier, Is.EqualTo(largeScore.SizeMultiplier).Within(1e-6),
+            "With the bias disabled, both sizes should use the same multiplier.");
+    }
 }
