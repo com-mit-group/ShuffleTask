@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace ShuffleTask.Services;
 
-public class StorageService
+public class StorageService : IStorageService
 {
     private const string DatabaseFileName = "shuffletask.db3";
     private const string SettingsKey = "app_settings";
