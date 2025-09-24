@@ -291,7 +291,11 @@ public partial class EditTaskViewModel : ObservableObject
             LastDoneAt = task.LastDoneAt,
             AllowedPeriod = task.AllowedPeriod,
             Paused = task.Paused,
-            CreatedAt = task.CreatedAt
+            CreatedAt = task.CreatedAt,
+            Status = task.Status,
+            SnoozedUntil = task.SnoozedUntil,
+            CompletedAt = task.CompletedAt,
+            NextEligibleAt = task.NextEligibleAt
         };
     }
 }

@@ -30,4 +30,12 @@ public class TaskItem
     public bool Paused { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
+
+    public DateTime? SnoozedUntil { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
+    public DateTime? NextEligibleAt { get; set; }
 }

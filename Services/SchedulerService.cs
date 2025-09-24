@@ -45,15 +45,18 @@ public class SchedulerService
     }
 
     public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings s, DateTime nowLocal)
-        => SchedulerService.PickNextTask(tasks, s, nowLocal, _deterministic);
+        => PickNextTask(tasks, s, nowLocal, _deterministic);
 
     public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings s, DateTime nowLocal, bool deterministic)
     {
         if (tasks == null) return null;
 
+        DateTime nowUtc = nowLocal.Kind == DateTimeKind.Utc ? nowLocal : nowLocal.ToUniversalTime();
+
         var candidates = tasks
             .Where(t => t is not null)
-            .Where(t => !t.Paused)
+            .Where(t => LifecycleEligible(t!, nowUtc))
+            .Where(t => !t!.Paused)
             .Where(t => TimeWindowService.AllowedNow(t.AllowedPeriod, nowLocal, s))
             .ToList();
 
@@ -65,7 +68,7 @@ public class SchedulerService
 
         foreach (var t in candidates)
         {
-            var components = ImportanceUrgencyCalculator.Calculate(t, nowLocal, s);
+            ImportanceUrgencyScore components = ImportanceUrgencyCalculator.Calculate(t, nowLocal, s);
             double score = components.CombinedScore;
 
             if (!deterministic)
@@ -99,7 +102,7 @@ public class SchedulerService
 
         // Softmax sampling
         double maxScore = scored.Max(x => x.Score);
-        var expScores = scored.Select(x => Math.Exp(x.Score - maxScore)).ToArray();
+        double[] expScores = [.. scored.Select(x => Math.Exp(x.Score - maxScore))];
         double sum = expScores.Sum();
         if (sum <= 0)
         {
@@ -134,7 +137,38 @@ public class SchedulerService
                 return scored[i].Task;
         }
 
-        return scored.Last().Task;
+        return scored[^1].Task;
+    }
+
+    private static bool LifecycleEligible(TaskItem task, DateTime nowUtc)
+    {
+        if (task.Status == TaskLifecycleStatus.Active)
+        {
+            return true;
+        }
+
+        if (task.Status == TaskLifecycleStatus.Snoozed || task.Status == TaskLifecycleStatus.Completed)
+        {
+            if (!task.NextEligibleAt.HasValue)
+            {
+                return false;
+            }
+
+            DateTime eligibleUtc = EnsureUtc(task.NextEligibleAt.Value);
+            return eligibleUtc <= nowUtc;
+        }
+
+        return true;
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 
     private static double NextStableSample(int daySeed)
