@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
@@ -31,11 +32,15 @@ public partial class TasksViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             var items = await _storage.GetTasksAsync();
+            var settings = await _storage.GetSettingsAsync();
+            var now = DateTime.Now;
 
             Tasks.Clear();
-            foreach (var task in items)
+            foreach (var entry in items
+                .Select(task => TaskListItem.From(task, settings, now))
+                .OrderByDescending(x => x.PriorityScore))
             {
-                Tasks.Add(TaskListItem.From(task));
+                Tasks.Add(entry);
             }
         }
         finally
@@ -65,6 +70,7 @@ public partial class TasksViewModel : ObservableObject
             Title = task.Title,
             Description = task.Description,
             Importance = task.Importance,
+            SizePoints = task.SizePoints,
             Deadline = task.Deadline,
             Repeat = task.Repeat,
             Weekdays = task.Weekdays,
@@ -81,6 +87,12 @@ public class TaskListItem
 {
     public TaskItem Task { get; }
 
+    public ImportanceUrgencyScore Score { get; }
+
+    public double PriorityScore => Score.CombinedScore;
+
+    public string ScoreText => $"Score {PriorityScore:0.#}";
+
     public string Title => string.IsNullOrWhiteSpace(Task.Title) ? "Untitled" : Task.Title;
 
     public string Description => string.IsNullOrWhiteSpace(Task.Description) ? "No description" : Task.Description;
@@ -95,16 +107,17 @@ public class TaskListItem
 
     public string StatusText => Task.Paused ? "Paused" : "Active";
 
-    private TaskListItem(TaskItem task, string repeatText, string scheduleText, string importanceText, string allowedPeriodText)
+    private TaskListItem(TaskItem task, string repeatText, string scheduleText, string importanceText, string allowedPeriodText, ImportanceUrgencyScore score)
     {
         Task = task;
         RepeatText = repeatText;
         ScheduleText = scheduleText;
         ImportanceText = importanceText;
         AllowedPeriodText = allowedPeriodText;
+        Score = score;
     }
 
-    public static TaskListItem From(TaskItem task)
+    public static TaskListItem From(TaskItem task, AppSettings settings, DateTime nowLocal)
     {
         string repeat = task.Repeat switch
         {
@@ -132,7 +145,9 @@ public class TaskListItem
             _ => "Auto shuffle: Any time"
         };
 
-        return new TaskListItem(task, repeat, schedule, importanceText, allowedPeriodText);
+        var score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
+
+        return new TaskListItem(task, repeat, schedule, importanceText, allowedPeriodText, score);
     }
 
     private static string FormatWeekdays(Weekdays weekdays)
