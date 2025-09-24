@@ -8,9 +8,6 @@ namespace ShuffleTask.Views;
 
 public partial class DashboardPage : ContentPage
 {
-    private const string PrefTaskId = "pref.currentTaskId";
-    private const string PrefRemainingSecs = "pref.remainingSecs";
-
     private readonly DashboardViewModel _vm;
 
     private IDispatcherTimer? _timer;
@@ -30,8 +27,8 @@ public partial class DashboardPage : ContentPage
     {
         await _vm.InitializeAsync();
 
-        string taskId = Preferences.Default.Get(PrefTaskId, string.Empty);
-        int seconds = Preferences.Default.Get(PrefRemainingSecs, -1);
+        string taskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
+        int seconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
 
         if (seconds > 0)
         {
@@ -91,14 +88,14 @@ public partial class DashboardPage : ContentPage
             return;
         }
 
-        Preferences.Default.Set(PrefTaskId, taskId);
-        Preferences.Default.Set(PrefRemainingSecs, (int)Math.Ceiling(_remaining.TotalSeconds));
+        Preferences.Default.Set(PreferenceKeys.CurrentTaskId, taskId);
+        Preferences.Default.Set(PreferenceKeys.RemainingSeconds, (int)Math.Ceiling(_remaining.TotalSeconds));
     }
 
     private static void ClearPersistedState()
     {
-        Preferences.Default.Remove(PrefTaskId);
-        Preferences.Default.Remove(PrefRemainingSecs);
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
     }
 
     private IDispatcherTimer EnsureTimer()

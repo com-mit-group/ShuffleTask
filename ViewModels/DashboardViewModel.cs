@@ -13,6 +13,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly StorageService _storage;
     private readonly SchedulerService _scheduler;
     private readonly NotificationService _notifications;
+    private readonly ShuffleCoordinatorService _coordinator;
 
     private TaskItem? _activeTask;
     private AppSettings? _settings;
@@ -21,11 +22,12 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications)
+    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications, ShuffleCoordinatorService coordinator)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
+        _coordinator = coordinator;
 
         Title = DefaultTitle;
         Description = DefaultDescription;
@@ -64,6 +66,7 @@ public partial class DashboardViewModel : ObservableObject
             _settings = await _storage.GetSettingsAsync();
         }
         await _notifications.InitializeAsync();
+        _coordinator.RegisterDashboard(this);
     }
 
     private async Task EnsureSettingsAsync()
@@ -184,6 +187,19 @@ public partial class DashboardViewModel : ObservableObject
         {
             await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", _settings);
         }
+    }
+
+    public Task ApplyAutoShuffleAsync(TaskItem task, AppSettings settings)
+    {
+        _settings = settings;
+        BindTask(task);
+
+        int minutes = Math.Max(1, settings.ReminderMinutes);
+        var duration = TimeSpan.FromMinutes(minutes);
+        TimerText = FormatTimerText(duration);
+        CountdownRequested?.Invoke(this, duration);
+
+        return Task.CompletedTask;
     }
 
     internal static string FormatTimerText(TimeSpan remaining)

@@ -30,6 +30,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<StorageService>();
         builder.Services.AddSingleton<NotificationService>();
         builder.Services.AddSingleton(sp => new SchedulerService(deterministic: false));
+        builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
         // ViewModels
         builder.Services.AddSingleton<DashboardViewModel>();

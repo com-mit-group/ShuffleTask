@@ -9,15 +9,14 @@ namespace ShuffleTask;
 public partial class App : Application
 {
     private readonly StorageService _storage;
+    private readonly ShuffleCoordinatorService _coordinator;
 
-    private const string PrefTaskId = "pref.currentTaskId";
-    private const string PrefRemainingSecs = "pref.remainingSecs";
-
-    public App(MainPage mainPage, StorageService storage)
+    public App(MainPage mainPage, StorageService storage, ShuffleCoordinatorService coordinator)
     {
         InitializeComponent();
         MainPage = mainPage;
         _storage = storage;
+        _coordinator = coordinator;
         RequestedThemeChanged += (_, __) => { };
     }
 
@@ -25,6 +24,19 @@ public partial class App : Application
     {
         base.OnStart();
         await EnsureSeedDataAsync();
+        await _coordinator.StartAsync();
+    }
+
+    protected override async void OnResume()
+    {
+        base.OnResume();
+        await _coordinator.ResumeAsync();
+    }
+
+    protected override async void OnSleep()
+    {
+        await _coordinator.PauseAsync();
+        base.OnSleep();
     }
 
     private async Task EnsureSeedDataAsync()
@@ -55,12 +67,20 @@ public partial class App : Application
         settings.EnableNotifications = true;
         settings.SoundOn = true;
         settings.Active = true;
+        settings.AutoShuffleEnabled = true;
         settings.ReminderMinutes = 60;
+        settings.MaxDailyShuffles = 6;
+        settings.QuietHoursStart = new TimeSpan(22, 0, 0);
+        settings.QuietHoursEnd = new TimeSpan(7, 0, 0);
         settings.StreakBias = 0.3;
         settings.StableRandomnessPerDay = true;
         await _storage.SetSettingsAsync(settings);
 
-        Preferences.Default.Remove(PrefRemainingSecs);
-        Preferences.Default.Remove(PrefTaskId);
+        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
+        Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
+        Preferences.Default.Remove(PreferenceKeys.ShuffleCount);
+        Preferences.Default.Remove(PreferenceKeys.ShuffleCountDate);
     }
 }
