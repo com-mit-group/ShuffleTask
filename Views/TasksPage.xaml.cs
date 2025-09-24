@@ -28,7 +28,7 @@ public partial class TasksPage : ContentPage
 
     private async void OnAddClicked(object? sender, EventArgs e)
     {
-        await OpenEditorAsync(new TaskItem());
+        await OpenEditorAsync(null);
     }
 
     private async void OnEditButtonClicked(object sender, EventArgs e)
@@ -69,7 +69,7 @@ public partial class TasksPage : ContentPage
         }
     }
 
-    private async Task OpenEditorAsync(TaskItem task)
+    private async Task OpenEditorAsync(TaskItem? task)
     {
         var page = _services.GetRequiredService<EditTaskPage>();
         var editorVm = _services.GetRequiredService<EditTaskViewModel>();
