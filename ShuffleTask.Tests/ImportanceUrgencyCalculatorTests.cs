@@ -75,7 +75,7 @@ public class ImportanceUrgencyCalculatorTests
     }
 
     [Test]
-    public void Calculate_SmallerTasksEarnSizeMultiplierBoost()
+    public void Calculate_LargerTasksEarnSizeMultiplierBoost()
     {
         var settings = new AppSettings();
 
@@ -100,10 +100,10 @@ public class ImportanceUrgencyCalculatorTests
         var smallScore = ImportanceUrgencyCalculator.Calculate(smallTask, DefaultNow, settings);
         var largeScore = ImportanceUrgencyCalculator.Calculate(largeTask, DefaultNow, settings);
 
-        Assert.That(smallScore.SizeMultiplier, Is.GreaterThan(largeScore.SizeMultiplier),
-            "Smaller tasks should receive the larger size multiplier.");
-        Assert.That(smallScore.CombinedScore, Is.GreaterThan(largeScore.CombinedScore),
-            "With the same inputs otherwise, the smaller task should edge the larger one.");
+        Assert.That(largeScore.SizeMultiplier, Is.GreaterThan(smallScore.SizeMultiplier),
+            "Larger tasks should receive the larger size multiplier.");
+        Assert.That(largeScore.CombinedScore, Is.GreaterThan(smallScore.CombinedScore),
+            "With the same inputs otherwise, the larger task should edge the smaller one.");
     }
 
     [Test]

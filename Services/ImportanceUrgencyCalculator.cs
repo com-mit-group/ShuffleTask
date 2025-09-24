@@ -227,7 +227,7 @@ public static class ImportanceUrgencyCalculator
     private static double ComputeSizeMultiplier(double storyPoints, double sizeBiasStrength)
     {
         double normalized = storyPoints / DefaultStoryPoints;
-        double bias = 1.0 + (sizeBiasStrength * (1.0 - normalized));
+        double bias = 1.0 + (sizeBiasStrength * (normalized - 1.0));
 
         if (bias < SizeBiasMinMultiplier)
         {

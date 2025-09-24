@@ -38,6 +38,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             Settings = await _storage.GetSettingsAsync();
+            Settings.NormalizeWeights();
             await _notifications.InitializeAsync();
         }
         finally
