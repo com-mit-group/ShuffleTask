@@ -14,6 +14,7 @@
     <Compile Include="../Services/ImportanceUrgencyCalculator.cs" Link="Services/ImportanceUrgencyCalculator.cs" />
     <Compile Include="../Services/SchedulerService.cs" Link="Services/SchedulerService.cs" />
     <Compile Include="../Services/TimeWindowService.cs" Link="Services/TimeWindowService.cs" />
+    <Compile Include="../ViewModels/TasksViewModel.cs" Link="Viewodels/TasksViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>

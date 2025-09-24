@@ -122,6 +122,17 @@
                                             HorizontalOptions="End"
                                             Clicked="OnEditButtonClicked"
                                             CommandParameter="{Binding Task}" />
+                                    <Button Text="Delete"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="#eb5757"
+                                            TextColor="White"
+                                            BorderColor="#eb5757"
+                                            CornerRadius="8"
+                                            HorizontalOptions="End"
+                                            Clicked="OnDeleteSwipe"
+                                            CommandParameter="{Binding Task}"
+                                            SemanticProperties.Description="{Binding Title, StringFormat='Delete task {0}'}" />
                                     <Label Text="{Binding StatusText}"
                                            FontSize="12"
                                            HorizontalOptions="End"
