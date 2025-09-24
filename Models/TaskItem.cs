@@ -13,6 +13,8 @@ public class TaskItem
 
     public int Importance { get; set; } // 1..5
 
+    public double SizePoints { get; set; } = 3.0; // story points style estimate
+
     public DateTime? Deadline { get; set; }
 
     public RepeatType Repeat { get; set; }
