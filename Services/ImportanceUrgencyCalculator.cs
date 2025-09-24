@@ -9,6 +9,14 @@ public static class ImportanceUrgencyCalculator
     private const double DeadlineShare = 0.75;
     private const double RepeatShare = 0.25;
     private const double RepeatPenalty = 0.6;
+    private const double DefaultStoryPoints = 3.0;
+    private const double MinStoryPoints = 0.5;
+    private const double MaxStoryPoints = 13.0;
+    private const double MinDeadlineWindowHours = 24.0;
+    private const double MaxDeadlineWindowHours = 168.0;
+    private const double SizeBiasStrength = 0.2;
+    private const double SizeBiasMinMultiplier = 0.8;
+    private const double SizeBiasMaxMultiplier = 1.2;
 
     public static ImportanceUrgencyScore Calculate(TaskItem task, DateTime nowLocal, AppSettings settings)
     {
@@ -17,21 +25,26 @@ public static class ImportanceUrgencyCalculator
         if (settings == null)
             throw new ArgumentNullException(nameof(settings));
 
+        double storyPoints = NormalizeStoryPoints(task.SizePoints);
+
         double importanceNorm = NormalizeImportance(task.Importance);
         double importanceWeighted = importanceNorm * ImportanceWeightPoints;
 
-        double deadlineNorm = NormalizeDeadlineUrgency(task, nowLocal);
+        double deadlineNorm = NormalizeDeadlineUrgency(task, nowLocal, storyPoints);
         double repeatNorm = NormalizeRepeatUrgency(task, nowLocal, settings);
 
         double urgencyDeadlinePoints = deadlineNorm * (UrgencyWeightPoints * DeadlineShare);
         double urgencyRepeatPoints = repeatNorm * (UrgencyWeightPoints * RepeatShare) * RepeatPenalty;
 
-        double total = importanceWeighted + urgencyDeadlinePoints + urgencyRepeatPoints;
+        double baseTotal = importanceWeighted + urgencyDeadlinePoints + urgencyRepeatPoints;
+        double sizeMultiplier = ComputeSizeMultiplier(storyPoints);
+        double total = baseTotal * sizeMultiplier;
 
         return new ImportanceUrgencyScore(
             WeightedImportance: importanceWeighted,
             WeightedDeadlineUrgency: urgencyDeadlinePoints,
             WeightedRepeatUrgency: urgencyRepeatPoints,
+            SizeMultiplier: sizeMultiplier,
             CombinedScore: total);
     }
 
@@ -41,7 +54,7 @@ public static class ImportanceUrgencyCalculator
         return (clamped - 1.0) / 4.0;
     }
 
-    private static double NormalizeDeadlineUrgency(TaskItem task, DateTime nowLocal)
+    private static double NormalizeDeadlineUrgency(TaskItem task, DateTime nowLocal, double storyPoints)
     {
         if (task.Deadline == null)
         {
@@ -53,7 +66,8 @@ public static class ImportanceUrgencyCalculator
 
         if (hours >= 0)
         {
-            double urgency = 1.0 - Math.Min(1.0, hours / 72.0);
+            double window = ComputeDeadlineWindowHours(storyPoints);
+            double urgency = 1.0 - Math.Min(1.0, hours / window);
             return Clamp01(urgency);
         }
 
@@ -165,6 +179,61 @@ public static class ImportanceUrgencyCalculator
             _ => Weekdays.None
         };
 
+    private static double NormalizeStoryPoints(double rawPoints)
+    {
+        if (double.IsNaN(rawPoints) || double.IsInfinity(rawPoints) || rawPoints <= 0)
+        {
+            return DefaultStoryPoints;
+        }
+
+        if (rawPoints < MinStoryPoints)
+        {
+            return MinStoryPoints;
+        }
+
+        if (rawPoints > MaxStoryPoints)
+        {
+            return MaxStoryPoints;
+        }
+
+        return rawPoints;
+    }
+
+    private static double ComputeDeadlineWindowHours(double storyPoints)
+    {
+        double scaled = 72.0 * (storyPoints / DefaultStoryPoints);
+
+        if (scaled < MinDeadlineWindowHours)
+        {
+            return MinDeadlineWindowHours;
+        }
+
+        if (scaled > MaxDeadlineWindowHours)
+        {
+            return MaxDeadlineWindowHours;
+        }
+
+        return scaled;
+    }
+
+    private static double ComputeSizeMultiplier(double storyPoints)
+    {
+        double normalized = storyPoints / DefaultStoryPoints;
+        double bias = 1.0 + (SizeBiasStrength * (1.0 - normalized));
+
+        if (bias < SizeBiasMinMultiplier)
+        {
+            return SizeBiasMinMultiplier;
+        }
+
+        if (bias > SizeBiasMaxMultiplier)
+        {
+            return SizeBiasMaxMultiplier;
+        }
+
+        return bias;
+    }
+
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
 }
 
@@ -172,6 +241,7 @@ public readonly record struct ImportanceUrgencyScore(
     double WeightedImportance,
     double WeightedDeadlineUrgency,
     double WeightedRepeatUrgency,
+    double SizeMultiplier,
     double CombinedScore)
 {
     public double WeightedUrgency => WeightedDeadlineUrgency + WeightedRepeatUrgency;

@@ -77,6 +77,70 @@ namespace ShuffleTask.Tests
                     "Deadline-driven work should lead the combined score");
             });
 
+            RunTest("Smaller tasks earn a size multiplier boost", () =>
+            {
+                var now = new DateTime(2024, 1, 1, 9, 0, 0, DateTimeKind.Local);
+                var settings = new AppSettings();
+
+                var smallTask = new TaskItem
+                {
+                    Title = "Tidy desk",
+                    Importance = 3,
+                    SizePoints = 1,
+                    Repeat = RepeatType.None,
+                    AllowedPeriod = AllowedPeriod.Any
+                };
+
+                var largeTask = new TaskItem
+                {
+                    Title = "Quarterly plan",
+                    Importance = 3,
+                    SizePoints = 8,
+                    Repeat = RepeatType.None,
+                    AllowedPeriod = AllowedPeriod.Any
+                };
+
+                var smallScore = ImportanceUrgencyCalculator.Calculate(smallTask, now, settings);
+                var largeScore = ImportanceUrgencyCalculator.Calculate(largeTask, now, settings);
+
+                Assert(smallScore.SizeMultiplier > largeScore.SizeMultiplier,
+                    "Smaller tasks should receive the larger size multiplier.");
+                Assert(smallScore.CombinedScore > largeScore.CombinedScore,
+                    "With the same inputs otherwise, the smaller task should edge the larger one.");
+            });
+
+            RunTest("Deadline urgency activates earlier for larger work", () =>
+            {
+                var now = new DateTime(2024, 1, 1, 9, 0, 0, DateTimeKind.Local);
+                var settings = new AppSettings();
+
+                var smallDeadline = new TaskItem
+                {
+                    Title = "Quick copy edit",
+                    Importance = 3,
+                    SizePoints = 1,
+                    Deadline = now.AddHours(80),
+                    Repeat = RepeatType.None,
+                    AllowedPeriod = AllowedPeriod.Any
+                };
+
+                var largeDeadline = new TaskItem
+                {
+                    Title = "Implementation rollout",
+                    Importance = 3,
+                    SizePoints = 8,
+                    Deadline = now.AddHours(80),
+                    Repeat = RepeatType.None,
+                    AllowedPeriod = AllowedPeriod.Any
+                };
+
+                var smallScore = ImportanceUrgencyCalculator.Calculate(smallDeadline, now, settings);
+                var largeScore = ImportanceUrgencyCalculator.Calculate(largeDeadline, now, settings);
+
+                Assert(largeScore.WeightedDeadlineUrgency > smallScore.WeightedDeadlineUrgency,
+                    "Larger work should ramp deadline urgency sooner than small tasks.");
+            });
+
             RunTest("Scheduler favors highest combined score", () =>
             {
                 var now = new DateTime(2024, 1, 1, 9, 0, 0, DateTimeKind.Local);

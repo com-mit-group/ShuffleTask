@@ -49,6 +49,7 @@ public class StorageService
 
             await AddCol("Title", "TEXT", "''");
             await AddCol("Importance", "INTEGER", "1");
+            await AddCol("SizePoints", "REAL", "3");
             await AddCol("Deadline", "TEXT", "NULL");
             await AddCol("Repeat", "INTEGER", "0");
             await AddCol("Weekdays", "INTEGER", "0");
