@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ViewModels\TasksViewModel.cs" Link="Production\TasksViewModel.cs" />
+    <Compile Include="..\Models\TaskItem.cs" Link="Production\Models\TaskItem.cs" />
+    <Compile Include="..\Models\Enums.cs" Link="Production\Models\Enums.cs" />
+  </ItemGroup>
+
+</Project>
