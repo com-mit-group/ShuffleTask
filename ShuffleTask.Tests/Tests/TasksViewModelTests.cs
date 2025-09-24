@@ -4,19 +4,20 @@ using ShuffleTask.Services;
 using ShuffleTask.ViewModels;
 using System.Threading.Tasks;
 using System.Linq;
+using ShuffleTask.Tests.TestDoubles;
 
 namespace ShuffleTask.Tests;
 
 [TestFixture]
 public class TasksViewModelTests
 {
-    private StorageService _storage = null!;
+    private StorageServiceStub _storage = null!;
     private TasksViewModel _viewModel = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _storage = new StorageService();
+        _storage = new StorageServiceStub();
         await _storage.InitializeAsync();
         _viewModel = new TasksViewModel(_storage);
     }

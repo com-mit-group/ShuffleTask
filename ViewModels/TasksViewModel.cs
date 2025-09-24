@@ -8,9 +8,9 @@ namespace ShuffleTask.ViewModels;
 
 public partial class TasksViewModel : ObservableObject
 {
-    private readonly StorageService _storage;
+    private readonly IStorageService _storage;
 
-    public TasksViewModel(StorageService storage)
+    public TasksViewModel(IStorageService storage)
     {
         _storage = storage;
     }

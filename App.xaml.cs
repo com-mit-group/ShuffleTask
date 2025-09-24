@@ -8,12 +8,12 @@ namespace ShuffleTask;
 
 public partial class App : Application
 {
-    private readonly StorageService _storage;
+    private readonly IStorageService _storage;
 
     private const string PrefTaskId = "pref.currentTaskId";
     private const string PrefRemainingSecs = "pref.remainingSecs";
 
-    public App(MainPage mainPage, StorageService storage)
+    public App(MainPage mainPage, IStorageService storage)
     {
         InitializeComponent();
         MainPage = mainPage;

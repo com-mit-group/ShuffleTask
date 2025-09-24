@@ -8,7 +8,7 @@ namespace ShuffleTask.ViewModels;
 
 public partial class EditTaskViewModel : ObservableObject
 {
-    private readonly StorageService _storage;
+    private readonly IStorageService _storage;
 
     private TaskItem _workingCopy = new();
 
@@ -79,7 +79,7 @@ public partial class EditTaskViewModel : ObservableObject
         private set => SetProperty(ref _isNew, value);
     }
 
-    public EditTaskViewModel(StorageService storage)
+    public EditTaskViewModel(IStorageService storage)
     {
         _storage = storage;
     }
