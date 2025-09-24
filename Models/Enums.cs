@@ -28,3 +28,10 @@ public enum AllowedPeriod
     Off = 2,
     OffWork = 3
 }
+
+public enum TaskLifecycleStatus
+{
+    Active = 0,
+    Snoozed = 1,
+    Completed = 2
+}

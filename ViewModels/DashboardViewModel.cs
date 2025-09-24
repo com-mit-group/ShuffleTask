@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -141,15 +142,40 @@ public partial class DashboardViewModel : ObservableObject
             return;
         }
 
-        await _storage.MarkTaskDoneAsync(_activeTask.Id);
+        var updated = await _storage.MarkTaskDoneAsync(_activeTask.Id);
+        if (updated != null)
+        {
+            _activeTask = updated;
+        }
+
+        var snapshot = _activeTask;
         ShowMessage("Task complete", "Shuffle another task when you're ready.");
+        EmitTimerResetTelemetry("done", snapshot);
     }
 
     [RelayCommand]
-    private Task SnoozeAsync()
+    private async Task SnoozeAsync()
     {
+        if (_activeTask == null)
+        {
+            return;
+        }
+
+        await EnsureSettingsAsync();
+        var settings = _settings ?? new AppSettings();
+
+        int snoozeMinutes = Math.Max(15, settings.MinGapMinutes);
+        var duration = TimeSpan.FromMinutes(snoozeMinutes);
+
+        var updated = await _storage.SnoozeTaskAsync(_activeTask.Id, duration);
+        if (updated != null)
+        {
+            _activeTask = updated;
+        }
+
+        var snapshot = _activeTask;
         ShowMessage("Task snoozed", "Shuffle another task when you're ready.");
-        return Task.CompletedTask;
+        EmitTimerResetTelemetry("snooze", snapshot);
     }
 
     public async Task<bool> RestoreTaskAsync(string? taskId, TimeSpan? remaining)
@@ -247,6 +273,17 @@ public partial class DashboardViewModel : ObservableObject
 
         var alternative = _scheduler.PickNextTask(alternatives, settings, now);
         return alternative ?? chosen;
+    }
+
+    private static void EmitTimerResetTelemetry(string reason, TaskItem? task)
+    {
+        if (task == null)
+        {
+            Debug.WriteLine($"[ShuffleTask] Timer reset ({reason})");
+            return;
+        }
+
+        Debug.WriteLine($"[ShuffleTask] Timer reset ({reason}) for task {task.Id} -> status={task.Status}, nextEligible={task.NextEligibleAt:O}");
     }
 
     private static string BuildScheduleText(TaskItem task)

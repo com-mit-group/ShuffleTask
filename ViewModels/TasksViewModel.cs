@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
@@ -56,6 +58,17 @@ public partial class TasksViewModel : ObservableObject
         await LoadAsync();
     }
 
+    public async Task ResumeAsync(TaskItem task)
+    {
+        if (task == null)
+        {
+            return;
+        }
+
+        await _storage.ResumeTaskAsync(task.Id);
+        await LoadAsync();
+    }
+
     public async Task DeleteAsync(TaskItem task)
     {
         await _storage.DeleteTaskAsync(task.Id);
@@ -78,7 +91,11 @@ public partial class TasksViewModel : ObservableObject
             LastDoneAt = task.LastDoneAt,
             AllowedPeriod = task.AllowedPeriod,
             Paused = task.Paused,
-            CreatedAt = task.CreatedAt
+            CreatedAt = task.CreatedAt,
+            Status = task.Status,
+            SnoozedUntil = task.SnoozedUntil,
+            CompletedAt = task.CompletedAt,
+            NextEligibleAt = task.NextEligibleAt
         };
     }
 }
@@ -105,15 +122,38 @@ public class TaskListItem
 
     public string AllowedPeriodText { get; }
 
-    public string StatusText => Task.Paused ? "Paused" : "Active";
+    public string StatusText { get; }
 
-    private TaskListItem(TaskItem task, string repeatText, string scheduleText, string importanceText, string allowedPeriodText, ImportanceUrgencyScore score)
+    public bool HasStatusBadge { get; }
+
+    public string StatusBackgroundColor { get; }
+
+    public string StatusTextColor { get; }
+
+    public bool CanResume { get; }
+
+    private TaskListItem(
+        TaskItem task,
+        string repeatText,
+        string scheduleText,
+        string importanceText,
+        string allowedPeriodText,
+        string statusText,
+        bool hasStatusBadge,
+        string statusBackgroundColor,
+        string statusTextColor,
+        bool canResume, ImportanceUrgencyScore score)
     {
         Task = task;
         RepeatText = repeatText;
         ScheduleText = scheduleText;
         ImportanceText = importanceText;
         AllowedPeriodText = allowedPeriodText;
+        StatusText = statusText;
+        HasStatusBadge = hasStatusBadge;
+        StatusBackgroundColor = statusBackgroundColor;
+        StatusTextColor = statusTextColor;
+        CanResume = canResume;
         Score = score;
     }
 
@@ -145,9 +185,80 @@ public class TaskListItem
             _ => "Auto shuffle: Any time"
         };
 
-        var score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
+        var status = BuildStatusPresentation(task);
+        var score = ImportanceUrgencyScore.Calculate(task, settings, nowLocal);
 
-        return new TaskListItem(task, repeat, schedule, importanceText, allowedPeriodText, score);
+        return new TaskListItem(
+            task,
+            repeat,
+            schedule,
+            importanceText,
+            allowedPeriodText,
+            status.Text,
+            status.HasBadge,
+            status.BackgroundColor,
+            status.TextColor,
+            status.CanResume, score);
+    }
+
+    private static (string Text, bool HasBadge, string BackgroundColor, string TextColor, bool CanResume) BuildStatusPresentation(TaskItem task)
+    {
+        if (task.Paused)
+        {
+            return ("Paused", true, "#FEE2E2", "#C53030", false);
+        }
+
+        switch (task.Status)
+        {
+            case TaskLifecycleStatus.Active:
+                return ("Active", false, "#E2E8F0", "#2D3748", false);
+            case TaskLifecycleStatus.Snoozed:
+            {
+                string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt);
+                string text = string.IsNullOrEmpty(until) ? "Snoozed" : $"Snoozed until {until}";
+                return (text, true, "#FEF3C7", "#975A16", true);
+            }
+            case TaskLifecycleStatus.Completed:
+            {
+                bool oneOff = task.Repeat == RepeatType.None;
+                string next = FormatRelative(task.NextEligibleAt);
+                string text = oneOff
+                    ? "Completed"
+                    : (string.IsNullOrEmpty(next) ? "Completed" : $"Completed • next at {next}");
+                return (text, true, "#C6F6D5", "#276749", true);
+            }
+            default:
+                return ("Active", false, "#E2E8F0", "#2D3748", false);
+        }
+    }
+
+    private static string FormatRelative(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return string.Empty;
+        }
+
+        DateTime dt = value.Value;
+        DateTime local = dt.Kind switch
+        {
+            DateTimeKind.Utc => dt.ToLocalTime(),
+            DateTimeKind.Local => dt,
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc).ToLocalTime()
+        };
+
+        DateTime today = DateTime.Today;
+        if (local.Date == today)
+        {
+            return local.ToString("h:mm tt", CultureInfo.CurrentCulture);
+        }
+
+        if (local.Date == today.AddDays(1))
+        {
+            return $"tomorrow {local.ToString("h:mm tt", CultureInfo.CurrentCulture)}";
+        }
+
+        return local.ToString("MMM d h:mm tt", CultureInfo.CurrentCulture);
     }
 
     private static string FormatWeekdays(Weekdays weekdays)
