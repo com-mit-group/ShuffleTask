@@ -16,6 +16,8 @@ public partial class DashboardViewModel : ObservableObject
 
     private TaskItem? _activeTask;
     private AppSettings? _settings;
+    private PomodoroSession? _pomodoroSession;
+    private TimerRequest? _currentTimer;
 
     private const string DefaultTitle = "Shuffle a task";
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
@@ -31,10 +33,27 @@ public partial class DashboardViewModel : ObservableObject
         Description = DefaultDescription;
         Schedule = DefaultSchedule;
         TimerText = "--:--";
+        CycleStatus = string.Empty;
+        PhaseBadge = string.Empty;
     }
 
-    public event EventHandler<TimeSpan>? CountdownRequested;
+    public event EventHandler<TimerRequest>? CountdownRequested;
     public event EventHandler? CountdownCleared;
+
+    public enum PomodoroPhase
+    {
+        Focus,
+        Break
+    }
+
+    public sealed record TimerRequest(
+        TimeSpan Duration,
+        TimerMode Mode,
+        PomodoroPhase? Phase,
+        int CycleIndex,
+        int CycleCount,
+        int FocusMinutes,
+        int BreakMinutes);
 
     [ObservableProperty]
     private string title;
@@ -53,6 +72,15 @@ public partial class DashboardViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isBusy;
+
+    [ObservableProperty]
+    private string cycleStatus = string.Empty;
+
+    [ObservableProperty]
+    private string phaseBadge = string.Empty;
+
+    [ObservableProperty]
+    private bool isPomodoroVisible;
 
     public string? ActiveTaskId => _activeTask?.Id;
 
@@ -117,14 +145,35 @@ public partial class DashboardViewModel : ObservableObject
 
             BindTask(next);
 
-            int minutes = Math.Max(1, settings.ReminderMinutes);
-            var duration = TimeSpan.FromMinutes(minutes);
-            TimerText = FormatTimerText(duration);
-            CountdownRequested?.Invoke(this, duration);
-
-            if (settings.EnableNotifications)
+            if (settings.TimerMode == TimerMode.Pomodoro)
             {
-                await _notifications.NotifyTaskAsync(next, minutes, settings);
+                _pomodoroSession = PomodoroSession.Create(settings);
+                var request = _pomodoroSession.CurrentRequest();
+                _currentTimer = request;
+                UpdateIndicators(request);
+                TimerText = FormatTimerText(request.Duration);
+                CountdownRequested?.Invoke(this, request);
+
+                if (settings.EnableNotifications)
+                {
+                    await _notifications.NotifyTaskAsync(next, _pomodoroSession.FocusMinutes, settings);
+                    SchedulePomodoroNotifications(next, _pomodoroSession, settings);
+                }
+            }
+            else
+            {
+                _pomodoroSession = null;
+                int minutes = Math.Max(1, settings.ReminderMinutes);
+                var request = new TimerRequest(TimeSpan.FromMinutes(minutes), TimerMode.LongInterval, null, 0, 0, 0, 0);
+                _currentTimer = request;
+                UpdateIndicators(request);
+                TimerText = FormatTimerText(request.Duration);
+                CountdownRequested?.Invoke(this, request);
+
+                if (settings.EnableNotifications)
+                {
+                    await _notifications.NotifyTaskAsync(next, minutes, settings);
+                }
             }
         }
         finally
@@ -152,7 +201,7 @@ public partial class DashboardViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    public async Task<bool> RestoreTaskAsync(string? taskId, TimeSpan? remaining)
+    public async Task<bool> RestoreTaskAsync(string? taskId, TimeSpan? remaining, TimerRequest? timerState)
     {
         if (string.IsNullOrWhiteSpace(taskId))
         {
@@ -169,21 +218,76 @@ public partial class DashboardViewModel : ObservableObject
         }
 
         BindTask(task);
+
+        if (timerState?.Mode == TimerMode.Pomodoro && timerState.Phase.HasValue)
+        {
+            _pomodoroSession = PomodoroSession.FromState(timerState);
+            _currentTimer = _pomodoroSession.CurrentRequest();
+            UpdateIndicators(_currentTimer);
+        }
+        else if (timerState != null)
+        {
+            _pomodoroSession = null;
+            _currentTimer = timerState;
+            UpdateIndicators(timerState);
+        }
+        else
+        {
+            _pomodoroSession = null;
+            UpdateIndicators(null);
+        }
+
         if (remaining.HasValue)
         {
             TimerText = FormatTimerText(remaining.Value);
+        }
+        else if (_currentTimer != null)
+        {
+            TimerText = FormatTimerText(_currentTimer.Duration);
         }
 
         return true;
     }
 
-    public async Task NotifyTimeUpAsync()
+    public async Task HandleCountdownCompletedAsync()
     {
         await EnsureSettingsAsync();
-        if (_settings != null)
+        if (_settings == null)
         {
-            await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", _settings);
+            return;
         }
+
+        if (_currentTimer?.Mode == TimerMode.Pomodoro && _pomodoroSession != null && _activeTask != null)
+        {
+            var next = _pomodoroSession.Advance();
+            if (next != null)
+            {
+                _currentTimer = next;
+                UpdateIndicators(next);
+                TimerText = FormatTimerText(next.Duration);
+                CountdownRequested?.Invoke(this, next);
+            }
+            else
+            {
+                await CompletePomodoroAsync();
+            }
+
+            return;
+        }
+
+        await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", _settings);
+        await ShuffleAfterTimeoutAsync();
+    }
+
+    private Task CompletePomodoroAsync()
+    {
+        int cycles = _pomodoroSession?.CycleCount ?? _settings?.PomodoroCycles ?? 0;
+        TimerText = "--:--";
+        ShowPomodoroCompletion(cycles);
+        _pomodoroSession = null;
+        _currentTimer = null;
+        CountdownCleared?.Invoke(this, EventArgs.Empty);
+        return Task.CompletedTask;
     }
 
     internal static string FormatTimerText(TimeSpan remaining)
@@ -219,6 +323,7 @@ public partial class DashboardViewModel : ObservableObject
 
     private void ShowMessage(string title, string description)
     {
+        ResetTimerState();
         _activeTask = null;
         Title = title;
         Description = description;
@@ -226,6 +331,165 @@ public partial class DashboardViewModel : ObservableObject
         TimerText = "--:--";
         HasTask = false;
         CountdownCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UpdateIndicators(TimerRequest? request)
+    {
+        if (request?.Mode == TimerMode.Pomodoro && request.Phase.HasValue)
+        {
+            IsPomodoroVisible = true;
+            PhaseBadge = request.Phase.Value == PomodoroPhase.Focus ? "Focus" : "Break";
+            int cycleIndex = Math.Max(1, request.CycleIndex);
+            int cycleCount = Math.Max(cycleIndex, request.CycleCount);
+            CycleStatus = $"Cycle {cycleIndex} of {cycleCount}";
+        }
+        else
+        {
+            IsPomodoroVisible = false;
+            PhaseBadge = string.Empty;
+            CycleStatus = string.Empty;
+        }
+    }
+
+    private void ShowPomodoroCompletion(int cycles)
+    {
+        IsPomodoroVisible = true;
+        PhaseBadge = "Complete";
+        CycleStatus = cycles > 0
+            ? $"{cycles} cycle(s) finished"
+            : "Session complete";
+    }
+
+    private void ResetTimerState()
+    {
+        _currentTimer = null;
+        _pomodoroSession = null;
+        IsPomodoroVisible = false;
+        PhaseBadge = string.Empty;
+        CycleStatus = string.Empty;
+    }
+
+    private void SchedulePomodoroNotifications(TaskItem task, PomodoroSession session, AppSettings settings)
+    {
+        int focusMinutes = session.FocusMinutes;
+        int breakMinutes = session.BreakMinutes;
+        int cycles = session.CycleCount;
+
+        var focusDuration = TimeSpan.FromMinutes(focusMinutes);
+        var breakDuration = TimeSpan.FromMinutes(breakMinutes);
+        TimeSpan offset = TimeSpan.Zero;
+
+        for (int cycle = 1; cycle <= cycles; cycle++)
+        {
+            offset += focusDuration;
+            string focusTitle = $"{task.Title}: Focus complete";
+            string focusMessage = breakMinutes > 0
+                ? "Take a short break."
+                : (cycle < cycles ? "Start the next cycle." : "Pomodoro cycles finished!");
+            _ = _notifications.NotifyPhaseAsync(focusTitle, focusMessage, offset, settings);
+
+            if (breakMinutes > 0)
+            {
+                offset += breakDuration;
+                if (cycle == cycles)
+                {
+                    string summaryTitle = $"{task.Title}: Pomodoro complete";
+                    string summaryMessage = $"Finished {cycles} cycle(s).";
+                    _ = _notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings);
+                }
+                else
+                {
+                    string breakTitle = $"{task.Title}: Break complete";
+                    const string breakMessage = "Focus time again.";
+                    _ = _notifications.NotifyPhaseAsync(breakTitle, breakMessage, offset, settings);
+                }
+            }
+            else if (cycle == cycles)
+            {
+                string summaryTitle = $"{task.Title}: Pomodoro complete";
+                string summaryMessage = $"Finished {cycles} cycle(s).";
+                _ = _notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings);
+            }
+        }
+    }
+
+    private sealed class PomodoroSession
+    {
+        public PomodoroSession(int focusMinutes, int breakMinutes, int cycles)
+        {
+            FocusMinutes = Math.Max(1, focusMinutes);
+            BreakMinutes = Math.Max(1, breakMinutes);
+            CycleCount = Math.Max(1, cycles);
+            CurrentCycle = 1;
+            Phase = PomodoroPhase.Focus;
+        }
+
+        private PomodoroSession(int focusMinutes, int breakMinutes, int cycles, int currentCycle, PomodoroPhase phase)
+        {
+            FocusMinutes = Math.Max(1, focusMinutes);
+            BreakMinutes = Math.Max(1, breakMinutes);
+            CycleCount = Math.Max(1, cycles);
+            CurrentCycle = Math.Clamp(currentCycle, 1, CycleCount);
+            Phase = phase;
+
+            if (Phase == PomodoroPhase.Break && BreakMinutes <= 0)
+            {
+                Phase = PomodoroPhase.Focus;
+            }
+        }
+
+        public int FocusMinutes { get; }
+
+        public int BreakMinutes { get; }
+
+        public int CycleCount { get; }
+
+        public int CurrentCycle { get; private set; }
+
+        public PomodoroPhase Phase { get; private set; }
+
+        public static PomodoroSession Create(AppSettings settings)
+            => new PomodoroSession(settings.FocusMinutes, settings.BreakMinutes, settings.PomodoroCycles);
+
+        public static PomodoroSession FromState(TimerRequest state)
+            => new PomodoroSession(state.FocusMinutes, state.BreakMinutes, state.CycleCount, state.CycleIndex, state.Phase ?? PomodoroPhase.Focus);
+
+        public TimerRequest CurrentRequest()
+            => new TimerRequest(CurrentDuration, TimerMode.Pomodoro, Phase, CurrentCycle, CycleCount, FocusMinutes, BreakMinutes);
+
+        public TimerRequest? Advance()
+        {
+            if (Phase == PomodoroPhase.Focus && BreakMinutes > 0)
+            {
+                Phase = PomodoroPhase.Break;
+                return CurrentRequest();
+            }
+
+            if (Phase == PomodoroPhase.Focus && BreakMinutes <= 0)
+            {
+                if (CurrentCycle >= CycleCount)
+                {
+                    return null;
+                }
+
+                CurrentCycle++;
+                Phase = PomodoroPhase.Focus;
+                return CurrentRequest();
+            }
+
+            if (CurrentCycle >= CycleCount)
+            {
+                return null;
+            }
+
+            CurrentCycle++;
+            Phase = PomodoroPhase.Focus;
+            return CurrentRequest();
+        }
+
+        private TimeSpan CurrentDuration => Phase == PomodoroPhase.Focus
+            ? TimeSpan.FromMinutes(FocusMinutes)
+            : TimeSpan.FromMinutes(BreakMinutes);
     }
 
     private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTime now, string? previousId)

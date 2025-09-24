@@ -25,6 +25,20 @@ public partial class SettingsViewModel : ObservableObject
         _notifications = notifications;
     }
 
+    public bool UsePomodoro
+    {
+        get => Settings.TimerMode == TimerMode.Pomodoro;
+        set
+        {
+            var mode = value ? TimerMode.Pomodoro : TimerMode.LongInterval;
+            if (Settings.TimerMode != mode)
+            {
+                Settings.TimerMode = mode;
+                OnPropertyChanged(nameof(UsePomodoro));
+            }
+        }
+    }
+
     [RelayCommand]
     private async Task LoadAsync()
     {
@@ -58,6 +72,7 @@ public partial class SettingsViewModel : ObservableObject
         IsBusy = true;
         try
         {
+            ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
         }
         finally
@@ -89,5 +104,20 @@ public partial class SettingsViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyValidation()
+    {
+        Settings.ReminderMinutes = Math.Clamp(Settings.ReminderMinutes, 1, 480);
+        Settings.MinGapMinutes = Math.Clamp(Settings.MinGapMinutes, 0, Settings.MaxGapMinutes);
+        Settings.MaxGapMinutes = Math.Clamp(Settings.MaxGapMinutes, Settings.MinGapMinutes, 720);
+        Settings.FocusMinutes = Math.Clamp(Settings.FocusMinutes, 1, 240);
+        Settings.BreakMinutes = Math.Clamp(Settings.BreakMinutes, 1, 120);
+        Settings.PomodoroCycles = Math.Clamp(Settings.PomodoroCycles, 1, 12);
+    }
+
+    partial void OnSettingsChanged(AppSettings value)
+    {
+        OnPropertyChanged(nameof(UsePomodoro));
     }
 }

@@ -133,7 +133,7 @@ public class StorageService
         try
         {
             AppSettings? settings = JsonConvert.DeserializeObject<AppSettings>(kv.Value!);
-            return settings ?? new AppSettings();
+            return NormalizeSettings(settings ?? new AppSettings());
         }
         catch
         {
@@ -144,6 +144,7 @@ public class StorageService
 
     public async Task SetSettingsAsync(AppSettings settings)
     {
+        settings = NormalizeSettings(settings);
         string json = JsonConvert.SerializeObject(settings);
         var kv = new KeyValueEntity
         {
@@ -173,4 +174,31 @@ public class StorageService
     }
 
     private class TableInfo { public int cid { get; set; } public string name { get; set; } = ""; public string type { get; set; } = ""; public int notnull { get; set; } public string? dflt_value { get; set; } public int pk { get; set; } }
+
+    private static AppSettings NormalizeSettings(AppSettings settings)
+    {
+        var defaults = new AppSettings();
+
+        if (settings.ReminderMinutes <= 0)
+        {
+            settings.ReminderMinutes = defaults.ReminderMinutes;
+        }
+
+        if (settings.FocusMinutes <= 0)
+        {
+            settings.FocusMinutes = defaults.FocusMinutes;
+        }
+
+        if (settings.BreakMinutes <= 0)
+        {
+            settings.BreakMinutes = defaults.BreakMinutes;
+        }
+
+        if (settings.PomodoroCycles <= 0)
+        {
+            settings.PomodoroCycles = defaults.PomodoroCycles;
+        }
+
+        return settings;
+    }
 }
