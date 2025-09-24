@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ShuffleTask.Models;
+using ShuffleTask.Services;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Tests.TestDoubles;
 
-public class StorageService
+public class StorageServiceStub : IStorageService
 {
     private readonly Dictionary<string, TaskItem> _tasks = new();
     private bool _initialized;

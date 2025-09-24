@@ -8,7 +8,7 @@ namespace ShuffleTask.ViewModels;
 
 public partial class SettingsViewModel : ObservableObject
 {
-    private readonly StorageService _storage;
+    private readonly IStorageService _storage;
     private readonly SchedulerService _scheduler;
     private readonly NotificationService _notifications;
 
@@ -18,7 +18,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications)
+    public SettingsViewModel(IStorageService storage, SchedulerService scheduler, NotificationService notifications)
     {
         _storage = storage;
         _scheduler = scheduler;

@@ -27,7 +27,7 @@ public static class MauiProgram
         });
 
         // DI registrations
-        builder.Services.AddSingleton<StorageService>();
+        builder.Services.AddSingleton<IStorageService, StorageService>();
         builder.Services.AddSingleton<NotificationService>();
         builder.Services.AddSingleton(sp => new SchedulerService(deterministic: false));
 
