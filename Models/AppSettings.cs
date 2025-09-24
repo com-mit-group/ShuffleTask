@@ -21,4 +21,18 @@ public class AppSettings
 
     // When true (default), randomness is stable per day; when false, more chaotic
     public bool StableRandomnessPerDay { get; set; } = true;
+
+    // Weighting controls
+    // Importance vs urgency weighting expressed in points (default 60/40 split)
+    public double ImportanceWeight { get; set; } = 60.0;
+    public double UrgencyWeight { get; set; } = 40.0;
+
+    // Percent of the urgency share that should go to deadlines (0-100)
+    public double UrgencyDeadlineShare { get; set; } = 75.0;
+
+    // Dampens how strongly repeating work counts toward urgency (0-1 by default)
+    public double RepeatUrgencyPenalty { get; set; } = 0.6;
+
+    // Strength of the size-based multiplier; 0 disables, higher values boost small work
+    public double SizeBiasStrength { get; set; } = 0.2;
 }

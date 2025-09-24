@@ -4,17 +4,18 @@ namespace ShuffleTask.Services;
 
 public static class ImportanceUrgencyCalculator
 {
-    private const double ImportanceWeightPoints = 60.0;
-    private const double UrgencyWeightPoints = 40.0;
-    private const double DeadlineShare = 0.75;
-    private const double RepeatShare = 0.25;
-    private const double RepeatPenalty = 0.6;
+    private const double DefaultImportanceWeightPoints = 60.0;
+    private const double DefaultUrgencyWeightPoints = 40.0;
+    private const double DefaultDeadlineSharePercent = 75.0;
+    private const double DefaultRepeatPenalty = 0.6;
+    private const double MaxRepeatPenalty = 2.0;
     private const double DefaultStoryPoints = 3.0;
     private const double MinStoryPoints = 0.5;
     private const double MaxStoryPoints = 13.0;
     private const double MinDeadlineWindowHours = 24.0;
     private const double MaxDeadlineWindowHours = 168.0;
-    private const double SizeBiasStrength = 0.2;
+    private const double DefaultSizeBiasStrength = 0.2;
+    private const double MaxSizeBiasStrength = 1.0;
     private const double SizeBiasMinMultiplier = 0.8;
     private const double SizeBiasMaxMultiplier = 1.2;
 
@@ -28,16 +29,23 @@ public static class ImportanceUrgencyCalculator
         double storyPoints = NormalizeStoryPoints(task.SizePoints);
 
         double importanceNorm = NormalizeImportance(task.Importance);
-        double importanceWeighted = importanceNorm * ImportanceWeightPoints;
+        double importanceWeight = GetImportanceWeight(settings);
+        double urgencyWeight = GetUrgencyWeight(settings);
+        double deadlineShare = GetDeadlineShare(settings);
+        double repeatShare = GetRepeatShare(deadlineShare);
+        double repeatPenalty = GetRepeatPenalty(settings);
+        double sizeBiasStrength = GetSizeBiasStrength(settings);
+
+        double importanceWeighted = importanceNorm * importanceWeight;
 
         double deadlineNorm = NormalizeDeadlineUrgency(task, nowLocal, storyPoints);
         double repeatNorm = NormalizeRepeatUrgency(task, nowLocal, settings);
 
-        double urgencyDeadlinePoints = deadlineNorm * (UrgencyWeightPoints * DeadlineShare);
-        double urgencyRepeatPoints = repeatNorm * (UrgencyWeightPoints * RepeatShare) * RepeatPenalty;
+        double urgencyDeadlinePoints = deadlineNorm * (urgencyWeight * deadlineShare);
+        double urgencyRepeatPoints = repeatNorm * (urgencyWeight * repeatShare) * repeatPenalty;
 
         double baseTotal = importanceWeighted + urgencyDeadlinePoints + urgencyRepeatPoints;
-        double sizeMultiplier = ComputeSizeMultiplier(storyPoints);
+        double sizeMultiplier = ComputeSizeMultiplier(storyPoints, sizeBiasStrength);
         double total = baseTotal * sizeMultiplier;
 
         return new ImportanceUrgencyScore(
@@ -216,10 +224,10 @@ public static class ImportanceUrgencyCalculator
         return scaled;
     }
 
-    private static double ComputeSizeMultiplier(double storyPoints)
+    private static double ComputeSizeMultiplier(double storyPoints, double sizeBiasStrength)
     {
         double normalized = storyPoints / DefaultStoryPoints;
-        double bias = 1.0 + (SizeBiasStrength * (1.0 - normalized));
+        double bias = 1.0 + (sizeBiasStrength * (1.0 - normalized));
 
         if (bias < SizeBiasMinMultiplier)
         {
@@ -233,6 +241,70 @@ public static class ImportanceUrgencyCalculator
 
         return bias;
     }
+
+    private static double GetImportanceWeight(AppSettings settings)
+    {
+        double weight = settings.ImportanceWeight;
+        if (IsInvalid(weight) || weight < 0.0)
+        {
+            return DefaultImportanceWeightPoints;
+        }
+
+        return weight;
+    }
+
+    private static double GetUrgencyWeight(AppSettings settings)
+    {
+        double weight = settings.UrgencyWeight;
+        if (IsInvalid(weight) || weight < 0.0)
+        {
+            return DefaultUrgencyWeightPoints;
+        }
+
+        return weight;
+    }
+
+    private static double GetDeadlineShare(AppSettings settings)
+    {
+        double sharePercent = settings.UrgencyDeadlineShare;
+        if (IsInvalid(sharePercent))
+        {
+            sharePercent = DefaultDeadlineSharePercent;
+        }
+
+        sharePercent = Math.Clamp(sharePercent, 0.0, 100.0);
+        return sharePercent / 100.0;
+    }
+
+    private static double GetRepeatShare(double deadlineShare)
+    {
+        double clamped = Clamp01(deadlineShare);
+        return Clamp01(1.0 - clamped);
+    }
+
+    private static double GetRepeatPenalty(AppSettings settings)
+    {
+        double penalty = settings.RepeatUrgencyPenalty;
+        if (IsInvalid(penalty))
+        {
+            penalty = DefaultRepeatPenalty;
+        }
+
+        return Math.Clamp(penalty, 0.0, MaxRepeatPenalty);
+    }
+
+    private static double GetSizeBiasStrength(AppSettings settings)
+    {
+        double strength = settings.SizeBiasStrength;
+        if (IsInvalid(strength))
+        {
+            strength = DefaultSizeBiasStrength;
+        }
+
+        return Math.Clamp(strength, 0.0, MaxSizeBiasStrength);
+    }
+
+    private static bool IsInvalid(double value) => double.IsNaN(value) || double.IsInfinity(value);
 
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
 }
