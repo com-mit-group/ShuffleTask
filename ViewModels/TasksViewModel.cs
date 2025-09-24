@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using System.Linq;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
@@ -22,12 +22,12 @@ public partial class TasksViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
-        if (IsBusy)
+        if (isBusy)
         {
             return;
         }
 
-        IsBusy = true;
+        isBusy = true;
         try
         {
             await _storage.InitializeAsync();
@@ -45,7 +45,7 @@ public partial class TasksViewModel : ObservableObject
         }
         finally
         {
-            IsBusy = false;
+            isBusy = false;
         }
     }
 
