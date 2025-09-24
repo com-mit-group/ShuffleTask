@@ -66,4 +66,8 @@
       </MauiXaml>
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Remove="ShuffleTask.Tests\**\*.cs" />
+    </ItemGroup>
+
 </Project>
