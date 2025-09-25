@@ -19,6 +19,7 @@ public class ShuffleCoordinatorService : IDisposable
     private CancellationTokenSource? _timerCts;
     private WeakReference<DashboardViewModel>? _dashboardRef;
     private bool _isPaused;
+    private bool _disposed;
 
     public ShuffleCoordinatorService(StorageService storage, SchedulerService scheduler, NotificationService notifications)
     {
@@ -29,8 +30,24 @@ public class ShuffleCoordinatorService : IDisposable
 
     public void Dispose()
     {
-        CancelTimerInternal();
-        _gate.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            CancelTimerInternal();
+            _gate.Dispose();
+        }
+
+        _disposed = true;
     }
 
     public void RegisterDashboard(DashboardViewModel dashboard)
@@ -38,24 +55,11 @@ public class ShuffleCoordinatorService : IDisposable
         _dashboardRef = new WeakReference<DashboardViewModel>(dashboard);
     }
 
-    public async Task StartAsync()
-    {
-        await EnsureInitializedAsync().ConfigureAwait(false);
+    public Task StartAsync() => ResumeInternalAsync();
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _isPaused = false;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+    public Task ResumeAsync() => ResumeInternalAsync();
 
-        await ScheduleNextShuffleAsync().ConfigureAwait(false);
-    }
-
-    public async Task ResumeAsync()
+    private async Task ResumeInternalAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
@@ -170,11 +174,8 @@ public class ShuffleCoordinatorService : IDisposable
 
                 if (string.IsNullOrEmpty(pending.TaskId))
                 {
-                    if (nextAt >= now)
-                    {
-                        StartTimer(nextAt, null);
-                        return;
-                    }
+                    StartTimer(nextAt, null);
+                    return;
                 }
                 else
                 {
@@ -495,7 +496,7 @@ public class ShuffleCoordinatorService : IDisposable
         return TimeWindowService.AllowedNow(task.AllowedPeriod, when, settings);
     }
 
-    private void PersistPendingShuffle(string? taskId, DateTime scheduledAt)
+    private static void PersistPendingShuffle(string? taskId, DateTime scheduledAt)
     {
         Preferences.Default.Set(PreferenceKeys.NextShuffleAt, scheduledAt.ToString("O", CultureInfo.InvariantCulture));
         if (string.IsNullOrEmpty(taskId))
@@ -508,14 +509,14 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
-    private void PersistActiveTask(TaskItem task, AppSettings settings)
+    private static void PersistActiveTask(TaskItem task, AppSettings settings)
     {
         int seconds = Math.Max(1, settings.ReminderMinutes) * 60;
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
         Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
     }
 
-    private (DateTime? NextAt, string TaskId) LoadPendingShuffle()
+    private static (DateTime? NextAt, string TaskId) LoadPendingShuffle()
     {
         string iso = Preferences.Default.Get(PreferenceKeys.NextShuffleAt, string.Empty);
         string taskId = Preferences.Default.Get(PreferenceKeys.PendingShuffleTaskId, string.Empty);
@@ -528,7 +529,7 @@ public class ShuffleCoordinatorService : IDisposable
         return (null, taskId);
     }
 
-    private (DateTime Date, int Count) LoadDailyCount()
+    private static (DateTime Date, int Count) LoadDailyCount()
     {
         string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
         int count = Preferences.Default.Get(PreferenceKeys.ShuffleCount, 0);
@@ -541,7 +542,7 @@ public class ShuffleCoordinatorService : IDisposable
         return (DateTime.MinValue, 0);
     }
 
-    private void ResetDailyCountIfNeeded(DateTime now)
+    private static void ResetDailyCountIfNeeded(DateTime now)
     {
         string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
         if (string.IsNullOrWhiteSpace(iso) || !DateTime.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date) || date.Date != now.Date)
@@ -551,7 +552,7 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
-    private void IncrementDailyCount(DateTime now)
+    private static void IncrementDailyCount(DateTime now)
     {
         var (date, count) = LoadDailyCount();
         if (date != now.Date)
@@ -564,7 +565,7 @@ public class ShuffleCoordinatorService : IDisposable
         Preferences.Default.Set(PreferenceKeys.ShuffleCount, count + 1);
     }
 
-    private void ClearPendingShuffle()
+    private static void ClearPendingShuffle()
     {
         Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
         Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
@@ -579,8 +580,9 @@ public class ShuffleCoordinatorService : IDisposable
             {
                 existing.Cancel();
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"ShuffleCoordinatorService cancellation error: {ex}");
             }
             finally
             {

@@ -26,7 +26,7 @@ public partial class App : MauiWinUIApplication
 
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 
-    private void OnResuming(object? sender, object e)
+    private static void OnResuming(object? _, object _2)
     {
         var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
         if (coordinator != null)
@@ -35,7 +35,7 @@ public partial class App : MauiWinUIApplication
         }
     }
 
-    private void OnSuspending(object? sender, SuspendingEventArgs e)
+    private static void OnSuspending(object? _, SuspendingEventArgs e)
     {
         var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
         if (coordinator == null)
