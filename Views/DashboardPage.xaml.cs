@@ -9,15 +9,13 @@ namespace ShuffleTask.Views;
 
 public partial class DashboardPage : ContentPage
 {
-    private const string PrefTaskId = "pref.currentTaskId";
-    private const string PrefRemainingSecs = "pref.remainingSecs";
     private const string PrefTimerMode = "pref.timerMode";
     private const string PrefPomodoroPhase = "pref.pomodoro.phase";
     private const string PrefPomodoroCycle = "pref.pomodoro.cycle";
     private const string PrefPomodoroTotal = "pref.pomodoro.total";
     private const string PrefPomodoroFocus = "pref.pomodoro.focus";
     private const string PrefPomodoroBreak = "pref.pomodoro.break";
-
+    
     private readonly DashboardViewModel _vm;
 
     private IDispatcherTimer? _timer;
@@ -38,8 +36,8 @@ public partial class DashboardPage : ContentPage
     {
         await _vm.InitializeAsync();
 
-        string taskId = Preferences.Default.Get(PrefTaskId, string.Empty);
-        int seconds = Preferences.Default.Get(PrefRemainingSecs, -1);
+        string taskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
+        int seconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
         var mode = (TimerMode)Preferences.Default.Get(PrefTimerMode, (int)TimerMode.LongInterval);
 
         if (seconds > 0)
@@ -140,8 +138,8 @@ public partial class DashboardPage : ContentPage
             return;
         }
 
-        Preferences.Default.Set(PrefTaskId, taskId);
-        Preferences.Default.Set(PrefRemainingSecs, (int)Math.Ceiling(_remaining.TotalSeconds));
+        Preferences.Default.Set(PreferenceKeys.CurrentTaskId, taskId);
+        Preferences.Default.Set(PreferenceKeys.RemainingSeconds, (int)Math.Ceiling(_remaining.TotalSeconds));
         Preferences.Default.Set(PrefTimerMode, (int)_currentRequest.Mode);
 
         if (_currentRequest.Mode == TimerMode.Pomodoro && _currentRequest.Phase.HasValue)
@@ -164,8 +162,8 @@ public partial class DashboardPage : ContentPage
 
     private static void ClearPersistedState()
     {
-        Preferences.Default.Remove(PrefTaskId);
-        Preferences.Default.Remove(PrefRemainingSecs);
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
         Preferences.Default.Remove(PrefTimerMode);
         Preferences.Default.Remove(PrefPomodoroPhase);
         Preferences.Default.Remove(PrefPomodoroCycle);

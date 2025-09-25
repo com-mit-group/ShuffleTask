@@ -1,9 +1,9 @@
-﻿using Foundation;
+using Foundation;
 
 namespace ShuffleTask;
 
 [Register("AppDelegate")]
-public class AppDelegate : MauiUIApplicationDelegate
+public class AppDelegate : ShuffleCoordinatorApplicationDelegate
 {
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 }

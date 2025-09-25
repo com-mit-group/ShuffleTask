@@ -55,6 +55,14 @@ public partial class AppSettings : ObservableObject
     [ObservableProperty]
     private bool active = true; // master switch
 
+    public bool AutoShuffleEnabled { get; set; } = true;
+
+    public int MaxDailyShuffles { get; set; } = 6;
+
+    public TimeSpan QuietHoursStart { get; set; } = new TimeSpan(22, 0, 0);
+
+    public TimeSpan QuietHoursEnd { get; set; } = new TimeSpan(7, 0, 0);
+
     // New settings
     // 0..1, scales preference for tasks not done in a while
     [ObservableProperty]

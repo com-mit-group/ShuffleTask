@@ -7,7 +7,7 @@ namespace ShuffleTask.Services;
 /// <summary>
 /// Provides cross-platform notifications using platform primitives with a XAML alert fallback.
 /// </summary>
-public partial class NotificationService
+public partial class NotificationService : INotificationService
 {
     private readonly INotificationPlatform _platform;
 

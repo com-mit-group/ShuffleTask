@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+using ShuffleTask.Services;
+using Windows.ApplicationModel;
+using Windows.ApplicationModel.Core;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -16,9 +18,31 @@ public partial class App : MauiWinUIApplication
     /// </summary>
     public App()
     {
-        this.InitializeComponent();
+        InitializeComponent();
+        CoreApplication.Suspending += OnSuspendingAsync;
+        CoreApplication.Resuming += OnResumingAsync;
     }
 
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
-}
 
+    private static async void OnResumingAsync(object? sender, object e)
+    {
+        ShuffleCoordinatorService? coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
+        if (coordinator != null)
+        {
+            await coordinator.ResumeAsync();
+        }
+    }
+
+    private static async void OnSuspendingAsync(object? sender, SuspendingEventArgs e)
+    {
+        ShuffleCoordinatorService? coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
+        if (coordinator == null)
+        {
+            return;
+        }
+
+        SuspendingDeferral deferral = e.SuspendingOperation.GetDeferral();
+        await coordinator.PauseAsync().ContinueWith(_ => deferral.Complete());
+    }
+}

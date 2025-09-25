@@ -1,10 +1,11 @@
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Models;
+using System.Collections.Generic;
 
 namespace ShuffleTask.Services;
 
-public class StorageService
+public class StorageService : IStorageService
 {
     private const string DatabaseFileName = "shuffletask.db3";
     private const string SettingsKey = "app_settings";
@@ -59,6 +60,10 @@ public class StorageService
             await AddCol("Paused", "INTEGER", "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
             await AddCol("Description", "TEXT", "''");
+            await AddCol("Status", "INTEGER", "0");
+            await AddCol("SnoozedUntil", "TEXT", "NULL");
+            await AddCol("CompletedAt", "TEXT", "NULL");
+            await AddCol("NextEligibleAt", "TEXT", "NULL");
         }
         catch
         {
@@ -69,16 +74,22 @@ public class StorageService
     private SQLiteAsyncConnection Db => _db ?? throw new InvalidOperationException("StorageService not initialized. Call InitializeAsync() first.");
 
     // Tasks CRUD
-    public Task<List<TaskItem>> GetTasksAsync()
+    public async Task<List<TaskItem>> GetTasksAsync()
     {
-        return Db.Table<TaskItem>()
-                 .OrderByDescending(t => t.CreatedAt)
-                 .ToListAsync();
+        await AutoResumeDueTasksAsync();
+
+        return await Db.Table<TaskItem>()
+                       .OrderByDescending(t => t.CreatedAt)
+                       .ToListAsync();
     }
 
-    public Task<TaskItem> GetTaskAsync(string id)
+    public async Task<TaskItem?> GetTaskAsync(string id)
     {
-        return Db.Table<TaskItem>().Where(t => t.Id == id).FirstOrDefaultAsync();
+        await AutoResumeDueTasksAsync();
+
+        return await Db.Table<TaskItem>()
+                       .Where(t => t.Id == id)
+                       .FirstOrDefaultAsync();
     }
 
     public async Task AddTaskAsync(TaskItem item)
@@ -90,6 +101,12 @@ public class StorageService
         if (item.CreatedAt == default)
         {
             item.CreatedAt = DateTime.UtcNow;
+        }
+        if (item.Status != TaskLifecycleStatus.Active &&
+            item.Status != TaskLifecycleStatus.Snoozed &&
+            item.Status != TaskLifecycleStatus.Completed)
+        {
+            item.Status = TaskLifecycleStatus.Active;
         }
         await Db.InsertAsync(item);
     }
@@ -108,15 +125,192 @@ public class StorageService
         }
     }
 
-    // Mark done helper
-    public async Task MarkTaskDoneAsync(string id)
+    // Lifecycle helpers
+    public async Task<TaskItem?> MarkTaskDoneAsync(string id)
     {
-        TaskItem existing = await GetTaskAsync(id);
-        if (existing != null)
+        TaskItem? updated = null;
+        DateTime nowUtc = DateTime.UtcNow;
+
+        await Db.RunInTransactionAsync(conn =>
         {
-            existing.LastDoneAt = DateTime.UtcNow;
-            await Db.UpdateAsync(existing);
+            var existing = conn.Find<TaskItem>(id);
+            if (existing == null)
+            {
+                return;
+            }
+
+            DateTime doneAt = EnsureUtc(nowUtc);
+            existing.LastDoneAt = doneAt;
+            existing.CompletedAt = doneAt;
+            existing.Status = TaskLifecycleStatus.Completed;
+            existing.SnoozedUntil = null;
+            existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
+
+            conn.Update(existing);
+            updated = existing;
+        });
+
+        return updated;
+    }
+
+    public async Task<TaskItem?> SnoozeTaskAsync(string id, TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            duration = TimeSpan.FromMinutes(15);
         }
+
+        TaskItem? updated = null;
+        DateTime nowUtc = DateTime.UtcNow;
+
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var existing = conn.Find<TaskItem>(id);
+            if (existing == null)
+            {
+                return;
+            }
+
+            DateTime until = EnsureUtc(nowUtc.Add(duration));
+            existing.Status = TaskLifecycleStatus.Snoozed;
+            existing.SnoozedUntil = until;
+            existing.NextEligibleAt = until;
+            existing.CompletedAt = null;
+
+            conn.Update(existing);
+            updated = existing;
+        });
+
+        return updated;
+    }
+
+    public async Task<TaskItem?> ResumeTaskAsync(string id)
+    {
+        TaskItem? updated = null;
+
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var existing = conn.Find<TaskItem>(id);
+            if (existing == null)
+            {
+                return;
+            }
+
+            ApplyResume(existing);
+            conn.Update(existing);
+            updated = existing;
+        });
+
+        return updated;
+    }
+
+    private async Task AutoResumeDueTasksAsync()
+    {
+        var pending = await Db.Table<TaskItem>()
+                               .Where(t => t.Status != TaskLifecycleStatus.Active && t.NextEligibleAt != null)
+                               .ToListAsync();
+
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        DateTime nowUtc = DateTime.UtcNow;
+        List<TaskItem> toUpdate = new();
+
+        foreach (var task in pending)
+        {
+            DateTime nextUtc = EnsureUtc(task.NextEligibleAt!.Value);
+            if (nextUtc <= nowUtc)
+            {
+                ApplyResume(task);
+                toUpdate.Add(task);
+            }
+        }
+
+        if (toUpdate.Count > 0)
+        {
+            await Db.UpdateAllAsync(toUpdate);
+        }
+    }
+
+    private static void ApplyResume(TaskItem task)
+    {
+        task.Status = TaskLifecycleStatus.Active;
+        task.SnoozedUntil = null;
+        task.NextEligibleAt = null;
+        task.CompletedAt = null;
+    }
+
+    private static DateTime? ComputeNextEligibleUtc(TaskItem task, DateTime nowUtc)
+    {
+        switch (task.Repeat)
+        {
+            case RepeatType.None:
+                return null;
+            case RepeatType.Daily:
+            {
+                DateTime nextLocal = nowUtc.ToLocalTime().AddDays(1);
+                return EnsureUtc(nextLocal);
+            }
+            case RepeatType.Weekly:
+                return ComputeWeeklyNext(task.Weekdays, nowUtc);
+            case RepeatType.Interval:
+            {
+                int interval = Math.Max(1, task.IntervalDays);
+                DateTime nextLocal = nowUtc.ToLocalTime().AddDays(interval);
+                return EnsureUtc(nextLocal);
+            }
+            default:
+                return null;
+        }
+    }
+
+    private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)
+    {
+        DateTime local = nowUtc.ToLocalTime();
+        if (weekdays == Weekdays.None)
+        {
+            weekdays = DayToWeekdayFlag(local.DayOfWeek);
+        }
+
+        for (int offset = 1; offset <= 7; offset++)
+        {
+            DateTime candidate = DateTime.SpecifyKind(local.Date.AddDays(offset).Add(local.TimeOfDay), DateTimeKind.Local);
+            Weekdays flag = DayToWeekdayFlag(candidate.DayOfWeek);
+            if ((weekdays & flag) != 0)
+            {
+                return EnsureUtc(candidate);
+            }
+        }
+
+        DateTime fallback = DateTime.SpecifyKind(local.Date.AddDays(7).Add(local.TimeOfDay), DateTimeKind.Local);
+        return EnsureUtc(fallback);
+    }
+
+    private static Weekdays DayToWeekdayFlag(DayOfWeek dow)
+    {
+        return dow switch
+        {
+            DayOfWeek.Sunday => Weekdays.Sun,
+            DayOfWeek.Monday => Weekdays.Mon,
+            DayOfWeek.Tuesday => Weekdays.Tue,
+            DayOfWeek.Wednesday => Weekdays.Wed,
+            DayOfWeek.Thursday => Weekdays.Thu,
+            DayOfWeek.Friday => Weekdays.Fri,
+            DayOfWeek.Saturday => Weekdays.Sat,
+            _ => Weekdays.None
+        };
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 
     // Settings
