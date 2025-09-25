@@ -130,7 +130,7 @@ public class TasksViewModelTests
     {
         var source = CreateTask("clone", DateTime.UtcNow, paused: true);
 
-        var clone = TasksViewModel.Clone(source);
+        var clone = TaskItem.Clone(source);
 
         Assert.AreNotSame(source, clone, "Clone should return a new instance.");
         Assert.AreEqual(source.Id, clone.Id);

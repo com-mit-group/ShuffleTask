@@ -241,29 +241,7 @@ public class StorageServiceStub : IStorageService
         }
     }
 
-    private static TaskItem Clone(TaskItem task)
-    {
-        return new TaskItem
-        {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            Importance = task.Importance,
-            Deadline = task.Deadline,
-            Repeat = task.Repeat,
-            Weekdays = task.Weekdays,
-            IntervalDays = task.IntervalDays,
-            LastDoneAt = task.LastDoneAt,
-            AllowedPeriod = task.AllowedPeriod,
-            Paused = task.Paused,
-            CreatedAt = task.CreatedAt,
-            SizePoints = task.SizePoints,
-            Status = task.Status,
-            SnoozedUntil = task.SnoozedUntil,
-            CompletedAt = task.CompletedAt,
-            NextEligibleAt = task.NextEligibleAt
-        };
-    }
+    private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
 
     private static AppSettings Clone(AppSettings settings)
     {

@@ -75,29 +75,6 @@ public partial class TasksViewModel : ObservableObject
         await LoadAsync();
     }
 
-    public static TaskItem Clone(TaskItem task)
-    {
-        return new TaskItem
-        {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            Importance = task.Importance,
-            SizePoints = task.SizePoints,
-            Deadline = task.Deadline,
-            Repeat = task.Repeat,
-            Weekdays = task.Weekdays,
-            IntervalDays = task.IntervalDays,
-            LastDoneAt = task.LastDoneAt,
-            AllowedPeriod = task.AllowedPeriod,
-            Paused = task.Paused,
-            CreatedAt = task.CreatedAt,
-            Status = task.Status,
-            SnoozedUntil = task.SnoozedUntil,
-            CompletedAt = task.CompletedAt,
-            NextEligibleAt = task.NextEligibleAt
-        };
-    }
 }
 
 public class TaskListItem
