@@ -6,37 +6,32 @@ using ShuffleTask.Services;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class TasksViewModel : ObservableObject
+public partial class TasksViewModel(IStorageService storage) : ObservableObject
 {
-    private readonly IStorageService _storage;
+    private readonly IStorageService _storage = storage;
 
-    public TasksViewModel(IStorageService storage)
-    {
-        _storage = storage;
-    }
-
-    public ObservableCollection<TaskListItem> Tasks { get; } = new();
+    public ObservableCollection<TaskListItem> Tasks { get; } = [];
 
     [ObservableProperty]
     private bool isBusy;
 
     public async Task LoadAsync()
     {
-        if (isBusy)
+        if (IsBusy)
         {
             return;
         }
 
-        isBusy = true;
+        IsBusy = true;
         try
         {
             await _storage.InitializeAsync();
-            var items = await _storage.GetTasksAsync();
-            var settings = await _storage.GetSettingsAsync();
-            var now = DateTime.Now;
+            List<TaskItem> items = await _storage.GetTasksAsync();
+            AppSettings settings = await _storage.GetSettingsAsync();
+            DateTime now = DateTime.Now;
 
             Tasks.Clear();
-            foreach (var entry in items
+            foreach (TaskListItem? entry in items
                 .Select(task => TaskListItem.From(task, settings, now))
                 .OrderByDescending(x => x.PriorityScore))
             {
@@ -45,7 +40,7 @@ public partial class TasksViewModel : ObservableObject
         }
         finally
         {
-            isBusy = false;
+            IsBusy = false;
         }
     }
 
@@ -179,8 +174,8 @@ public class TaskListItem
             _ => "Auto shuffle: Any time"
         };
 
-        var status = BuildStatusPresentation(task);
-        var score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
+        TaskStatusPresentation status = BuildStatusPresentation(task);
+        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
 
         return new TaskListItem(
             task,
