@@ -9,9 +9,9 @@ namespace ShuffleTask.Services;
 
 public class ShuffleCoordinatorService : IDisposable
 {
-    private readonly StorageService _storage;
-    private readonly SchedulerService _scheduler;
-    private readonly NotificationService _notifications;
+    private readonly IStorageService _storage;
+    private readonly ISchedulerService _scheduler;
+    private readonly INotificationService _notifications;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -21,7 +21,7 @@ public class ShuffleCoordinatorService : IDisposable
     private bool _isPaused;
     private bool _disposed;
 
-    public ShuffleCoordinatorService(StorageService storage, SchedulerService scheduler, NotificationService notifications)
+    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
     {
         _storage = storage;
         _scheduler = scheduler;
