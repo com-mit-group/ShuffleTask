@@ -35,7 +35,15 @@ public partial class TasksPage : ContentPage
     {
         if (sender is Button { CommandParameter: TaskItem task })
         {
-            await OpenEditorAsync(TasksViewModel.Clone(task));
+            await OpenEditorAsync(TaskItem.Clone(task));
+        }
+    }
+
+    private async void OnResumeButtonClicked(object sender, EventArgs e)
+    {
+        if (sender is Button { CommandParameter: TaskItem task })
+        {
+            await _vm.ResumeAsync(task);
         }
     }
 
@@ -43,7 +51,7 @@ public partial class TasksPage : ContentPage
     {
         if (sender is SwipeItem { CommandParameter: TaskItem task })
         {
-            await OpenEditorAsync(TasksViewModel.Clone(task));
+            await OpenEditorAsync(TaskItem.Clone(task));
         }
     }
 

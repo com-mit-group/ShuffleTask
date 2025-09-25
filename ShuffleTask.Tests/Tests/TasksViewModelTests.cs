@@ -4,19 +4,20 @@ using ShuffleTask.Services;
 using ShuffleTask.ViewModels;
 using System.Threading.Tasks;
 using System.Linq;
+using ShuffleTask.Tests.TestDoubles;
 
 namespace ShuffleTask.Tests;
 
 [TestFixture]
 public class TasksViewModelTests
 {
-    private StorageService _storage = null!;
+    private StorageServiceStub _storage = null!;
     private TasksViewModel _viewModel = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _storage = new StorageService();
+        _storage = new StorageServiceStub();
         await _storage.InitializeAsync();
         _viewModel = new TasksViewModel(_storage);
     }
@@ -41,7 +42,7 @@ public class TasksViewModelTests
     }
 
     [Test]
-    public async Task LoadAsync_PopulatesTasksSortedNewestFirst()
+    public async Task LoadAsync_PopulatesTasksSortedByPriority()
     {
         var older = CreateTask("older", DateTime.UtcNow.AddDays(-2));
         var newer = CreateTask("newer", DateTime.UtcNow.AddDays(-1));
@@ -52,8 +53,14 @@ public class TasksViewModelTests
         await _viewModel.LoadAsync();
 
         Assert.AreEqual(2, _viewModel.Tasks.Count, "Expected two tasks after load.");
-        Assert.AreEqual(newer.Id, _viewModel.Tasks[0].Task.Id, "Newest task should appear first.");
-        Assert.AreEqual(older.Id, _viewModel.Tasks[1].Task.Id, "Older task should appear second.");
+        CollectionAssert.AreEquivalent(
+            new[] { older.Id, newer.Id },
+            _viewModel.Tasks.Select(t => t.Task.Id).ToArray(),
+            "All tasks should be present after load.");
+        Assert.That(
+            _viewModel.Tasks.Select(t => t.PriorityScore).ToList(),
+            Is.Ordered.Descending,
+            "Tasks should be sorted by priority score.");
         Assert.IsFalse(_viewModel.IsBusy, "LoadAsync should reset IsBusy.");
         Assert.AreEqual(2, _storage.InitializeCallCount, "LoadAsync should initialize storage each time.");
         Assert.AreEqual(1, _storage.GetTasksCallCount, "LoadAsync should fetch tasks once.");
@@ -106,7 +113,9 @@ public class TasksViewModelTests
         await _viewModel.LoadAsync();
         Assert.AreEqual(2, _viewModel.Tasks.Count, "Precondition: two tasks before deletion.");
 
-        await _viewModel.DeleteAsync(_viewModel.Tasks[0].Task);
+        var toDelete = _viewModel.Tasks.Single(item => item.Task.Id == remove.Id).Task;
+
+        await _viewModel.DeleteAsync(toDelete);
 
         Assert.AreEqual(1, _viewModel.Tasks.Count, "DeleteAsync should refresh the list.");
         Assert.AreEqual(keep.Id, _viewModel.Tasks[0].Task.Id, "Remaining task should be the one not deleted.");
@@ -121,7 +130,7 @@ public class TasksViewModelTests
     {
         var source = CreateTask("clone", DateTime.UtcNow, paused: true);
 
-        var clone = TasksViewModel.Clone(source);
+        var clone = TaskItem.Clone(source);
 
         Assert.AreNotSame(source, clone, "Clone should return a new instance.");
         Assert.AreEqual(source.Id, clone.Id);

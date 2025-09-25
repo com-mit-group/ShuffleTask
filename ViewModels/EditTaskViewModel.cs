@@ -8,7 +8,7 @@ namespace ShuffleTask.ViewModels;
 
 public partial class EditTaskViewModel : ObservableObject
 {
-    private readonly StorageService _storage;
+    private readonly IStorageService _storage;
 
     private TaskItem _workingCopy = new();
 
@@ -79,7 +79,7 @@ public partial class EditTaskViewModel : ObservableObject
         private set => SetProperty(ref _isNew, value);
     }
 
-    public EditTaskViewModel(StorageService storage)
+    public EditTaskViewModel(IStorageService storage)
     {
         _storage = storage;
     }
@@ -153,7 +153,7 @@ public partial class EditTaskViewModel : ObservableObject
     public void Load(TaskItem? task)
     {
         IsBusy = false;
-        _workingCopy = task != null ? Clone(task) : new TaskItem();
+        _workingCopy = task != null ? TaskItem.Clone(task) : new TaskItem();
         IsNew = task == null || string.IsNullOrWhiteSpace(task.Id);
 
         Title = _workingCopy.Title;
@@ -275,23 +275,4 @@ public partial class EditTaskViewModel : ObservableObject
         }
     }
 
-    private static TaskItem Clone(TaskItem task)
-    {
-        return new TaskItem
-        {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            Importance = task.Importance,
-            SizePoints = task.SizePoints,
-            Deadline = task.Deadline,
-            Repeat = task.Repeat,
-            Weekdays = task.Weekdays,
-            IntervalDays = task.IntervalDays,
-            LastDoneAt = task.LastDoneAt,
-            AllowedPeriod = task.AllowedPeriod,
-            Paused = task.Paused,
-            CreatedAt = task.CreatedAt
-        };
-    }
 }

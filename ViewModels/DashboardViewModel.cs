@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,9 +11,9 @@ namespace ShuffleTask.ViewModels;
 
 public partial class DashboardViewModel : ObservableObject
 {
-    private readonly StorageService _storage;
-    private readonly SchedulerService _scheduler;
-    private readonly NotificationService _notifications;
+    private readonly IStorageService _storage;
+    private readonly ISchedulerService _scheduler;
+    private readonly INotificationService _notifications;
 
     private TaskItem? _activeTask;
     private AppSettings? _settings;
@@ -21,7 +22,7 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(StorageService storage, SchedulerService scheduler, NotificationService notifications)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -141,15 +142,40 @@ public partial class DashboardViewModel : ObservableObject
             return;
         }
 
-        await _storage.MarkTaskDoneAsync(_activeTask.Id);
+        var updated = await _storage.MarkTaskDoneAsync(_activeTask.Id);
+        if (updated != null)
+        {
+            _activeTask = updated;
+        }
+
+        var snapshot = _activeTask;
         ShowMessage("Task complete", "Shuffle another task when you're ready.");
+        EmitTimerResetTelemetry("done", snapshot);
     }
 
     [RelayCommand]
-    private Task SnoozeAsync()
+    private async Task SnoozeAsync()
     {
+        if (_activeTask == null)
+        {
+            return;
+        }
+
+        await EnsureSettingsAsync();
+        var settings = _settings ?? new AppSettings();
+
+        int snoozeMinutes = Math.Max(15, settings.MinGapMinutes);
+        var duration = TimeSpan.FromMinutes(snoozeMinutes);
+
+        var updated = await _storage.SnoozeTaskAsync(_activeTask.Id, duration);
+        if (updated != null)
+        {
+            _activeTask = updated;
+        }
+
+        var snapshot = _activeTask;
         ShowMessage("Task snoozed", "Shuffle another task when you're ready.");
-        return Task.CompletedTask;
+        EmitTimerResetTelemetry("snooze", snapshot);
     }
 
     public async Task<bool> RestoreTaskAsync(string? taskId, TimeSpan? remaining)
@@ -247,6 +273,17 @@ public partial class DashboardViewModel : ObservableObject
 
         var alternative = _scheduler.PickNextTask(alternatives, settings, now);
         return alternative ?? chosen;
+    }
+
+    private static void EmitTimerResetTelemetry(string reason, TaskItem? task)
+    {
+        if (task == null)
+        {
+            Debug.WriteLine($"[ShuffleTask] Timer reset ({reason})");
+            return;
+        }
+
+        Debug.WriteLine($"[ShuffleTask] Timer reset ({reason}) for task {task.Id} -> status={task.Status}, nextEligible={task.NextEligibleAt:O}");
     }
 
     private static string BuildScheduleText(TaskItem task)

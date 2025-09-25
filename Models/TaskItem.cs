@@ -30,4 +30,36 @@ public class TaskItem
     public bool Paused { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
+
+    public DateTime? SnoozedUntil { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
+    public DateTime? NextEligibleAt { get; set; }
+
+    public static TaskItem Clone(TaskItem task)
+    {
+        return new TaskItem
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Description = task.Description,
+            Importance = task.Importance,
+            SizePoints = task.SizePoints,
+            Deadline = task.Deadline,
+            Repeat = task.Repeat,
+            Weekdays = task.Weekdays,
+            IntervalDays = task.IntervalDays,
+            LastDoneAt = task.LastDoneAt,
+            AllowedPeriod = task.AllowedPeriod,
+            Paused = task.Paused,
+            CreatedAt = task.CreatedAt,
+            Status = task.Status,
+            SnoozedUntil = task.SnoozedUntil,
+            CompletedAt = task.CompletedAt,
+            NextEligibleAt = task.NextEligibleAt
+        };
+    }
 }

@@ -145,6 +145,26 @@
                                             </DataTrigger>
                                         </Label.Triggers>
                                     </Label>
+                                    <Button Text="Resume"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="Transparent"
+                                            TextColor="#2f855a"
+                                            BorderColor="Transparent"
+                                            HorizontalOptions="End"
+                                            IsVisible="{Binding CanResume}"
+                                            Clicked="OnResumeButtonClicked"
+                                            CommandParameter="{Binding Task}" />
+                                    <Border StrokeThickness="0"
+                                            Padding="8,4"
+                                            StrokeShape="RoundRectangle 8"
+                                            BackgroundColor="{Binding StatusBackgroundColor}"
+                                            IsVisible="{Binding HasStatusBadge}"
+                                            HorizontalOptions="End">
+                                        <Label Text="{Binding StatusText}"
+                                               FontSize="12"
+                                               TextColor="{Binding StatusTextColor}" />
+                                    </Border>
                                 </VerticalStackLayout>
                             </Grid>
                         </Grid>
