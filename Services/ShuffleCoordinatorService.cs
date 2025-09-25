@@ -156,62 +156,87 @@ public class ShuffleCoordinatorService : IDisposable
             var now = DateTime.Now;
             ResetDailyCountIfNeeded(now);
 
-            if (HasReachedDailyLimit(settings, now))
+            if (TryScheduleAfterDailyLimit(settings, now))
             {
-                var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
-                StartTimer(resumeAt, null);
                 return;
             }
 
-            var pending = LoadPendingShuffle();
-            if (pending.NextAt.HasValue)
+            if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
             {
-                var nextAt = pending.NextAt.Value;
-                if (nextAt <= now)
-                {
-                    nextAt = now;
-                }
-
-                if (string.IsNullOrEmpty(pending.TaskId))
-                {
-                    StartTimer(nextAt, null);
-                    return;
-                }
-                else
-                {
-                    var pendingTask = await _storage.GetTaskAsync(pending.TaskId).ConfigureAwait(false);
-                    if (pendingTask != null && IsTaskValid(pendingTask, settings, nextAt))
-                    {
-                        StartTimer(nextAt, pending.TaskId);
-                        return;
-                    }
-                }
-            }
-
-            var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
-            if (tasks.Count == 0)
-            {
-                ClearPendingShuffle();
-                var retryAtEmpty = EnsureAllowed(now.AddMinutes(30), settings);
-                StartTimer(retryAtEmpty, null);
                 return;
             }
 
-            var target = ComputeNextTarget(now, settings);
-            var candidate = _scheduler.PickNextTask(tasks, settings, target);
-            if (candidate == null)
-            {
-                var retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
-                StartTimer(retryAt, null);
-                return;
-            }
-
-            StartTimer(target, candidate.Id);
+            await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTime now)
+    {
+        if (!HasReachedDailyLimit(settings, now))
+        {
+            return false;
+        }
+
+        var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+        StartTimer(resumeAt, null);
+        return true;
+    }
+
+    private async Task<bool> TryResumePendingShuffleAsync(AppSettings settings, DateTime now)
+    {
+        var pending = LoadPendingShuffle();
+        if (!pending.NextAt.HasValue)
+        {
+            return false;
+        }
+
+        var nextAt = pending.NextAt.Value;
+        if (nextAt <= now)
+        {
+            nextAt = now;
+        }
+
+        if (string.IsNullOrEmpty(pending.TaskId))
+        {
+            StartTimer(nextAt, null);
+            return true;
+        }
+
+        var pendingTask = await _storage.GetTaskAsync(pending.TaskId).ConfigureAwait(false);
+        if (pendingTask != null && IsTaskValid(pendingTask, settings, nextAt))
+        {
+            StartTimer(nextAt, pending.TaskId);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTime now)
+    {
+        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        if (tasks.Count == 0)
+        {
+            ClearPendingShuffle();
+            var retryAtEmpty = EnsureAllowed(now.AddMinutes(30), settings);
+            StartTimer(retryAtEmpty, null);
+            return;
+        }
+
+        var target = ComputeNextTarget(now, settings);
+        var candidate = _scheduler.PickNextTask(tasks, settings, target);
+        if (candidate == null)
+        {
+            var retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
+            StartTimer(retryAt, null);
+            return;
+        }
+
+        StartTimer(target, candidate.Id);
     }
 
     private DateTime ComputeNextTarget(DateTime now, AppSettings settings)
@@ -253,6 +278,7 @@ public class ShuffleCoordinatorService : IDisposable
                 await Task.Delay(delay, cts.Token).ConfigureAwait(false);
                 if (cts.Token.IsCancellationRequested)
                 {
+                    Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
                     return;
                 }
 
@@ -267,6 +293,7 @@ public class ShuffleCoordinatorService : IDisposable
             }
             catch (TaskCanceledException)
             {
+                Debug.WriteLine("ShuffleCoordinatorService timer task canceled");
             }
             catch (Exception ex)
             {
@@ -402,7 +429,7 @@ public class ShuffleCoordinatorService : IDisposable
         return true;
     }
 
-    private bool HasReachedDailyLimit(AppSettings settings, DateTime now)
+    private static bool HasReachedDailyLimit(AppSettings settings, DateTime now)
     {
         int max = settings.MaxDailyShuffles;
         if (max <= 0)
