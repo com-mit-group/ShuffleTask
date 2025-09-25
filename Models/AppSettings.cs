@@ -4,6 +4,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ShuffleTask.Models;
 
+public enum TimerMode
+{
+    LongInterval = 0,
+    Pomodoro = 1
+}
+
 public partial class AppSettings : ObservableObject
 {
     private const double ImportanceUrgencyTotal = 100.0;
@@ -20,6 +26,13 @@ public partial class AppSettings : ObservableObject
 
     [ObservableProperty]
     private TimeSpan workEnd = new(17, 0, 0); // default 17:00
+    public TimerMode TimerMode { get; set; } = TimerMode.LongInterval;
+
+    public int FocusMinutes { get; set; } = 15;
+
+    public int BreakMinutes { get; set; } = 5;
+
+    public int PomodoroCycles { get; set; } = 3;
 
     [ObservableProperty]
     private int minGapMinutes = 45; // default 45
