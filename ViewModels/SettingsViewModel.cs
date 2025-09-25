@@ -11,6 +11,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly ShuffleCoordinatorService _coordinator;
 
     [ObservableProperty]
     private AppSettings settings = new();
@@ -18,11 +19,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
+        _coordinator = coordinator;
     }
 
     [RelayCommand]
@@ -59,6 +61,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _storage.SetSettingsAsync(Settings);
+            await _coordinator.RefreshAsync();
         }
         finally
         {
