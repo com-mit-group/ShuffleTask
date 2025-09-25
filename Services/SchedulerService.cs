@@ -102,7 +102,7 @@ public class SchedulerService : ISchedulerService
 
         // Softmax sampling
         double maxScore = scored.Max(x => x.Score);
-        double[] expScores = [.. scored.Select(x => Math.Exp(x.Score - maxScore))];
+        double[] expScores = scored.Select(x => Math.Exp(x.Score - maxScore)).ToArray();
         double sum = expScores.Sum();
         if (sum <= 0)
         {

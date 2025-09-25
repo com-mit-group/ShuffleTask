@@ -102,7 +102,9 @@ public class StorageService : IStorageService
         {
             item.CreatedAt = DateTime.UtcNow;
         }
-        if (!Enum.IsDefined(typeof(TaskLifecycleStatus), (int)item.Status))
+        if (item.Status != TaskLifecycleStatus.Active &&
+            item.Status != TaskLifecycleStatus.Snoozed &&
+            item.Status != TaskLifecycleStatus.Completed)
         {
             item.Status = TaskLifecycleStatus.Active;
         }

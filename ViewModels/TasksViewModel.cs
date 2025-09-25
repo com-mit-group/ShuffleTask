@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,9 +7,15 @@ using ShuffleTask.Services;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class TasksViewModel(IStorageService storage) : ObservableObject
+public partial class TasksViewModel : ObservableObject
 {
-    private readonly IStorageService _storage = storage;
+    private readonly IStorageService _storage;
+
+    public TasksViewModel(IStorageService storage)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+        _storage = storage;
+    }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
 
@@ -53,7 +60,7 @@ public partial class TasksViewModel(IStorageService storage) : ObservableObject
 
     public async Task ResumeAsync(TaskItem task)
     {
-        if (task == null)
+        if (task is null)
         {
             return;
         }
