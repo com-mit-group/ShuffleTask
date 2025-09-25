@@ -425,9 +425,15 @@ public partial class DashboardViewModel : ObservableObject
         {
             offset += focusDuration;
             string focusTitle = $"{task.Title}: Focus complete";
-            string focusMessage = breakMinutes > 0
-                ? "Take a short break."
-                : (cycle < cycles ? "Start the next cycle." : "Pomodoro cycles finished!");
+            string focusMessage;
+            if (breakMinutes > 0)
+            {
+                focusMessage = "Take a short break.";
+            }
+            else
+            {
+                focusMessage = cycle < cycles ? "Start the next cycle." : "Pomodoro cycles finished!";
+            }
             _ = _notifications.NotifyPhaseAsync(focusTitle, focusMessage, offset, settings);
 
             if (breakMinutes > 0)
