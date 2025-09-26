@@ -28,12 +28,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
-        <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
-        <MauiImage Include="Resources\Images\*" />
-        <MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
-        <MauiFont Include="Resources\Fonts\*" />
-        <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        <MauiIcon Include="ShuffleTask.Presentation\Resources\AppIcon\appicon.svg" ForegroundFile="ShuffleTask.Presentation\Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+        <MauiSplashScreen Include="ShuffleTask.Presentation\Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+        <MauiImage Include="ShuffleTask.Presentation\Resources\Images\*" />
+        <MauiImage Update="ShuffleTask.Presentation\Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
+        <MauiFont Include="ShuffleTask.Presentation\Resources\Fonts\*" />
+        <MauiAsset Include="ShuffleTask.Presentation\Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>
@@ -46,22 +46,22 @@
     </ItemGroup>
 
     <ItemGroup>
-      <MauiXaml Update="Views\MainPage.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Views\MainPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
-      <MauiXaml Update="Views\SettingsPage.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Views\SettingsPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
-      <MauiXaml Update="Views\TasksPage.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Views\TasksPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
-      <MauiXaml Update="Views\EditTaskPage.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Views\EditTaskPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
-      <MauiXaml Update="Views\DashboardPage.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Views\DashboardPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
-      <MauiXaml Update="Controls\NumericStepper.xaml">
+      <MauiXaml Update="ShuffleTask.Presentation\Controls\NumericStepper.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
     </ItemGroup>
