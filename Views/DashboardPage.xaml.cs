@@ -54,9 +54,8 @@ public partial class DashboardPage : ContentPage
                     ? TimeSpan.FromMinutes(breakMinutes)
                     : TimeSpan.FromMinutes(focus);
 
-                timerState = new DashboardViewModel.TimerRequest(
+                timerState = DashboardViewModel.TimerRequest.Pomodoro(
                     duration,
-                    TimerMode.Pomodoro,
                     phase,
                     cycle,
                     total,
@@ -65,14 +64,8 @@ public partial class DashboardPage : ContentPage
             }
             else
             {
-                timerState = new DashboardViewModel.TimerRequest(
-                    TimeSpan.FromSeconds(Math.Max(1, seconds)),
-                    TimerMode.LongInterval,
-                    null,
-                    0,
-                    0,
-                    0,
-                    0);
+                timerState = DashboardViewModel.TimerRequest.LongInterval(
+                    TimeSpan.FromSeconds(Math.Max(1, seconds)));
             }
 
             bool restored = await _vm.RestoreTaskAsync(taskId, remaining, timerState);
