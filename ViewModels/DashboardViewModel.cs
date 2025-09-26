@@ -20,6 +20,7 @@ public partial class DashboardViewModel : ObservableObject
     private AppSettings? _settings;
     private PomodoroSession? _pomodoroSession;
     private TimerRequest? _currentTimer;
+    private bool _isInitialized;
 
     private const string DefaultTitle = "Shuffle a task";
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
@@ -110,21 +111,31 @@ public partial class DashboardViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        await _storage.InitializeAsync();
-        if (_settings == null)
+        if (!_isInitialized)
         {
-            _settings = await _storage.GetSettingsAsync();
+            await _storage.InitializeAsync();
+            await _notifications.InitializeAsync();
+            _coordinator.RegisterDashboard(this);
+            _isInitialized = true;
         }
-        await _notifications.InitializeAsync();
-        _coordinator.RegisterDashboard(this);
+
+        await LoadSettingsAsync();
     }
 
     private async Task EnsureSettingsAsync()
     {
-        if (_settings == null)
+        if (!_isInitialized)
         {
             await InitializeAsync();
+            return;
         }
+
+        await LoadSettingsAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        _settings = await _storage.GetSettingsAsync();
     }
 
     [RelayCommand]
