@@ -193,7 +193,7 @@ public partial class DashboardViewModel : ObservableObject
                 if (settings.EnableNotifications)
                 {
                     await _notifications.NotifyTaskAsync(next, _pomodoroSession.FocusMinutes, settings);
-                    SchedulePomodoroNotifications(next, _pomodoroSession, settings);
+                    await SchedulePomodoroNotificationsAsync(next, _pomodoroSession, settings);
                 }
             }
             else
@@ -458,7 +458,7 @@ public partial class DashboardViewModel : ObservableObject
         CycleStatus = string.Empty;
     }
 
-    private void SchedulePomodoroNotifications(TaskItem task, PomodoroSession session, AppSettings settings)
+    private async Task SchedulePomodoroNotificationsAsync(TaskItem task, PomodoroSession session, AppSettings settings)
     {
         int focusMinutes = session.FocusMinutes;
         int breakMinutes = session.BreakMinutes;
@@ -467,6 +467,7 @@ public partial class DashboardViewModel : ObservableObject
         var focusDuration = TimeSpan.FromMinutes(focusMinutes);
         var breakDuration = TimeSpan.FromMinutes(breakMinutes);
         TimeSpan offset = TimeSpan.Zero;
+        var schedulingTasks = new List<Task>();
 
         for (int cycle = 1; cycle <= cycles; cycle++)
         {
@@ -481,7 +482,7 @@ public partial class DashboardViewModel : ObservableObject
             {
                 focusMessage = cycle < cycles ? "Start the next cycle." : "Pomodoro cycles finished!";
             }
-            _ = _notifications.NotifyPhaseAsync(focusTitle, focusMessage, offset, settings);
+            schedulingTasks.Add(_notifications.NotifyPhaseAsync(focusTitle, focusMessage, offset, settings));
 
             if (breakMinutes > 0)
             {
@@ -490,21 +491,26 @@ public partial class DashboardViewModel : ObservableObject
                 {
                     string summaryTitle = $"{task.Title}: Pomodoro complete";
                     string summaryMessage = $"Finished {cycles} cycle(s).";
-                    _ = _notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings);
+                    schedulingTasks.Add(_notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings));
                 }
                 else
                 {
                     string breakTitle = $"{task.Title}: Break complete";
                     const string breakMessage = "Focus time again.";
-                    _ = _notifications.NotifyPhaseAsync(breakTitle, breakMessage, offset, settings);
+                    schedulingTasks.Add(_notifications.NotifyPhaseAsync(breakTitle, breakMessage, offset, settings));
                 }
             }
             else if (cycle == cycles)
             {
                 string summaryTitle = $"{task.Title}: Pomodoro complete";
                 string summaryMessage = $"Finished {cycles} cycle(s).";
-                _ = _notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings);
+                schedulingTasks.Add(_notifications.NotifyPhaseAsync(summaryTitle, summaryMessage, offset, settings));
             }
+        }
+
+        if (schedulingTasks.Count > 0)
+        {
+            await Task.WhenAll(schedulingTasks);
         }
     }
 
