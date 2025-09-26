@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShuffleTask", "ShuffleTask.csproj", "{34075F05-5092-40B2-8CEA-6402EAF60E4A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShuffleTask.Presentation", "ShuffleTask.Presentation\ShuffleTask.Presentation.csproj", "{34075F05-5092-40B2-8CEA-6402EAF60E4A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShuffleTask.Tests", "ShuffleTask.Tests\ShuffleTask.Tests.csproj", "{E9D50AEC-AC21-4BD5-B295-CA64231BD27B}"
 EndProject
