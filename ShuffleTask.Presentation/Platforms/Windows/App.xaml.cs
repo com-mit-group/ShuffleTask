@@ -25,7 +25,7 @@ public partial class App : MauiWinUIApplication
 
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 
-    private static async void OnResumingAsync(object? sender, object e)
+    private static async void OnResumingAsync(object? sender, object _)
     {
         ShuffleCoordinatorService? coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
         if (coordinator != null)

@@ -40,45 +40,26 @@ public static class TimeWindowService
     // Compute minutes until the next work window boundary (open or close)
     public static TimeSpan UntilNextBoundary(DateTime nowLocal, AppSettings s)
     {
-        var within = IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd);
-        DateTime todayStart = nowLocal.Date + s.WorkStart;
-        DateTime todayEnd = nowLocal.Date + s.WorkEnd;
+        if (s.WorkStart == s.WorkEnd)
+        {
+            return TimeSpan.Zero;
+        }
 
-        // Handle overnight windows
-        if (s.WorkStart > s.WorkEnd)
+        bool within = IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd);
+        TimeSpan nextBoundaryTime = within ? s.WorkEnd : s.WorkStart;
+        DateTime nextBoundary = GetNextOccurrence(nowLocal, nextBoundaryTime);
+
+        return nextBoundary - nowLocal;
+    }
+
+    private static DateTime GetNextOccurrence(DateTime nowLocal, TimeSpan boundary)
+    {
+        DateTime candidate = nowLocal.Date + boundary;
+        if (candidate <= nowLocal)
         {
-            // Window spans midnight: start today to end tomorrow
-            if (within)
-            {
-                // Next boundary is end today+1
-                var nextEnd = nowLocal.Date.AddDays(nowLocal.TimeOfDay >= s.WorkStart ? 1 : 0) + s.WorkEnd;
-                if (nextEnd <= nowLocal) nextEnd = nextEnd.AddDays(1);
-                return nextEnd - nowLocal;
-            }
-            else
-            {
-                // Next boundary is start (could be today or tomorrow)
-                var nextStart = nowLocal.TimeOfDay < s.WorkStart ? todayStart : todayStart.AddDays(1);
-                if (nextStart <= nowLocal) nextStart = nextStart.AddDays(1);
-                return nextStart - nowLocal;
-            }
+            candidate = candidate.AddDays(1);
         }
-        else
-        {
-            if (within)
-            {
-                if (nowLocal < todayEnd)
-                    return todayEnd - nowLocal;
-                // past end, next open is tomorrow start
-                return (todayStart.AddDays(1)) - nowLocal;
-            }
-            else
-            {
-                if (nowLocal < todayStart)
-                    return todayStart - nowLocal;
-                // after end, next start is tomorrow
-                return (todayStart.AddDays(1)) - nowLocal;
-            }
-        }
+
+        return candidate;
     }
 }
