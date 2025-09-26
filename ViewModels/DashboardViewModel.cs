@@ -56,7 +56,28 @@ public partial class DashboardViewModel : ObservableObject
         int CycleIndex,
         int CycleCount,
         int FocusMinutes,
-        int BreakMinutes);
+        int BreakMinutes)
+    {
+        public static TimerRequest Pomodoro(TimeSpan duration, PomodoroPhase phase, int cycleIndex, int cycleCount, int focusMinutes, int breakMinutes)
+            => new(duration, TimerMode.Pomodoro, phase, cycleIndex, cycleCount, focusMinutes, breakMinutes);
+
+        public static TimerRequest PomodoroFromMinutes(PomodoroPhase phase, int cycleIndex, int cycleCount, int focusMinutes, int breakMinutes)
+        {
+            int safeFocus = Math.Max(1, focusMinutes);
+            int safeBreak = Math.Max(1, breakMinutes);
+            var duration = phase == PomodoroPhase.Break
+                ? TimeSpan.FromMinutes(safeBreak)
+                : TimeSpan.FromMinutes(safeFocus);
+
+            return Pomodoro(duration, phase, cycleIndex, cycleCount, safeFocus, safeBreak);
+        }
+
+        public static TimerRequest LongInterval(TimeSpan duration)
+            => new(duration, TimerMode.LongInterval, null, 0, 0, 0, 0);
+
+        public static TimerRequest LongIntervalFromMinutes(int minutes)
+            => LongInterval(TimeSpan.FromMinutes(Math.Max(1, minutes)));
+    }
 
     [ObservableProperty]
     private string title;
@@ -168,7 +189,7 @@ public partial class DashboardViewModel : ObservableObject
             {
                 _pomodoroSession = null;
                 int minutes = Math.Max(1, settings.ReminderMinutes);
-                var request = new TimerRequest(TimeSpan.FromMinutes(minutes), TimerMode.LongInterval, null, 0, 0, 0, 0);
+                var request = TimerRequest.LongIntervalFromMinutes(minutes);
                 _currentTimer = request;
                 UpdateIndicators(request);
                 TimerText = FormatTimerText(request.Duration);
@@ -327,7 +348,10 @@ public partial class DashboardViewModel : ObservableObject
         int minutes = Math.Max(1, settings.ReminderMinutes);
         var duration = TimeSpan.FromMinutes(minutes);
         TimerText = FormatTimerText(duration);
-        CountdownRequested?.Invoke(this, duration);
+        var request = TimerRequest.LongInterval(duration);
+        _currentTimer = request;
+        UpdateIndicators(request);
+        CountdownRequested?.Invoke(this, request);
 
         return Task.CompletedTask;
     }
@@ -503,7 +527,7 @@ public partial class DashboardViewModel : ObservableObject
             => new PomodoroSession(state.FocusMinutes, state.BreakMinutes, state.CycleCount, state.CycleIndex, state.Phase ?? PomodoroPhase.Focus);
 
         public TimerRequest CurrentRequest()
-            => new TimerRequest(CurrentDuration, TimerMode.Pomodoro, Phase, CurrentCycle, CycleCount, FocusMinutes, BreakMinutes);
+            => TimerRequest.Pomodoro(CurrentDuration, Phase, CurrentCycle, CycleCount, FocusMinutes, BreakMinutes);
 
         public TimerRequest? Advance()
         {
