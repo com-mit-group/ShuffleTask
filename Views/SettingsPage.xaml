@@ -39,6 +39,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -243,18 +246,18 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="14"
+            <Label Grid.Row="18"
                    Text="Pomodoro mode"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="14"
+            <Switch Grid.Row="18"
                     Grid.Column="1"
                     IsToggled="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="15"
+            <Label Grid.Row="19"
                    Text="Focus length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="15"
+            <controls:NumericStepper Grid.Row="19"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="240"
@@ -263,11 +266,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="16"
+            <Label Grid.Row="20"
                    Text="Break length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="16"
+            <controls:NumericStepper Grid.Row="20"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="120"
@@ -276,11 +279,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="17"
+            <Label Grid.Row="21"
                    Text="Cycles"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="17"
+            <controls:NumericStepper Grid.Row="21"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="12"
@@ -289,7 +292,7 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Grid Grid.Row="18"
+            <Grid Grid.Row="22"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -301,7 +304,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="19"
+            <ActivityIndicator Grid.Row="23"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
