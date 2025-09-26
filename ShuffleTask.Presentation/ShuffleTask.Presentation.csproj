@@ -67,7 +67,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="ShuffleTask.Tests\**\*.cs" />
+        <Compile Remove="..\ShuffleTask.Tests\**\*.cs" />
     </ItemGroup>
 
 </Project>
