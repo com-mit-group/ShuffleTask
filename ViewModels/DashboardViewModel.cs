@@ -345,13 +345,25 @@ public partial class DashboardViewModel : ObservableObject
         _settings = settings;
         BindTask(task);
 
-        int minutes = Math.Max(1, settings.ReminderMinutes);
-        var duration = TimeSpan.FromMinutes(minutes);
-        TimerText = FormatTimerText(duration);
-        var request = TimerRequest.LongInterval(duration);
-        _currentTimer = request;
-        UpdateIndicators(request);
-        CountdownRequested?.Invoke(this, request);
+        if (settings.TimerMode == TimerMode.Pomodoro)
+        {
+            _pomodoroSession = PomodoroSession.Create(settings);
+            var request = _pomodoroSession.CurrentRequest();
+            _currentTimer = request;
+            UpdateIndicators(request);
+            TimerText = FormatTimerText(request.Duration);
+            CountdownRequested?.Invoke(this, request);
+        }
+        else
+        {
+            _pomodoroSession = null;
+            int minutes = Math.Max(1, settings.ReminderMinutes);
+            var request = TimerRequest.LongIntervalFromMinutes(minutes);
+            _currentTimer = request;
+            UpdateIndicators(request);
+            TimerText = FormatTimerText(request.Duration);
+            CountdownRequested?.Invoke(this, request);
+        }
 
         return Task.CompletedTask;
     }
