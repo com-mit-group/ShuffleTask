@@ -5,7 +5,7 @@ namespace ShuffleTask.Services;
 public interface INotificationService
 {
     Task InitializeAsync();
-
+    Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings);
     Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings);
 
     Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings, TimeSpan delay);

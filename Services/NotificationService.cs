@@ -39,7 +39,7 @@ public partial class NotificationService : INotificationService
         string title = "Reminder";
         string message = $"Time for: {task.Title}\nYou have {minutes} minutes.";
 
-        await _platform.NotifyAsync(title, message, delay, settings.SoundOn);
+        await NotifyAsync(title, message, delay, settings);
     }
 
     public async Task ShowToastAsync(string title, string message, AppSettings settings)
@@ -51,6 +51,19 @@ public partial class NotificationService : INotificationService
 
         await _platform.ShowToastAsync(title, message, settings.SoundOn);
     }
+
+    public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
+    {
+        if (!settings.EnableNotifications)
+        {
+            return Task.CompletedTask;
+        }
+
+        return NotifyAsync(title, message, delay, settings);
+    }
+
+    private Task NotifyAsync(string title, string message, TimeSpan delay, AppSettings settings)
+        => _platform.NotifyAsync(title, message, delay, settings.SoundOn);
 
     private static async Task ShowAlertAsync(string title, string message)
     {
