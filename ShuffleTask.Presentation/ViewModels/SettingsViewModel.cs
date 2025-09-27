@@ -99,7 +99,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             var items = await _storage.GetTasksAsync();
-            var now = _clock.GetUtcNow().UtcDateTime.ToLocalTime();
+            DateTimeOffset now = _clock.GetUtcNow();
             var next = _scheduler.PickNextTask(items, Settings, now);
             if (next != null && Settings.EnableNotifications)
             {

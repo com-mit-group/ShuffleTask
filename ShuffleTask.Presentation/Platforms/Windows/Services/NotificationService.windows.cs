@@ -84,7 +84,7 @@ public partial class NotificationService
                 }
 
                 var xml = CreateToastXml(title, message, playSound);
-                DateTimeOffset baseTime = _clock.GetLocalNow();
+                DateTimeOffset baseTime = _clock.GetUtcNow();
                 var effectiveDelay = delay < MinimumScheduleDelay ? MinimumScheduleDelay : delay;
                 var deliveryTime = baseTime + effectiveDelay;
                 var scheduled = new ScheduledToastNotification(xml, deliveryTime);

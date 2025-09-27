@@ -165,7 +165,7 @@ public partial class DashboardViewModel : ObservableObject
             }
 
             var tasks = await _storage.GetTasksAsync();
-            var now = _clock.GetUtcNow().UtcDateTime.ToLocalTime();
+            DateTimeOffset now = _clock.GetUtcNow();
             string? previousId = _activeTask?.Id;
 
             var next = PickNextCandidate(tasks, settings, now, previousId);
@@ -595,7 +595,7 @@ public partial class DashboardViewModel : ObservableObject
             : TimeSpan.FromMinutes(BreakMinutes);
     }
 
-    private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTime now, string? previousId)
+    private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTimeOffset now, string? previousId)
     {
         var chosen = _scheduler.PickNextTask(tasks, settings, now);
         if (chosen == null || string.IsNullOrEmpty(previousId) || !string.Equals(chosen.Id, previousId, StringComparison.Ordinal))

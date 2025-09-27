@@ -1,3 +1,4 @@
+using System;
 using ShuffleTask.Models;
 
 namespace ShuffleTask.Services;
@@ -15,7 +16,7 @@ public class SchedulerService : ISchedulerService
         _deterministic = deterministic;
     }
 
-    public TimeSpan NextGap(AppSettings settings, DateTime nowLocal)
+    public TimeSpan NextGap(AppSettings settings, DateTimeOffset now)
     {
         int min = Math.Max(0, settings.MinGapMinutes);
         int max = Math.Max(min, settings.MaxGapMinutes);
@@ -29,9 +30,10 @@ public class SchedulerService : ISchedulerService
 
         // Pick RNG based on settings
         Random rng;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
         if (settings.StableRandomnessPerDay)
         {
-            int seed = nowLocal.Year * 10000 + nowLocal.Month * 100 + nowLocal.Day;
+            int seed = local.Year * 10000 + local.Month * 100 + local.Day;
             rng = new Random(seed ^ 0x5f3759df);
         }
         else
@@ -44,20 +46,21 @@ public class SchedulerService : ISchedulerService
         return TimeSpan.FromMinutes(minutes);
     }
 
-    public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTime nowLocal)
-        => PickNextTask(tasks, settings, nowLocal, _deterministic);
+    public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
+        => PickNextTask(tasks, settings, now, _deterministic);
 
-    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings s, DateTime nowLocal, bool deterministic)
+    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings s, DateTimeOffset now, bool deterministic)
     {
         if (tasks == null) return null;
 
-        DateTime nowUtc = nowLocal.Kind == DateTimeKind.Utc ? nowLocal : nowLocal.ToUniversalTime();
+        DateTime nowUtc = now.UtcDateTime;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
 
         var candidates = tasks
             .Where(t => t is not null)
             .Where(t => LifecycleEligible(t!, nowUtc))
             .Where(t => !t!.Paused)
-            .Where(t => TimeWindowService.AllowedNow(t.AllowedPeriod, nowLocal, s))
+            .Where(t => TimeWindowService.AllowedNow(t.AllowedPeriod, now, s))
             .ToList();
 
         if (candidates.Count == 0)
@@ -68,7 +71,7 @@ public class SchedulerService : ISchedulerService
 
         foreach (var t in candidates)
         {
-            ImportanceUrgencyScore components = ImportanceUrgencyCalculator.Calculate(t, nowLocal, s);
+            ImportanceUrgencyScore components = ImportanceUrgencyCalculator.Calculate(t, now, s);
             double score = components.CombinedScore;
 
             if (!deterministic)
@@ -77,7 +80,7 @@ public class SchedulerService : ISchedulerService
                 Random rng;
                 if (s.StableRandomnessPerDay)
                 {
-                    int seed = nowLocal.Year * 10000 + nowLocal.Month * 100 + nowLocal.Day;
+                    int seed = local.Year * 10000 + local.Month * 100 + local.Day;
                     unchecked { seed = seed * 31 + t.Id.GetHashCode(); }
                     rng = new Random(seed);
                 }
@@ -121,7 +124,7 @@ public class SchedulerService : ISchedulerService
         double sample;
         if (s.StableRandomnessPerDay)
         {
-            int daySeed = nowLocal.Year * 10000 + nowLocal.Month * 100 + nowLocal.Day;
+            int daySeed = local.Year * 10000 + local.Month * 100 + local.Day;
             sample = NextStableSample(daySeed);
         }
         else

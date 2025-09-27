@@ -1,3 +1,4 @@
+using System;
 using ShuffleTask.Models;
 
 namespace ShuffleTask.Services;
@@ -19,7 +20,7 @@ public static class ImportanceUrgencyCalculator
     private const double SizeBiasMinMultiplier = 0.8;
     private const double SizeBiasMaxMultiplier = 1.2;
 
-    public static ImportanceUrgencyScore Calculate(TaskItem task, DateTime nowLocal, AppSettings settings)
+    public static ImportanceUrgencyScore Calculate(TaskItem task, DateTimeOffset now, AppSettings settings)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
@@ -27,6 +28,7 @@ public static class ImportanceUrgencyCalculator
             throw new ArgumentNullException(nameof(settings));
 
         double storyPoints = NormalizeStoryPoints(task.SizePoints);
+        DateTimeOffset nowLocal = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
 
         double importanceNorm = NormalizeImportance(task.Importance);
         double importanceWeight = GetImportanceWeight(settings);
@@ -38,8 +40,8 @@ public static class ImportanceUrgencyCalculator
 
         double importanceWeighted = importanceNorm * importanceWeight;
 
-        double deadlineNorm = NormalizeDeadlineUrgency(task, nowLocal, storyPoints);
-        double repeatNorm = NormalizeRepeatUrgency(task, nowLocal, settings);
+        double deadlineNorm = NormalizeDeadlineUrgency(task, now, storyPoints);
+        double repeatNorm = NormalizeRepeatUrgency(task, now, nowLocal, settings);
 
         double urgencyDeadlinePoints = deadlineNorm * (urgencyWeight * deadlineShare);
         double urgencyRepeatPoints = repeatNorm * (urgencyWeight * repeatShare) * repeatPenalty;
@@ -62,14 +64,15 @@ public static class ImportanceUrgencyCalculator
         return (clamped - 1.0) / 4.0;
     }
 
-    private static double NormalizeDeadlineUrgency(TaskItem task, DateTime nowLocal, double storyPoints)
+    private static double NormalizeDeadlineUrgency(TaskItem task, DateTimeOffset now, double storyPoints)
     {
-        if (task.Deadline == null)
+        DateTimeOffset? deadline = EnsureUtc(task.Deadline);
+        if (deadline == null)
         {
             return 0.05;
         }
 
-        TimeSpan diff = task.Deadline.Value - nowLocal;
+        TimeSpan diff = deadline.Value - now;
         double hours = diff.TotalHours;
 
         if (hours >= 0)
@@ -84,14 +87,14 @@ public static class ImportanceUrgencyCalculator
         return 1.0 + overdueBoost;
     }
 
-    private static double NormalizeRepeatUrgency(TaskItem task, DateTime nowLocal, AppSettings settings)
+    private static double NormalizeRepeatUrgency(TaskItem task, DateTimeOffset now, DateTimeOffset nowLocal, AppSettings settings)
     {
         double baseUrgency = task.Repeat switch
         {
             RepeatType.None => 0.0,
-            RepeatType.Daily => ComputeDailyUrgency(task, nowLocal),
+            RepeatType.Daily => ComputeDailyUrgency(task, now),
             RepeatType.Weekly => ComputeWeeklyUrgency(task, nowLocal),
-            RepeatType.Interval => ComputeIntervalUrgency(task, nowLocal),
+            RepeatType.Interval => ComputeIntervalUrgency(task, now),
             _ => 0.0
         };
 
@@ -100,8 +103,9 @@ public static class ImportanceUrgencyCalculator
             return 0.0;
         }
 
-        double daysSince = task.LastDoneAt.HasValue
-            ? Math.Max(0.0, (nowLocal - task.LastDoneAt.Value).TotalDays)
+        DateTimeOffset? lastDone = EnsureUtc(task.LastDoneAt);
+        double daysSince = lastDone.HasValue
+            ? Math.Max(0.0, (now - lastDone.Value).TotalDays)
             : 7.0;
         double streakBias = Clamp01(settings.StreakBias);
         double streakMultiplier = 1.0 + (streakBias * Math.Min(7.0, daysSince) / 7.0);
@@ -110,14 +114,15 @@ public static class ImportanceUrgencyCalculator
         return Math.Min(1.0, urgencyWithStreak);
     }
 
-    private static double ComputeDailyUrgency(TaskItem task, DateTime nowLocal)
+    private static double ComputeDailyUrgency(TaskItem task, DateTimeOffset now)
     {
-        if (task.LastDoneAt == null)
+        DateTimeOffset? lastDone = EnsureUtc(task.LastDoneAt);
+        if (lastDone == null)
         {
             return 0.6;
         }
 
-        double hours = (nowLocal - task.LastDoneAt.Value).TotalHours;
+        double hours = (now - lastDone.Value).TotalHours;
         if (hours <= 0)
         {
             return 0.1;
@@ -126,7 +131,7 @@ public static class ImportanceUrgencyCalculator
         return Math.Min(1.0, hours / 24.0);
     }
 
-    private static double ComputeWeeklyUrgency(TaskItem task, DateTime nowLocal)
+    private static double ComputeWeeklyUrgency(TaskItem task, DateTimeOffset nowLocal)
     {
         Weekdays today = DayToWeekdayFlag(nowLocal.DayOfWeek);
         bool plannedToday = (task.Weekdays & today) != 0;
@@ -136,12 +141,13 @@ public static class ImportanceUrgencyCalculator
             return 0.2;
         }
 
-        if (task.LastDoneAt == null)
+        DateTimeOffset? lastDone = EnsureUtc(task.LastDoneAt);
+        if (lastDone == null)
         {
             return 0.7;
         }
 
-        double days = (nowLocal - task.LastDoneAt.Value).TotalDays;
+        double days = (nowLocal - lastDone.Value).TotalDays;
         if (days <= 0)
         {
             return 0.2;
@@ -150,15 +156,16 @@ public static class ImportanceUrgencyCalculator
         return Math.Min(1.0, days / 7.0);
     }
 
-    private static double ComputeIntervalUrgency(TaskItem task, DateTime nowLocal)
+    private static double ComputeIntervalUrgency(TaskItem task, DateTimeOffset now)
     {
         int interval = Math.Max(1, task.IntervalDays);
-        if (task.LastDoneAt == null)
+        DateTimeOffset? lastDone = EnsureUtc(task.LastDoneAt);
+        if (lastDone == null)
         {
             return 0.5;
         }
 
-        double days = (nowLocal - task.LastDoneAt.Value).TotalDays;
+        double days = (now - lastDone.Value).TotalDays;
         if (days <= 0)
         {
             return 0.1;
@@ -307,6 +314,22 @@ public static class ImportanceUrgencyCalculator
     private static bool IsInvalid(double value) => double.IsNaN(value) || double.IsInfinity(value);
 
     private static double Clamp01(double value) => Math.Max(0.0, Math.Min(1.0, value));
+
+    private static DateTimeOffset? EnsureUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        DateTime dt = value.Value;
+        return dt.Kind switch
+        {
+            DateTimeKind.Utc => new DateTimeOffset(dt, TimeSpan.Zero),
+            DateTimeKind.Local => new DateTimeOffset(dt.ToUniversalTime(), TimeSpan.Zero),
+            _ => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc), TimeSpan.Zero)
+        };
+    }
 }
 
 public readonly record struct ImportanceUrgencyScore(

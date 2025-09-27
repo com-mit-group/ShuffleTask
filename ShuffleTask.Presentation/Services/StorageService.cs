@@ -254,16 +254,16 @@ public class StorageService : IStorageService
                 return null;
             case RepeatType.Daily:
             {
-                DateTime nextLocal = nowUtc.ToLocalTime().AddDays(1);
-                return EnsureUtc(nextLocal);
+                var nextLocal = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(1);
+                return EnsureUtc(nextLocal.UtcDateTime);
             }
             case RepeatType.Weekly:
                 return ComputeWeeklyNext(task.Weekdays, nowUtc);
             case RepeatType.Interval:
             {
                 int interval = Math.Max(1, task.IntervalDays);
-                DateTime nextLocal = nowUtc.ToLocalTime().AddDays(interval);
-                return EnsureUtc(nextLocal);
+                var nextLocal = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(interval);
+                return EnsureUtc(nextLocal.UtcDateTime);
             }
             default:
                 return null;
@@ -272,7 +272,7 @@ public class StorageService : IStorageService
 
     private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)
     {
-        DateTime local = nowUtc.ToLocalTime();
+        var local = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local);
         if (weekdays == Weekdays.None)
         {
             weekdays = DayToWeekdayFlag(local.DayOfWeek);
@@ -280,16 +280,16 @@ public class StorageService : IStorageService
 
         for (int offset = 1; offset <= 7; offset++)
         {
-            DateTime candidate = DateTime.SpecifyKind(local.Date.AddDays(offset).Add(local.TimeOfDay), DateTimeKind.Local);
-            Weekdays flag = DayToWeekdayFlag(candidate.DayOfWeek);
+            DateTimeOffset candidateLocal = new(local.Date.AddDays(offset).Add(local.TimeOfDay), local.Offset);
+            Weekdays flag = DayToWeekdayFlag(candidateLocal.DayOfWeek);
             if ((weekdays & flag) != 0)
             {
-                return EnsureUtc(candidate);
+                return EnsureUtc(candidateLocal.UtcDateTime);
             }
         }
 
-        DateTime fallback = DateTime.SpecifyKind(local.Date.AddDays(7).Add(local.TimeOfDay), DateTimeKind.Local);
-        return EnsureUtc(fallback);
+        DateTimeOffset fallbackLocal = new(local.Date.AddDays(7).Add(local.TimeOfDay), local.Offset);
+        return EnsureUtc(fallbackLocal.UtcDateTime);
     }
 
     private static Weekdays DayToWeekdayFlag(DayOfWeek dow)
