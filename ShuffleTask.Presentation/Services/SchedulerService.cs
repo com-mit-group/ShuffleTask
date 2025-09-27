@@ -1,20 +1,10 @@
-using System;
 using ShuffleTask.Models;
 
 namespace ShuffleTask.Services;
 
-public class SchedulerService : ISchedulerService
+public class SchedulerService(bool deterministic = false) : ISchedulerService
 {
-    private readonly bool _deterministic;
-
-    private static readonly object _stableSampleLock = new();
-    private static int _stableSampleSeed = int.MinValue;
-    private static int _stableSampleIndex;
-
-    public SchedulerService(bool deterministic = false)
-    {
-        _deterministic = deterministic;
-    }
+    private readonly bool _deterministic = deterministic;
 
     public TimeSpan NextGap(AppSettings settings, DateTimeOffset now)
     {
@@ -29,17 +19,7 @@ public class SchedulerService : ISchedulerService
         }
 
         // Pick RNG based on settings
-        Random rng;
-        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
-        if (settings.StableRandomnessPerDay)
-        {
-            int seed = local.Year * 10000 + local.Month * 100 + local.Day;
-            rng = new Random(seed ^ 0x5f3759df);
-        }
-        else
-        {
-            rng = new Random();
-        }
+        Random rng = UtilityMethods.CreateRng(settings, now, null);
 
         int range = Math.Max(1, (max - min + 1));
         int minutes = min + rng.Next(0, range);
@@ -49,68 +29,59 @@ public class SchedulerService : ISchedulerService
     public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
         => PickNextTask(tasks, settings, now, _deterministic);
 
-    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings s, DateTimeOffset now, bool deterministic)
+    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, bool deterministic)
     {
         if (tasks == null) return null;
 
-        DateTime nowUtc = now.UtcDateTime;
-        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
-
         var candidates = tasks
-            .Where(t => t is not null)
-            .Where(t => LifecycleEligible(t!, nowUtc))
-            .Where(t => !t!.Paused)
-            .Where(t => TimeWindowService.AllowedNow(t.AllowedPeriod, now, s))
+            .Where(task => task is not null)
+            .Where(task => UtilityMethods.LifecycleEligible(task, now.UtcDateTime))
+            .Where(task => !task.Paused)
+            .Where(task => TimeWindowService.AllowedNow(task.AllowedPeriod, now, settings))
             .ToList();
 
         if (candidates.Count == 0)
             return null;
 
-        // Compute scores
-        var scored = new List<(TaskItem Task, double Score)>();
+        List<ScoredTask> scored = ComputeScores(settings, now, deterministic, candidates);
+        return GetBestScoredTask(settings, now, deterministic, scored);
+    }
 
-        foreach (var t in candidates)
+    private static List<ScoredTask> ComputeScores(AppSettings settings, DateTimeOffset now, bool deterministic, List<TaskItem> candidates)
+    {
+        List<ScoredTask> scored = [];
+
+        foreach (TaskItem task in candidates)
         {
-            ImportanceUrgencyScore components = ImportanceUrgencyCalculator.Calculate(t, now, s);
+            ImportanceUrgencyScore components = ImportanceUrgencyCalculator.Calculate(task, now, settings);
             double score = components.CombinedScore;
 
             if (!deterministic)
             {
                 // jitter in [-0.5, 0.5]
-                Random rng;
-                if (s.StableRandomnessPerDay)
-                {
-                    int seed = local.Year * 10000 + local.Month * 100 + local.Day;
-                    unchecked { seed = seed * 31 + t.Id.GetHashCode(); }
-                    rng = new Random(seed);
-                }
-                else
-                {
-                    rng = new Random();
-                }
+                Random rng = UtilityMethods.CreateRng(settings, now, task);
                 score += (rng.NextDouble() - 0.5);
             }
 
-            scored.Add((Task: t, Score: score));
+            scored.Add(new ScoredTask(task, score));
         }
 
+        return scored;
+    }
+
+    private static TaskItem GetBestScoredTask(AppSettings settings, DateTimeOffset now, bool deterministic, List<ScoredTask> scored)
+    {
         if (deterministic)
         {
-            // Deterministic: pick argmax (stable)
-            return scored
-                .OrderByDescending(x => x.Score)
-                .ThenBy(x => x.Task.Id, StringComparer.Ordinal)
-                .First().Task;
+            return UtilityMethods.DeterministicMaxScoredTask(scored);
         }
 
         // Softmax sampling
-        double maxScore = scored.Max(x => x.Score);
-        double[] expScores = scored.Select(x => Math.Exp(x.Score - maxScore)).ToArray();
-        double sum = expScores.Sum();
-        if (sum <= 0)
+        double[] expScores = UtilityMethods.ExponentArray(scored);
+        double expSum = expScores.Sum();
+        if (expSum <= 0)
         {
-            // Fallback: pick max
-            return scored.OrderByDescending(x => x.Score).First().Task;
+            return UtilityMethods.DeterministicMaxScoredTask(scored);
         }
 
         double[] cumulative = new double[expScores.Length];
@@ -122,17 +93,16 @@ public class SchedulerService : ISchedulerService
         }
 
         double sample;
-        if (s.StableRandomnessPerDay)
+        if (settings.StableRandomnessPerDay)
         {
-            int daySeed = local.Year * 10000 + local.Month * 100 + local.Day;
-            sample = NextStableSample(daySeed);
+            sample = UtilityMethods.NextStableSample(now);
         }
         else
         {
             sample = Random.Shared.NextDouble();
         }
 
-        double r = sample * sum;
+        double r = sample * expSum;
 
         for (int i = 0; i < cumulative.Length; i++)
         {
@@ -141,54 +111,5 @@ public class SchedulerService : ISchedulerService
         }
 
         return scored[^1].Task;
-    }
-
-    private static bool LifecycleEligible(TaskItem task, DateTime nowUtc)
-    {
-        if (task.Status == TaskLifecycleStatus.Active)
-        {
-            return true;
-        }
-
-        if (task.Status == TaskLifecycleStatus.Snoozed || task.Status == TaskLifecycleStatus.Completed)
-        {
-            if (!task.NextEligibleAt.HasValue)
-            {
-                return false;
-            }
-
-            DateTime eligibleUtc = EnsureUtc(task.NextEligibleAt.Value);
-            return eligibleUtc <= nowUtc;
-        }
-
-        return true;
-    }
-
-    private static DateTime EnsureUtc(DateTime value)
-    {
-        return value.Kind switch
-        {
-            DateTimeKind.Utc => value,
-            DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-        };
-    }
-
-    private static double NextStableSample(int daySeed)
-    {
-        lock (_stableSampleLock)
-        {
-            if (_stableSampleSeed != daySeed)
-            {
-                _stableSampleSeed = daySeed;
-                _stableSampleIndex = 0;
-            }
-
-            int combined = unchecked(daySeed * 397) ^ _stableSampleIndex++;
-            combined &= int.MaxValue;
-
-            var rng = new Random(combined);
-            return rng.NextDouble();
-        }
     }
 }

@@ -10,10 +10,12 @@
   <ItemGroup>
     <Compile Include="../ShuffleTask.Presentation/Models/Enums.cs" Link="Models/Enums.cs" />
     <Compile Include="../ShuffleTask.Presentation/Models/AppSettings.cs" Link="Models/AppSettings.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Models/ScoredTask.cs" Link="Models/ScoredTask.cs" />
     <Compile Include="../ShuffleTask.Presentation/Models/TaskItem.cs" Link="Models/TaskItem.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/ImportanceUrgencyCalculator.cs" Link="Services/ImportanceUrgencyCalculator.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/SchedulerService.cs" Link="Services/SchedulerService.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/TimeWindowService.cs" Link="Services/TimeWindowService.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Services/UtilityMethods.cs" Link="Services/UtilityMethods.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/IStorageService.cs" Link="Services/IStorageService.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/ISchedulerService.cs" Link="Services/ISchedulerService.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/INotificationService.cs" Link="Services/INotificationService.cs" />
