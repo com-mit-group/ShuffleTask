@@ -9,6 +9,7 @@ public class StorageService : IStorageService
 {
     private const string DatabaseFileName = "shuffletask.db3";
     private const string SettingsKey = "app_settings";
+    private const string IntegerSqlType = "INTEGER";
 
     private readonly string _dbPath;
     private SQLiteAsyncConnection? _db;
@@ -49,18 +50,18 @@ public class StorageService : IStorageService
             }
 
             await AddCol("Title", "TEXT", "''");
-            await AddCol("Importance", "INTEGER", "1");
+            await AddCol("Importance", IntegerSqlType, "1");
             await AddCol("SizePoints", "REAL", "3");
             await AddCol("Deadline", "TEXT", "NULL");
-            await AddCol("Repeat", "INTEGER", "0");
-            await AddCol("Weekdays", "INTEGER", "0");
-            await AddCol("IntervalDays", "INTEGER", "0");
+            await AddCol("Repeat", IntegerSqlType, "0");
+            await AddCol("Weekdays", IntegerSqlType, "0");
+            await AddCol("IntervalDays", IntegerSqlType, "0");
             await AddCol("LastDoneAt", "TEXT", "NULL");
-            await AddCol("AllowedPeriod", "INTEGER", "0");
-            await AddCol("Paused", "INTEGER", "0");
+            await AddCol("AllowedPeriod", IntegerSqlType, "0");
+            await AddCol("Paused", IntegerSqlType, "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
             await AddCol("Description", "TEXT", "''");
-            await AddCol("Status", "INTEGER", "0");
+            await AddCol("Status", IntegerSqlType, "0");
             await AddCol("SnoozedUntil", "TEXT", "NULL");
             await AddCol("CompletedAt", "TEXT", "NULL");
             await AddCol("NextEligibleAt", "TEXT", "NULL");
@@ -367,7 +368,7 @@ public class StorageService : IStorageService
         public string? Value { get; set; }
     }
 
-    private class TableInfo { public int cid { get; set; } public string name { get; set; } = ""; public string type { get; set; } = ""; public int notnull { get; set; } public string? dflt_value { get; set; } public int pk { get; set; } }
+    private sealed class TableInfo { public int cid { get; set; } public string name { get; set; } = ""; public string type { get; set; } = ""; public int notnull { get; set; } public string? dflt_value { get; set; } public int pk { get; set; } }
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {

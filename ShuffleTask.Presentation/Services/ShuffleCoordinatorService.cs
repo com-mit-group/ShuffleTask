@@ -144,34 +144,39 @@ public class ShuffleCoordinatorService : IDisposable
                 return;
             }
 
-            CancelTimerInternal();
-
-            var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-            if (!ShouldAutoShuffle(settings))
-            {
-                ClearPendingShuffle();
-                return;
-            }
-
-            var now = DateTime.Now;
-            ResetDailyCountIfNeeded(now);
-
-            if (TryScheduleAfterDailyLimit(settings, now))
-            {
-                return;
-            }
-
-            if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
+            await ScheduleNextShuffleUnsafeAsync().ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    private async Task ScheduleNextShuffleUnsafeAsync()
+    {
+        CancelTimerInternal();
+
+        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        if (!ShouldAutoShuffle(settings))
+        {
+            ClearPendingShuffle();
+            return;
+        }
+
+        var now = DateTime.Now;
+        ResetDailyCountIfNeeded(now);
+
+        if (TryScheduleAfterDailyLimit(settings, now))
+        {
+            return;
+        }
+
+        if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
     }
 
     private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTime now)
@@ -332,66 +337,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (ReferenceEquals(_timerCts, cts))
-            {
-                _timerCts = null;
-            }
-
-            if (_isPaused)
-            {
-                return;
-            }
-
-            var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-            if (!ShouldAutoShuffle(settings))
-            {
-                ClearPendingShuffle();
-                return;
-            }
-
-            var now = DateTime.Now;
-            ResetDailyCountIfNeeded(now);
-
-            if (IsWithinQuietHours(now, settings))
-            {
-                var resumeAt = EnsureAllowed(now, settings);
-                StartTimer(resumeAt, taskId);
-                return;
-            }
-
-            if (HasReachedDailyLimit(settings, now))
-            {
-                var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
-                StartTimer(resumeAt, null);
-                return;
-            }
-
-            TaskItem? task = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
-            if (task == null || !IsTaskValid(task, settings, now))
-            {
-                var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
-                task = _scheduler.PickNextTask(tasks, settings, now);
-                if (task == null)
-                {
-                    ClearPendingShuffle();
-                    var retryAt = EnsureAllowed(now.AddMinutes(30), settings);
-                    StartTimer(retryAt, null);
-                    return;
-                }
-            }
-
-            ClearPendingShuffle();
-
-            PersistActiveTask(task, settings);
-
-            if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
-            {
-                await MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings)).ConfigureAwait(false);
-            }
-
-            await _notifications.NotifyTaskAsync(task, Math.Max(1, settings.ReminderMinutes), settings).ConfigureAwait(false);
-            IncrementDailyCount(now);
-            executed = true;
+            executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
         }
         finally
         {
@@ -402,6 +348,97 @@ public class ShuffleCoordinatorService : IDisposable
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
         }
+    }
+
+    private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_timerCts, cts))
+        {
+            _timerCts = null;
+        }
+
+        if (_isPaused)
+        {
+            return false;
+        }
+
+        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        if (!ShouldAutoShuffle(settings))
+        {
+            ClearPendingShuffle();
+            return false;
+        }
+
+        var now = DateTime.Now;
+        ResetDailyCountIfNeeded(now);
+
+        if (HandleQuietHoursOrLimit(settings, now, taskId))
+        {
+            return false;
+        }
+
+        TaskItem? task = await ResolveTaskAsync(taskId, settings, now).ConfigureAwait(false);
+        if (task == null)
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+        PersistActiveTask(task, settings);
+        await NotifyAsync(task, settings).ConfigureAwait(false);
+        IncrementDailyCount(now);
+        return true;
+    }
+
+    private bool HandleQuietHoursOrLimit(AppSettings settings, DateTime now, string taskId)
+    {
+        if (IsWithinQuietHours(now, settings))
+        {
+            var resumeAt = EnsureAllowed(now, settings);
+            StartTimer(resumeAt, taskId);
+            return true;
+        }
+
+        if (HasReachedDailyLimit(settings, now))
+        {
+            var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+            StartTimer(resumeAt, null);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TaskItem?> ResolveTaskAsync(string taskId, AppSettings settings, DateTime now)
+    {
+        TaskItem? task = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (task != null && IsTaskValid(task, settings, now))
+        {
+            return task;
+        }
+
+        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        TaskItem? candidate = _scheduler.PickNextTask(tasks, settings, now);
+        if (candidate != null)
+        {
+            return candidate;
+        }
+
+        ClearPendingShuffle();
+        var retryAt = EnsureAllowed(now.AddMinutes(30), settings);
+        StartTimer(retryAt, null);
+        return null;
+    }
+
+    private async Task NotifyAsync(TaskItem task, AppSettings settings)
+    {
+        if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
+        {
+            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings));
+            await applyTask.ConfigureAwait(false);
+        }
+
+        await _notifications.NotifyTaskAsync(task, Math.Max(1, settings.ReminderMinutes), settings).ConfigureAwait(false);
     }
 
     private static bool ShouldAutoShuffle(AppSettings settings)
