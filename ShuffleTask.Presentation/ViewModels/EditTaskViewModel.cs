@@ -279,7 +279,7 @@ public partial class EditTaskViewModel : ObservableObject
         {
             DateTimeKind.Utc => value,
             DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime()
         };
     }
 
