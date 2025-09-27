@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -9,11 +10,13 @@ namespace ShuffleTask.ViewModels;
 public partial class TasksViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
+    private readonly TimeProvider _clock;
 
-    public TasksViewModel(IStorageService storage)
+    public TasksViewModel(IStorageService storage, TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -34,7 +37,7 @@ public partial class TasksViewModel : ObservableObject
             await _storage.InitializeAsync();
             List<TaskItem> items = await _storage.GetTasksAsync();
             AppSettings settings = await _storage.GetSettingsAsync();
-            DateTime now = DateTime.Now;
+            DateTime now = _clock.GetUtcNow().UtcDateTime.ToLocalTime();
 
             Tasks.Clear();
             foreach (TaskListItem? entry in items

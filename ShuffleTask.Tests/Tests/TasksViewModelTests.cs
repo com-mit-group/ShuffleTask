@@ -1,10 +1,10 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using ShuffleTask.Models;
-using ShuffleTask.Services;
-using ShuffleTask.ViewModels;
-using System.Threading.Tasks;
-using System.Linq;
 using ShuffleTask.Tests.TestDoubles;
+using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Tests;
 
@@ -13,39 +13,42 @@ public class TasksViewModelTests
 {
     private StorageServiceStub _storage = null!;
     private TasksViewModel _viewModel = null!;
+    private TimeProvider _clock = null!;
 
     [SetUp]
     public async Task SetUp()
     {
-        _storage = new StorageServiceStub();
+        _clock = TimeProvider.System;
+        _storage = new StorageServiceStub(_clock);
         await _storage.InitializeAsync();
-        _viewModel = new TasksViewModel(_storage);
+        _viewModel = new TasksViewModel(_storage, _clock);
     }
 
-    private static TaskItem CreateTask(string id, DateTime createdAt, bool paused = false)
+    private TaskItem CreateTask(string id, TimeSpan createdOffset, bool paused = false)
     {
+        DateTime baseUtc = _clock.GetUtcNow().UtcDateTime;
         return new TaskItem
         {
             Id = id,
             Title = $"Task {id}",
             Description = $"Description {id}",
             Importance = 3,
-            Deadline = DateTime.UtcNow.AddDays(1),
+            Deadline = baseUtc.AddDays(1),
             Repeat = RepeatType.Daily,
             Weekdays = Weekdays.Mon | Weekdays.Wed,
             IntervalDays = 2,
-            LastDoneAt = DateTime.UtcNow.AddHours(-6),
+            LastDoneAt = baseUtc.AddHours(-6),
             AllowedPeriod = AllowedPeriod.Work,
             Paused = paused,
-            CreatedAt = createdAt
+            CreatedAt = baseUtc.Add(createdOffset)
         };
     }
 
     [Test]
     public async Task LoadAsync_PopulatesTasksSortedByPriority()
     {
-        var older = CreateTask("older", DateTime.UtcNow.AddDays(-2));
-        var newer = CreateTask("newer", DateTime.UtcNow.AddDays(-1));
+        var older = CreateTask("older", TimeSpan.FromDays(-2));
+        var newer = CreateTask("newer", TimeSpan.FromDays(-1));
 
         await _storage.AddTaskAsync(older);
         await _storage.AddTaskAsync(newer);
@@ -80,7 +83,7 @@ public class TasksViewModelTests
     [Test]
     public async Task TogglePauseAsync_TogglesPausedStateAndRefreshesTasks()
     {
-        var task = CreateTask("toggle", DateTime.UtcNow, paused: false);
+        var task = CreateTask("toggle", TimeSpan.Zero, paused: false);
         await _storage.AddTaskAsync(task);
 
         await _viewModel.LoadAsync();
@@ -104,8 +107,8 @@ public class TasksViewModelTests
     [Test]
     public async Task DeleteAsync_RemovesTaskAndRefreshesList()
     {
-        var keep = CreateTask("keep", DateTime.UtcNow.AddHours(-1));
-        var remove = CreateTask("remove", DateTime.UtcNow);
+        var keep = CreateTask("keep", TimeSpan.FromHours(-1));
+        var remove = CreateTask("remove", TimeSpan.Zero);
 
         await _storage.AddTaskAsync(keep);
         await _storage.AddTaskAsync(remove);
@@ -128,7 +131,7 @@ public class TasksViewModelTests
     [Test]
     public void Clone_CreatesIndependentCopy()
     {
-        var source = CreateTask("clone", DateTime.UtcNow, paused: true);
+        var source = CreateTask("clone", TimeSpan.Zero, paused: true);
 
         var clone = TaskItem.Clone(source);
 

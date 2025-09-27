@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Maui.ApplicationModel;
@@ -12,6 +13,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly TimeProvider _clock;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -21,11 +23,12 @@ public class ShuffleCoordinatorService : IDisposable
     private bool _isPaused;
     private bool _disposed;
 
-    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
+    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, TimeProvider clock)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public void Dispose()
@@ -163,7 +166,7 @@ public class ShuffleCoordinatorService : IDisposable
             return;
         }
 
-        var now = DateTime.Now;
+        var now = GetLocalNow();
         ResetDailyCountIfNeeded(now);
 
         if (TryScheduleAfterDailyLimit(settings, now))
@@ -270,7 +273,7 @@ public class ShuffleCoordinatorService : IDisposable
         var cts = new CancellationTokenSource();
         _timerCts = cts;
 
-        var delay = scheduledAt - DateTime.Now;
+        var delay = scheduledAt - GetLocalNow();
         if (delay < TimeSpan.Zero)
         {
             delay = TimeSpan.Zero;
@@ -369,7 +372,7 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        var now = DateTime.Now;
+        var now = GetLocalNow();
         ResetDailyCountIfNeeded(now);
 
         if (HandleQuietHoursOrLimit(settings, now, taskId))
@@ -654,4 +657,7 @@ public class ShuffleCoordinatorService : IDisposable
             }
         }
     }
+
+    private DateTime GetLocalNow()
+        => _clock.GetUtcNow().UtcDateTime.ToLocalTime();
 }

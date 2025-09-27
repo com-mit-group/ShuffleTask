@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
 
@@ -6,6 +9,7 @@ namespace ShuffleTask.Tests.TestDoubles;
 public class StorageServiceStub : IStorageService
 {
     private readonly Dictionary<string, TaskItem> _tasks = new();
+    private readonly TimeProvider _clock;
     private bool _initialized;
     private AppSettings _settings = new();
 
@@ -18,6 +22,11 @@ public class StorageServiceStub : IStorageService
     public int ResumeCallCount { get; private set; }
     public int GetSettingsCallCount { get; private set; }
     public int SetSettingsCallCount { get; private set; }
+
+    public StorageServiceStub(TimeProvider? clock = null)
+    {
+        _clock = clock ?? TimeProvider.System;
+    }
 
     public Task InitializeAsync()
     {
@@ -78,7 +87,7 @@ public class StorageServiceStub : IStorageService
             return Task.FromResult<TaskItem?>(null);
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         DateTime doneAt = EnsureUtc(nowUtc);
 
         existing.LastDoneAt = doneAt;
@@ -106,7 +115,7 @@ public class StorageServiceStub : IStorageService
             return Task.FromResult<TaskItem?>(null);
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         DateTime until = EnsureUtc(nowUtc.Add(duration));
 
         existing.Status = TaskLifecycleStatus.Snoozed;
@@ -150,7 +159,7 @@ public class StorageServiceStub : IStorageService
 
     private void AutoResumeDueTasks()
     {
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
         foreach (var task in _tasks.Values)
         {

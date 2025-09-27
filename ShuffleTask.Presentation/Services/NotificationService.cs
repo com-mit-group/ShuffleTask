@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Models;
@@ -10,9 +11,11 @@ namespace ShuffleTask.Services;
 public partial class NotificationService : INotificationService
 {
     private readonly INotificationPlatform _platform;
+    private readonly TimeProvider _clock;
 
-    public NotificationService()
+    public NotificationService(TimeProvider clock)
     {
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         INotificationPlatform platform = new DefaultNotificationPlatform();
         InitializePlatform(ref platform);
         _platform = platform;

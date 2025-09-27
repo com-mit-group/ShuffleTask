@@ -29,7 +29,7 @@ public class TaskItem
 
     public bool Paused { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
 

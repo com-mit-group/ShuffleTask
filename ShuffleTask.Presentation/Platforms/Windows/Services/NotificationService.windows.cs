@@ -13,7 +13,7 @@ public partial class NotificationService
         try
         {
             var notifier = ToastNotificationManager.CreateToastNotifier();
-            platform = new WindowsNotificationPlatform(notifier);
+            platform = new WindowsNotificationPlatform(notifier, _clock);
         }
         catch
         {
@@ -21,14 +21,16 @@ public partial class NotificationService
         }
     }
 
-    private sealed class WindowsNotificationPlatform : INotificationPlatform
-    {
-        private static readonly TimeSpan MinimumScheduleDelay = TimeSpan.FromSeconds(1);
-        private readonly ToastNotifier _notifier;
+        private sealed class WindowsNotificationPlatform : INotificationPlatform
+        {
+            private static readonly TimeSpan MinimumScheduleDelay = TimeSpan.FromSeconds(1);
+            private readonly ToastNotifier _notifier;
+            private readonly TimeProvider _clock;
 
-        public WindowsNotificationPlatform(ToastNotifier notifier)
+        public WindowsNotificationPlatform(ToastNotifier notifier, TimeProvider clock)
         {
             _notifier = notifier;
+            _clock = clock;
         }
 
         public Task InitializeAsync() => Task.CompletedTask;
@@ -82,7 +84,9 @@ public partial class NotificationService
                 }
 
                 var xml = CreateToastXml(title, message, playSound);
-                var deliveryTime = DateTimeOffset.Now + (delay < MinimumScheduleDelay ? MinimumScheduleDelay : delay);
+                DateTimeOffset baseTime = _clock.GetLocalNow();
+                var effectiveDelay = delay < MinimumScheduleDelay ? MinimumScheduleDelay : delay;
+                var deliveryTime = baseTime + effectiveDelay;
                 var scheduled = new ScheduledToastNotification(xml, deliveryTime);
                 _notifier.AddToSchedule(scheduled);
                 return true;

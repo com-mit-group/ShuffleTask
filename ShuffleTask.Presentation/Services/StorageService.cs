@@ -1,7 +1,8 @@
+using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Models;
-using System.Collections.Generic;
 
 namespace ShuffleTask.Services;
 
@@ -11,11 +12,13 @@ public class StorageService : IStorageService
     private const string SettingsKey = "app_settings";
     private const string IntegerSqlType = "INTEGER";
 
+    private readonly TimeProvider _clock;
     private readonly string _dbPath;
     private SQLiteAsyncConnection? _db;
 
-    public StorageService()
+    public StorageService(TimeProvider clock)
     {
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _dbPath = Path.Combine(FileSystem.AppDataDirectory, DatabaseFileName);
     }
 
@@ -101,7 +104,7 @@ public class StorageService : IStorageService
         }
         if (item.CreatedAt == default)
         {
-            item.CreatedAt = DateTime.UtcNow;
+            item.CreatedAt = _clock.GetUtcNow().UtcDateTime;
         }
         if (item.Status != TaskLifecycleStatus.Active &&
             item.Status != TaskLifecycleStatus.Snoozed &&
@@ -130,7 +133,7 @@ public class StorageService : IStorageService
     public async Task<TaskItem?> MarkTaskDoneAsync(string id)
     {
         TaskItem? updated = null;
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -162,7 +165,7 @@ public class StorageService : IStorageService
         }
 
         TaskItem? updated = null;
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -216,7 +219,7 @@ public class StorageService : IStorageService
             return;
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         List<TaskItem> toUpdate = new();
 
         foreach (var task in pending)
