@@ -1,3 +1,4 @@
+using System;
 using ShuffleTask.Models;
 
 namespace ShuffleTask.Services;
@@ -6,9 +7,10 @@ public static class TimeWindowService
 {
     // Returns true if nowLocal falls inside the [start, end) window in local time.
     // Handles overnight windows (e.g., start 22:00, end 06:00 -> spans midnight).
-    public static bool IsWithinWorkHours(DateTime nowLocal, TimeSpan start, TimeSpan end)
+    public static bool IsWithinWorkHours(DateTimeOffset now, TimeSpan start, TimeSpan end)
     {
-        TimeSpan t = nowLocal.TimeOfDay;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        TimeSpan t = local.TimeOfDay;
 
         // If start == end, treat as full-day window
         if (start == end)
@@ -27,39 +29,40 @@ public static class TimeWindowService
         }
     }
 
-    public static bool AllowedNow(AllowedPeriod ap, DateTime nowLocal, AppSettings s)
+    public static bool AllowedNow(AllowedPeriod ap, DateTimeOffset now, AppSettings s)
         => ap switch
         {
             AllowedPeriod.Any => true,
-            AllowedPeriod.Work => IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
-            AllowedPeriod.OffWork => !IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
-            AllowedPeriod.Off => !IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.Work => IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.OffWork => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.Off => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             _ => true,
         };
 
     // Compute minutes until the next work window boundary (open or close)
-    public static TimeSpan UntilNextBoundary(DateTime nowLocal, AppSettings s)
+    public static TimeSpan UntilNextBoundary(DateTimeOffset now, AppSettings s)
     {
         if (s.WorkStart == s.WorkEnd)
         {
             return TimeSpan.Zero;
         }
 
-        bool within = IsWithinWorkHours(nowLocal, s.WorkStart, s.WorkEnd);
+        bool within = IsWithinWorkHours(now, s.WorkStart, s.WorkEnd);
         TimeSpan nextBoundaryTime = within ? s.WorkEnd : s.WorkStart;
-        DateTime nextBoundary = GetNextOccurrence(nowLocal, nextBoundaryTime);
+        DateTimeOffset nextBoundary = GetNextOccurrence(now, nextBoundaryTime);
 
-        return nextBoundary - nowLocal;
+        return nextBoundary - now;
     }
 
-    private static DateTime GetNextOccurrence(DateTime nowLocal, TimeSpan boundary)
+    private static DateTimeOffset GetNextOccurrence(DateTimeOffset now, TimeSpan boundary)
     {
-        DateTime candidate = nowLocal.Date + boundary;
-        if (candidate <= nowLocal)
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        DateTimeOffset candidate = new DateTimeOffset(local.Date + boundary, local.Offset);
+        if (candidate <= local)
         {
             candidate = candidate.AddDays(1);
         }
 
-        return candidate;
+        return candidate.ToOffset(TimeSpan.Zero);
     }
 }

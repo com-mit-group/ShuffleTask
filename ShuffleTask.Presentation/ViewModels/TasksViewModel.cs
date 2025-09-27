@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -9,11 +10,13 @@ namespace ShuffleTask.ViewModels;
 public partial class TasksViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
+    private readonly TimeProvider _clock;
 
-    public TasksViewModel(IStorageService storage)
+    public TasksViewModel(IStorageService storage, TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -34,7 +37,7 @@ public partial class TasksViewModel : ObservableObject
             await _storage.InitializeAsync();
             List<TaskItem> items = await _storage.GetTasksAsync();
             AppSettings settings = await _storage.GetSettingsAsync();
-            DateTime now = DateTime.Now;
+            DateTimeOffset now = _clock.GetUtcNow();
 
             Tasks.Clear();
             foreach (TaskListItem? entry in items
@@ -129,7 +132,7 @@ public class TaskListItem
         Score = score;
     }
 
-    public static TaskListItem From(TaskItem task, AppSettings settings, DateTime nowLocal)
+    public static TaskListItem From(TaskItem task, AppSettings settings, DateTimeOffset now)
     {
         string repeat = task.Repeat switch
         {
@@ -141,7 +144,7 @@ public class TaskListItem
         };
 
         string schedule = task.Deadline.HasValue
-            ? $"Due {task.Deadline:MMM d, yyyy HH:mm}"
+            ? $"Due {FormatAbsolute(task.Deadline)}"
             : "No deadline";
 
         int importance = Math.Clamp(task.Importance, 1, 5);
@@ -157,8 +160,8 @@ public class TaskListItem
             _ => "Auto shuffle: Any time"
         };
 
-        TaskStatusPresentation status = BuildStatusPresentation(task);
-        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(task, nowLocal, settings);
+        TaskStatusPresentation status = BuildStatusPresentation(task, now);
+        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(task, now, settings);
 
         return new TaskListItem(
             task,
@@ -169,7 +172,7 @@ public class TaskListItem
             status, score);
     }
 
-    private static TaskStatusPresentation BuildStatusPresentation(TaskItem task)
+    private static TaskStatusPresentation BuildStatusPresentation(TaskItem task, DateTimeOffset reference)
     {
         if (task.Paused)
         {
@@ -179,23 +182,23 @@ public class TaskListItem
         return task.Status switch
         {
             TaskLifecycleStatus.Active => TaskStatusPresentation.Active,
-            TaskLifecycleStatus.Snoozed => BuildSnoozedPresentation(task),
-            TaskLifecycleStatus.Completed => BuildCompletedPresentation(task),
+            TaskLifecycleStatus.Snoozed => BuildSnoozedPresentation(task, reference),
+            TaskLifecycleStatus.Completed => BuildCompletedPresentation(task, reference),
             _ => TaskStatusPresentation.Active
         };
     }
 
-    private static TaskStatusPresentation BuildSnoozedPresentation(TaskItem task)
+    private static TaskStatusPresentation BuildSnoozedPresentation(TaskItem task, DateTimeOffset reference)
     {
-        string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt);
+        string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt, reference);
         string text = string.IsNullOrEmpty(until) ? "Snoozed" : $"Snoozed until {until}";
         return new TaskStatusPresentation(text, true, "#FEF3C7", "#975A16", true);
     }
 
-    private static TaskStatusPresentation BuildCompletedPresentation(TaskItem task)
+    private static TaskStatusPresentation BuildCompletedPresentation(TaskItem task, DateTimeOffset reference)
     {
         bool oneOff = task.Repeat == RepeatType.None;
-        string next = FormatRelative(task.NextEligibleAt);
+        string next = FormatRelative(task.NextEligibleAt, reference);
         string text = "Completed";
 
         if (!oneOff && !string.IsNullOrEmpty(next))
@@ -206,33 +209,67 @@ public class TaskListItem
         return new TaskStatusPresentation(text, true, "#C6F6D5", "#276749", true);
     }
 
-    private static string FormatRelative(DateTime? value)
+    private static string FormatRelative(DateTime? value, DateTimeOffset reference)
     {
         if (!value.HasValue)
         {
             return string.Empty;
         }
 
+        DateTimeOffset? target = EnsureUtc(value);
+        if (target == null)
+        {
+            return string.Empty;
+        }
+
+        DateTimeOffset referenceLocal = TimeZoneInfo.ConvertTime(reference, TimeZoneInfo.Local);
+        DateTimeOffset targetLocal = TimeZoneInfo.ConvertTime(target.Value, TimeZoneInfo.Local);
+
+        DateTime referenceDate = referenceLocal.Date;
+        if (targetLocal.Date == referenceDate)
+        {
+            return targetLocal.ToString("h:mm tt", CultureInfo.CurrentCulture);
+        }
+
+        if (targetLocal.Date == referenceDate.AddDays(1))
+        {
+            return $"tomorrow {targetLocal.ToString("h:mm tt", CultureInfo.CurrentCulture)}";
+        }
+
+        return targetLocal.ToString("MMM d h:mm tt", CultureInfo.CurrentCulture);
+    }
+
+    private static string FormatAbsolute(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return "--";
+        }
+
+        DateTimeOffset? target = EnsureUtc(value);
+        if (target == null)
+        {
+            return "--";
+        }
+
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(target.Value, TimeZoneInfo.Local);
+        return local.ToString("MMM d, yyyy HH:mm", CultureInfo.CurrentCulture);
+    }
+
+    private static DateTimeOffset? EnsureUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
         DateTime dt = value.Value;
-        DateTime local = dt.Kind switch
+        return dt.Kind switch
         {
-            DateTimeKind.Utc => dt.ToLocalTime(),
-            DateTimeKind.Local => dt,
-            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc).ToLocalTime()
+            DateTimeKind.Utc => new DateTimeOffset(dt, TimeSpan.Zero),
+            DateTimeKind.Local => new DateTimeOffset(dt.ToUniversalTime(), TimeSpan.Zero),
+            _ => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc), TimeSpan.Zero)
         };
-
-        DateTime today = DateTime.Today;
-        if (local.Date == today)
-        {
-            return local.ToString("h:mm tt", CultureInfo.CurrentCulture);
-        }
-
-        if (local.Date == today.AddDays(1))
-        {
-            return $"tomorrow {local.ToString("h:mm tt", CultureInfo.CurrentCulture)}";
-        }
-
-        return local.ToString("MMM d h:mm tt", CultureInfo.CurrentCulture);
     }
 
     private static string FormatWeekdays(Weekdays weekdays)

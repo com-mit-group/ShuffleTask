@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System;
+using Microsoft.Extensions.Logging;
 using ShuffleTask.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
@@ -27,6 +28,7 @@ public static class MauiProgram
         });
 
         // DI registrations
+        builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
         builder.Services.AddSingleton<IStorageService, StorageService>();
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
