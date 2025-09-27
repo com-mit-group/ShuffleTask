@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Maui.ApplicationModel;
@@ -12,6 +13,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly TimeProvider _clock;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -21,11 +23,12 @@ public class ShuffleCoordinatorService : IDisposable
     private bool _isPaused;
     private bool _disposed;
 
-    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications)
+    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, TimeProvider clock)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public void Dispose()
@@ -144,29 +147,7 @@ public class ShuffleCoordinatorService : IDisposable
                 return;
             }
 
-            CancelTimerInternal();
-
-            var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-            if (!ShouldAutoShuffle(settings))
-            {
-                ClearPendingShuffle();
-                return;
-            }
-
-            var now = DateTime.Now;
-            ResetDailyCountIfNeeded(now);
-
-            if (TryScheduleAfterDailyLimit(settings, now))
-            {
-                return;
-            }
-
-            if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
+            await ScheduleNextShuffleUnsafeAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -174,19 +155,46 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
-    private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTime now)
+    private async Task ScheduleNextShuffleUnsafeAsync()
+    {
+        CancelTimerInternal();
+
+        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        if (!ShouldAutoShuffle(settings))
+        {
+            ClearPendingShuffle();
+            return;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+        ResetDailyCountIfNeeded(now);
+
+        if (TryScheduleAfterDailyLimit(settings, now))
+        {
+            return;
+        }
+
+        if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
+    }
+
+    private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTimeOffset now)
     {
         if (!HasReachedDailyLimit(settings, now))
         {
             return false;
         }
 
-        var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+        DateTimeOffset resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
         StartTimer(resumeAt, null);
         return true;
     }
 
-    private async Task<bool> TryResumePendingShuffleAsync(AppSettings settings, DateTime now)
+    private async Task<bool> TryResumePendingShuffleAsync(AppSettings settings, DateTimeOffset now)
     {
         var pending = LoadPendingShuffle();
         if (!pending.NextAt.HasValue)
@@ -194,7 +202,7 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        var nextAt = pending.NextAt.Value;
+        DateTimeOffset nextAt = pending.NextAt.Value;
         if (nextAt <= now)
         {
             nextAt = now;
@@ -216,7 +224,7 @@ public class ShuffleCoordinatorService : IDisposable
         return false;
     }
 
-    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTime now)
+    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
     {
         var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
         if (tasks.Count == 0)
@@ -227,11 +235,11 @@ public class ShuffleCoordinatorService : IDisposable
             return;
         }
 
-        var target = ComputeNextTarget(now, settings);
+        DateTimeOffset target = ComputeNextTarget(now, settings);
         var candidate = _scheduler.PickNextTask(tasks, settings, target);
         if (candidate == null)
         {
-            var retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
+            DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
             StartTimer(retryAt, null);
             return;
         }
@@ -239,10 +247,10 @@ public class ShuffleCoordinatorService : IDisposable
         StartTimer(target, candidate.Id);
     }
 
-    private DateTime ComputeNextTarget(DateTime now, AppSettings settings)
+    private DateTimeOffset ComputeNextTarget(DateTimeOffset now, AppSettings settings)
     {
-        var gap = _scheduler.NextGap(settings, now);
-        var target = now + gap;
+        TimeSpan gap = _scheduler.NextGap(settings, now);
+        DateTimeOffset target = now + gap;
         if (target <= now)
         {
             target = now.AddMinutes(1);
@@ -257,7 +265,7 @@ public class ShuffleCoordinatorService : IDisposable
         return target;
     }
 
-    private void StartTimer(DateTime scheduledAt, string? taskId)
+    private void StartTimer(DateTimeOffset scheduledAt, string? taskId)
     {
         CancelTimerInternal();
         PersistPendingShuffle(taskId, scheduledAt);
@@ -265,7 +273,7 @@ public class ShuffleCoordinatorService : IDisposable
         var cts = new CancellationTokenSource();
         _timerCts = cts;
 
-        var delay = scheduledAt - DateTime.Now;
+        TimeSpan delay = scheduledAt - GetCurrentInstant();
         if (delay < TimeSpan.Zero)
         {
             delay = TimeSpan.Zero;
@@ -332,66 +340,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (ReferenceEquals(_timerCts, cts))
-            {
-                _timerCts = null;
-            }
-
-            if (_isPaused)
-            {
-                return;
-            }
-
-            var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-            if (!ShouldAutoShuffle(settings))
-            {
-                ClearPendingShuffle();
-                return;
-            }
-
-            var now = DateTime.Now;
-            ResetDailyCountIfNeeded(now);
-
-            if (IsWithinQuietHours(now, settings))
-            {
-                var resumeAt = EnsureAllowed(now, settings);
-                StartTimer(resumeAt, taskId);
-                return;
-            }
-
-            if (HasReachedDailyLimit(settings, now))
-            {
-                var resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
-                StartTimer(resumeAt, null);
-                return;
-            }
-
-            TaskItem? task = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
-            if (task == null || !IsTaskValid(task, settings, now))
-            {
-                var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
-                task = _scheduler.PickNextTask(tasks, settings, now);
-                if (task == null)
-                {
-                    ClearPendingShuffle();
-                    var retryAt = EnsureAllowed(now.AddMinutes(30), settings);
-                    StartTimer(retryAt, null);
-                    return;
-                }
-            }
-
-            ClearPendingShuffle();
-
-            PersistActiveTask(task, settings);
-
-            if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
-            {
-                await MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings)).ConfigureAwait(false);
-            }
-
-            await _notifications.NotifyTaskAsync(task, Math.Max(1, settings.ReminderMinutes), settings).ConfigureAwait(false);
-            IncrementDailyCount(now);
-            executed = true;
+            executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
         }
         finally
         {
@@ -402,6 +351,97 @@ public class ShuffleCoordinatorService : IDisposable
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
         }
+    }
+
+    private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_timerCts, cts))
+        {
+            _timerCts = null;
+        }
+
+        if (_isPaused)
+        {
+            return false;
+        }
+
+        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        if (!ShouldAutoShuffle(settings))
+        {
+            ClearPendingShuffle();
+            return false;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+        ResetDailyCountIfNeeded(now);
+
+        if (HandleQuietHoursOrLimit(settings, now, taskId))
+        {
+            return false;
+        }
+
+        TaskItem? task = await ResolveTaskAsync(taskId, settings, now).ConfigureAwait(false);
+        if (task == null)
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+        PersistActiveTask(task, settings);
+        await NotifyAsync(task, settings).ConfigureAwait(false);
+        IncrementDailyCount(now);
+        return true;
+    }
+
+    private bool HandleQuietHoursOrLimit(AppSettings settings, DateTimeOffset now, string taskId)
+    {
+        if (IsWithinQuietHours(now, settings))
+        {
+            DateTimeOffset resumeAt = EnsureAllowed(now, settings);
+            StartTimer(resumeAt, taskId);
+            return true;
+        }
+
+        if (HasReachedDailyLimit(settings, now))
+        {
+            DateTimeOffset resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+            StartTimer(resumeAt, null);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TaskItem?> ResolveTaskAsync(string taskId, AppSettings settings, DateTimeOffset now)
+    {
+        TaskItem? task = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (task != null && IsTaskValid(task, settings, now))
+        {
+            return task;
+        }
+
+        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        TaskItem? candidate = _scheduler.PickNextTask(tasks, settings, now);
+        if (candidate != null)
+        {
+            return candidate;
+        }
+
+        ClearPendingShuffle();
+        DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(30), settings);
+        StartTimer(retryAt, null);
+        return null;
+    }
+
+    private async Task NotifyAsync(TaskItem task, AppSettings settings)
+    {
+        if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
+        {
+            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings));
+            await applyTask.ConfigureAwait(false);
+        }
+
+        await _notifications.NotifyTaskAsync(task, Math.Max(1, settings.ReminderMinutes), settings).ConfigureAwait(false);
     }
 
     private static bool ShouldAutoShuffle(AppSettings settings)
@@ -429,7 +469,7 @@ public class ShuffleCoordinatorService : IDisposable
         return true;
     }
 
-    private static bool HasReachedDailyLimit(AppSettings settings, DateTime now)
+    private static bool HasReachedDailyLimit(AppSettings settings, DateTimeOffset now)
     {
         int max = settings.MaxDailyShuffles;
         if (max <= 0)
@@ -438,21 +478,30 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         var (date, count) = LoadDailyCount();
-        return date == now.Date && count >= max;
-    }
-
-    private static DateTime GetNextDayStart(DateTime now, AppSettings settings)
-    {
-        DateTime nextDay = now.Date.AddDays(1);
-        if (settings.QuietHoursStart != settings.QuietHoursEnd)
+        if (!date.HasValue)
         {
-            return nextDay + settings.QuietHoursEnd;
+            return false;
         }
 
-        return nextDay + settings.WorkStart;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        return date.Value.Date == local.Date && count >= max;
     }
 
-    private static bool IsWithinQuietHours(DateTime time, AppSettings settings)
+    private static DateTimeOffset GetNextDayStart(DateTimeOffset now, AppSettings settings)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        DateTime nextDay = local.Date.AddDays(1);
+        if (settings.QuietHoursStart != settings.QuietHoursEnd)
+        {
+            DateTime localCandidate = nextDay + settings.QuietHoursEnd;
+            return new DateTimeOffset(localCandidate, local.Offset).ToOffset(TimeSpan.Zero);
+        }
+
+        DateTime defaultCandidate = nextDay + settings.WorkStart;
+        return new DateTimeOffset(defaultCandidate, local.Offset).ToOffset(TimeSpan.Zero);
+    }
+
+    private static bool IsWithinQuietHours(DateTimeOffset time, AppSettings settings)
     {
         var start = settings.QuietHoursStart;
         var end = settings.QuietHoursEnd;
@@ -462,7 +511,8 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        TimeSpan t = time.TimeOfDay;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(time, TimeZoneInfo.Local);
+        TimeSpan t = local.TimeOfDay;
         if (start < end)
         {
             return t >= start && t < end;
@@ -471,7 +521,7 @@ public class ShuffleCoordinatorService : IDisposable
         return t >= start || t < end;
     }
 
-    private static DateTime EnsureAllowed(DateTime candidate, AppSettings settings)
+    private static DateTimeOffset EnsureAllowed(DateTimeOffset candidate, AppSettings settings)
     {
         if (!IsWithinQuietHours(candidate, settings))
         {
@@ -481,39 +531,44 @@ public class ShuffleCoordinatorService : IDisposable
         return GetQuietHoursEnd(candidate, settings);
     }
 
-    private static DateTime GetQuietHoursEnd(DateTime current, AppSettings settings)
+    private static DateTimeOffset GetQuietHoursEnd(DateTimeOffset current, AppSettings settings)
     {
         var start = settings.QuietHoursStart;
         var end = settings.QuietHoursEnd;
-        DateTime baseDate = current.Date;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(current, TimeZoneInfo.Local);
+        DateTime baseDate = local.Date;
 
         if (start < end)
         {
             DateTime quietEnd = baseDate + end;
-            if (current.TimeOfDay < end)
+            if (local.TimeOfDay < end)
             {
-                return quietEnd;
+                return new DateTimeOffset(quietEnd, local.Offset).ToOffset(TimeSpan.Zero);
             }
 
-            return quietEnd.AddDays(1);
+            DateTime next = quietEnd.AddDays(1);
+            return new DateTimeOffset(next, local.Offset).ToOffset(TimeSpan.Zero);
         }
         else
         {
-            if (current.TimeOfDay >= start)
+            if (local.TimeOfDay >= start)
             {
-                return baseDate.AddDays(1) + end;
+                DateTime next = baseDate.AddDays(1) + end;
+                return new DateTimeOffset(next, local.Offset).ToOffset(TimeSpan.Zero);
             }
 
-            if (current.TimeOfDay < end)
+            if (local.TimeOfDay < end)
             {
-                return baseDate + end;
+                DateTime sameDay = baseDate + end;
+                return new DateTimeOffset(sameDay, local.Offset).ToOffset(TimeSpan.Zero);
             }
 
-            return baseDate + start;
+            DateTime fallback = baseDate + start;
+            return new DateTimeOffset(fallback, local.Offset).ToOffset(TimeSpan.Zero);
         }
     }
 
-    private static bool IsTaskValid(TaskItem task, AppSettings settings, DateTime when)
+    private static bool IsTaskValid(TaskItem task, AppSettings settings, DateTimeOffset when)
     {
         if (task.Paused)
         {
@@ -523,7 +578,7 @@ public class ShuffleCoordinatorService : IDisposable
         return TimeWindowService.AllowedNow(task.AllowedPeriod, when, settings);
     }
 
-    private static void PersistPendingShuffle(string? taskId, DateTime scheduledAt)
+    private static void PersistPendingShuffle(string? taskId, DateTimeOffset scheduledAt)
     {
         Preferences.Default.Set(PreferenceKeys.NextShuffleAt, scheduledAt.ToString("O", CultureInfo.InvariantCulture));
         if (string.IsNullOrEmpty(taskId))
@@ -543,12 +598,12 @@ public class ShuffleCoordinatorService : IDisposable
         Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
     }
 
-    private static (DateTime? NextAt, string TaskId) LoadPendingShuffle()
+    private static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle()
     {
         string iso = Preferences.Default.Get(PreferenceKeys.NextShuffleAt, string.Empty);
         string taskId = Preferences.Default.Get(PreferenceKeys.PendingShuffleTaskId, string.Empty);
 
-        if (!string.IsNullOrWhiteSpace(iso) && DateTime.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var nextAt))
+        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var nextAt))
         {
             return (nextAt, taskId);
         }
@@ -556,39 +611,49 @@ public class ShuffleCoordinatorService : IDisposable
         return (null, taskId);
     }
 
-    private static (DateTime Date, int Count) LoadDailyCount()
+    private static (DateTimeOffset? Date, int Count) LoadDailyCount()
     {
         string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
         int count = Preferences.Default.Get(PreferenceKeys.ShuffleCount, 0);
 
-        if (!string.IsNullOrWhiteSpace(iso) && DateTime.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
+        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
         {
-            return (date.Date, count);
+            return (date, count);
         }
 
-        return (DateTime.MinValue, 0);
+        return (null, 0);
     }
 
-    private static void ResetDailyCountIfNeeded(DateTime now)
+    private static void ResetDailyCountIfNeeded(DateTimeOffset now)
     {
         string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
-        if (string.IsNullOrWhiteSpace(iso) || !DateTime.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date) || date.Date != now.Date)
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        bool needsReset = true;
+        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
         {
-            Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, now.Date.ToString("O", CultureInfo.InvariantCulture));
+            DateTimeOffset existingLocal = TimeZoneInfo.ConvertTime(date, TimeZoneInfo.Local);
+            needsReset = existingLocal.Date != local.Date;
+        }
+
+        if (needsReset)
+        {
+            var storedLocal = new DateTimeOffset(local.Date, local.Offset);
+            Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, storedLocal.ToString("O", CultureInfo.InvariantCulture));
             Preferences.Default.Set(PreferenceKeys.ShuffleCount, 0);
         }
     }
 
-    private static void IncrementDailyCount(DateTime now)
+    private static void IncrementDailyCount(DateTimeOffset now)
     {
         var (date, count) = LoadDailyCount();
-        if (date != now.Date)
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        if (!date.HasValue || TimeZoneInfo.ConvertTime(date.Value, TimeZoneInfo.Local).Date != local.Date)
         {
-            date = now.Date;
+            date = new DateTimeOffset(local.Date, local.Offset);
             count = 0;
         }
 
-        Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, date.ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, date.Value.ToString("O", CultureInfo.InvariantCulture));
         Preferences.Default.Set(PreferenceKeys.ShuffleCount, count + 1);
     }
 
@@ -617,4 +682,7 @@ public class ShuffleCoordinatorService : IDisposable
             }
         }
     }
+
+    private DateTimeOffset GetCurrentInstant()
+        => _clock.GetUtcNow();
 }

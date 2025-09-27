@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Models;
@@ -10,10 +11,12 @@ namespace ShuffleTask.Services;
 public partial class NotificationService : INotificationService
 {
     private readonly INotificationPlatform _platform;
+    private readonly TimeProvider _clock;
 
-    public NotificationService()
+    public NotificationService(TimeProvider clock)
     {
-        INotificationPlatform platform = new DefaultNotificationPlatform();
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        INotificationPlatform platform = new DefaultNotificationPlatform(_clock);
         InitializePlatform(ref platform);
         _platform = platform;
     }
@@ -97,6 +100,13 @@ public partial class NotificationService : INotificationService
 
     private sealed class DefaultNotificationPlatform : INotificationPlatform
     {
+        private readonly TimeProvider _clock;
+
+        public DefaultNotificationPlatform(TimeProvider clock)
+        {
+            _clock = clock;
+        }
+
         public Task InitializeAsync() => Task.CompletedTask;
 
         public async Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
@@ -105,7 +115,12 @@ public partial class NotificationService : INotificationService
             {
                 try
                 {
-                    await Task.Delay(delay);
+                    DateTimeOffset scheduledTime = _clock.GetUtcNow() + delay;
+                    TimeSpan remaining = scheduledTime - _clock.GetUtcNow();
+                    if (remaining > TimeSpan.Zero)
+                    {
+                        await Task.Delay(remaining);
+                    }
                 }
                 catch (TaskCanceledException)
                 {

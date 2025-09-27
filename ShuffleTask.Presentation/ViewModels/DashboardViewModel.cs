@@ -15,6 +15,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
     private readonly ShuffleCoordinatorService _coordinator;
+    private readonly TimeProvider _clock;
 
     private TaskItem? _activeTask;
     private AppSettings? _settings;
@@ -26,12 +27,13 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
         _coordinator = coordinator;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
 
         Title = DefaultTitle;
         Description = DefaultDescription;
@@ -163,7 +165,7 @@ public partial class DashboardViewModel : ObservableObject
             }
 
             var tasks = await _storage.GetTasksAsync();
-            var now = DateTime.Now;
+            DateTimeOffset now = _clock.GetUtcNow();
             string? previousId = _activeTask?.Id;
 
             var next = PickNextCandidate(tasks, settings, now, previousId);
@@ -593,7 +595,7 @@ public partial class DashboardViewModel : ObservableObject
             : TimeSpan.FromMinutes(BreakMinutes);
     }
 
-    private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTime now, string? previousId)
+    private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTimeOffset now, string? previousId)
     {
         var chosen = _scheduler.PickNextTask(tasks, settings, now);
         if (chosen == null || string.IsNullOrEmpty(previousId) || !string.Equals(chosen.Id, previousId, StringComparison.Ordinal))

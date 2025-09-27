@@ -7,7 +7,7 @@ namespace ShuffleTask.Tests;
 [TestFixture]
 public class ImportanceUrgencyCalculatorTests
 {
-    private static readonly DateTime DefaultNow = new(2024, 1, 1, 9, 0, 0, DateTimeKind.Local);
+    private static readonly DateTimeOffset DefaultNow = new(2024, 1, 1, 9, 0, 0, TimeSpan.Zero);
 
     [Test]
     public void Calculate_DeadlineOutranksWeeklyRepeat()
@@ -18,7 +18,7 @@ public class ImportanceUrgencyCalculatorTests
         {
             Title = "Project report",
             Importance = 5,
-            Deadline = DefaultNow.AddHours(24),
+            Deadline = DefaultNow.AddHours(24).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };
@@ -29,7 +29,7 @@ public class ImportanceUrgencyCalculatorTests
             Importance = 3,
             Repeat = RepeatType.Weekly,
             Weekdays = Weekdays.Mon,
-            LastDoneAt = DefaultNow.AddDays(-7),
+            LastDoneAt = DefaultNow.AddDays(-7).UtcDateTime,
             AllowedPeriod = AllowedPeriod.Any
         };
 
@@ -52,7 +52,7 @@ public class ImportanceUrgencyCalculatorTests
             Title = "Daily stand-up",
             Importance = 4,
             Repeat = RepeatType.Daily,
-            LastDoneAt = DefaultNow.AddHours(-3),
+            LastDoneAt = DefaultNow.AddHours(-3).UtcDateTime,
             AllowedPeriod = AllowedPeriod.Any
         };
 
@@ -60,7 +60,7 @@ public class ImportanceUrgencyCalculatorTests
         {
             Title = "Submit taxes",
             Importance = 3,
-            Deadline = DefaultNow.AddHours(6),
+            Deadline = DefaultNow.AddHours(6).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };
@@ -116,7 +116,7 @@ public class ImportanceUrgencyCalculatorTests
             Title = "Quick copy edit",
             Importance = 3,
             SizePoints = 1,
-            Deadline = DefaultNow.AddHours(80),
+            Deadline = DefaultNow.AddHours(80).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };
@@ -126,7 +126,7 @@ public class ImportanceUrgencyCalculatorTests
             Title = "Implementation rollout",
             Importance = 3,
             SizePoints = 8,
-            Deadline = DefaultNow.AddHours(80),
+            Deadline = DefaultNow.AddHours(80).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };
@@ -193,7 +193,7 @@ public class ImportanceUrgencyCalculatorTests
             Title = "Production fix",
             Importance = 1,
             SizePoints = 3,
-            Deadline = DefaultNow.AddHours(1),
+            Deadline = DefaultNow.AddHours(1).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };
@@ -223,7 +223,7 @@ public class ImportanceUrgencyCalculatorTests
             Title = "Daily backup",
             Importance = 2,
             Repeat = RepeatType.Daily,
-            LastDoneAt = DefaultNow.AddDays(-1),
+            LastDoneAt = DefaultNow.AddDays(-1).UtcDateTime,
             AllowedPeriod = AllowedPeriod.Any
         };
 
@@ -231,7 +231,7 @@ public class ImportanceUrgencyCalculatorTests
         {
             Title = "Status deck",
             Importance = 2,
-            Deadline = DefaultNow.AddHours(2),
+            Deadline = DefaultNow.AddHours(2).UtcDateTime,
             Repeat = RepeatType.None,
             AllowedPeriod = AllowedPeriod.Any
         };

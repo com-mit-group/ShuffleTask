@@ -12,6 +12,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
     private readonly ShuffleCoordinatorService _coordinator;
+    private readonly TimeProvider _clock;
 
     [ObservableProperty]
     private AppSettings settings = new();
@@ -19,12 +20,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator)
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
         _coordinator = coordinator;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public bool UsePomodoro
@@ -97,7 +99,8 @@ public partial class SettingsViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             var items = await _storage.GetTasksAsync();
-            var next = _scheduler.PickNextTask(items, Settings, DateTime.Now);
+            DateTimeOffset now = _clock.GetUtcNow();
+            var next = _scheduler.PickNextTask(items, Settings, now);
             if (next != null && Settings.EnableNotifications)
             {
                 await _notifications.NotifyTaskAsync(next, Settings.ReminderMinutes, Settings);

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using ShuffleTask.Models;
 using ShuffleTask.Services;
 
@@ -6,6 +9,7 @@ namespace ShuffleTask.Tests.TestDoubles;
 public class StorageServiceStub : IStorageService
 {
     private readonly Dictionary<string, TaskItem> _tasks = new();
+    private readonly TimeProvider _clock;
     private bool _initialized;
     private AppSettings _settings = new();
 
@@ -18,6 +22,11 @@ public class StorageServiceStub : IStorageService
     public int ResumeCallCount { get; private set; }
     public int GetSettingsCallCount { get; private set; }
     public int SetSettingsCallCount { get; private set; }
+
+    public StorageServiceStub(TimeProvider? clock = null)
+    {
+        _clock = clock ?? TimeProvider.System;
+    }
 
     public Task InitializeAsync()
     {
@@ -78,7 +87,7 @@ public class StorageServiceStub : IStorageService
             return Task.FromResult<TaskItem?>(null);
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         DateTime doneAt = EnsureUtc(nowUtc);
 
         existing.LastDoneAt = doneAt;
@@ -106,7 +115,7 @@ public class StorageServiceStub : IStorageService
             return Task.FromResult<TaskItem?>(null);
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         DateTime until = EnsureUtc(nowUtc.Add(duration));
 
         existing.Status = TaskLifecycleStatus.Snoozed;
@@ -150,7 +159,7 @@ public class StorageServiceStub : IStorageService
 
     private void AutoResumeDueTasks()
     {
-        DateTime nowUtc = DateTime.UtcNow;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
         foreach (var task in _tasks.Values)
         {
@@ -182,19 +191,20 @@ public class StorageServiceStub : IStorageService
 
     private static DateTime? ComputeNextEligibleUtc(TaskItem task, DateTime nowUtc)
     {
+        var nowLocal = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local);
         return task.Repeat switch
         {
             RepeatType.None => null,
-            RepeatType.Daily => EnsureUtc(nowUtc.ToLocalTime().AddDays(1)),
+            RepeatType.Daily => EnsureUtc(nowLocal.AddDays(1).UtcDateTime),
             RepeatType.Weekly => ComputeWeeklyNext(task.Weekdays, nowUtc),
-            RepeatType.Interval => EnsureUtc(nowUtc.ToLocalTime().AddDays(Math.Max(1, task.IntervalDays))),
+            RepeatType.Interval => EnsureUtc(nowLocal.AddDays(Math.Max(1, task.IntervalDays)).UtcDateTime),
             _ => null
         };
     }
 
     private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)
     {
-        DateTime local = nowUtc.ToLocalTime();
+        var local = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local);
         if (weekdays == Weekdays.None)
         {
             weekdays = DayToWeekdayFlag(local.DayOfWeek);
@@ -202,16 +212,16 @@ public class StorageServiceStub : IStorageService
 
         for (int offset = 1; offset <= 7; offset++)
         {
-            DateTime candidate = DateTime.SpecifyKind(local.Date.AddDays(offset).Add(local.TimeOfDay), DateTimeKind.Local);
-            Weekdays flag = DayToWeekdayFlag(candidate.DayOfWeek);
+            DateTimeOffset candidateLocal = new(local.Date.AddDays(offset).Add(local.TimeOfDay), local.Offset);
+            Weekdays flag = DayToWeekdayFlag(candidateLocal.DayOfWeek);
             if ((weekdays & flag) != 0)
             {
-                return EnsureUtc(candidate);
+                return EnsureUtc(candidateLocal.UtcDateTime);
             }
         }
 
-        DateTime fallback = DateTime.SpecifyKind(local.Date.AddDays(7).Add(local.TimeOfDay), DateTimeKind.Local);
-        return EnsureUtc(fallback);
+        DateTimeOffset fallbackLocal = new(local.Date.AddDays(7).Add(local.TimeOfDay), local.Offset);
+        return EnsureUtc(fallbackLocal.UtcDateTime);
     }
 
     private static Weekdays DayToWeekdayFlag(DayOfWeek dow)

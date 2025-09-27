@@ -9,6 +9,7 @@ namespace ShuffleTask.ViewModels;
 public partial class EditTaskViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
+    private readonly TimeProvider _clock;
 
     private TaskItem _workingCopy = new();
 
@@ -52,7 +53,7 @@ public partial class EditTaskViewModel : ObservableObject
     private bool hasDeadline;
 
     [ObservableProperty]
-    private DateTime deadlineDate = DateTime.Today;
+    private DateTime deadlineDate = DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
 
     [ObservableProperty]
     private TimeSpan deadlineTime = new(9, 0, 0);
@@ -79,9 +80,11 @@ public partial class EditTaskViewModel : ObservableObject
         private set => SetProperty(ref _isNew, value);
     }
 
-    public EditTaskViewModel(IStorageService storage)
+    public EditTaskViewModel(IStorageService storage, TimeProvider clock)
     {
         _storage = storage;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        DeadlineDate = GetTodayUtcDate();
     }
 
     public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
@@ -169,13 +172,14 @@ public partial class EditTaskViewModel : ObservableObject
         if (_workingCopy.Deadline.HasValue)
         {
             HasDeadline = true;
-            DeadlineDate = _workingCopy.Deadline.Value.Date;
-            DeadlineTime = _workingCopy.Deadline.Value.TimeOfDay;
+            DateTime deadlineUtc = EnsureUtc(_workingCopy.Deadline.Value);
+            DeadlineDate = deadlineUtc.Date;
+            DeadlineTime = deadlineUtc.TimeOfDay;
         }
         else
         {
             HasDeadline = false;
-            DeadlineDate = DateTime.Today;
+            DeadlineDate = GetTodayUtcDate();
             DeadlineTime = new TimeSpan(9, 0, 0);
         }
     }
@@ -211,7 +215,8 @@ public partial class EditTaskViewModel : ObservableObject
 
             if (HasDeadline)
             {
-                _workingCopy.Deadline = DeadlineDate.Date + DeadlineTime;
+                DateTime combined = DeadlineDate.Date + DeadlineTime;
+                _workingCopy.Deadline = EnsureUtc(combined);
             }
             else
             {
@@ -260,6 +265,22 @@ public partial class EditTaskViewModel : ObservableObject
         // Stepper may return values like 2.4999999997, round to 0.5 increments
         double rounded = Math.Round(value * 2.0, MidpointRounding.AwayFromZero) / 2.0;
         return Math.Max(MinSizePoints, Math.Min(MaxSizePoints, rounded));
+    }
+
+    private DateTime GetTodayUtcDate()
+    {
+        DateTime utcNow = _clock.GetUtcNow().UtcDateTime;
+        return utcNow.Date;
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime()
+        };
     }
 
     partial void OnRepeatChanged(RepeatType value)
