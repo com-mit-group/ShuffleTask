@@ -1,12 +1,13 @@
 using System;
-using Microsoft.Maui.Storage;
-using ShuffleTask.Models;
-using ShuffleTask.Services;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Services;
 using ShuffleTask.Views;
 
 namespace ShuffleTask;
 
-public partial class App : Application
+public partial class App : Microsoft.Maui.Controls.Application
 {
     private readonly IStorageService _storage;
     private readonly ShuffleCoordinatorService _coordinator;

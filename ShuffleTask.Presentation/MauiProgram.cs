@@ -1,6 +1,10 @@
 ﻿using System;
 using Microsoft.Extensions.Logging;
-using ShuffleTask.Services;
+using Microsoft.Maui.Storage;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
 
@@ -29,7 +33,13 @@ public static class MauiProgram
 
         // DI registrations
         builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
-        builder.Services.AddSingleton<IStorageService, StorageService>();
+        builder.Services.AddSingleton(provider =>
+        {
+            var clock = provider.GetRequiredService<TimeProvider>();
+            var dbPath = Path.Combine(FileSystem.AppDataDirectory, "shuffletask.db3");
+            return new StorageService(clock, dbPath);
+        });
+        builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();

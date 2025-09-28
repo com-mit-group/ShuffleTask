@@ -1,8 +1,7 @@
-using System;
 using System.Runtime.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace ShuffleTask.Models;
+namespace ShuffleTask.Application.Models;
 
 public enum TimerMode
 {

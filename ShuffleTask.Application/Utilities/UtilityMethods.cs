@@ -1,13 +1,13 @@
-﻿using ShuffleTask.Models;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Application.Utilities;
 
 internal static class UtilityMethods
 {
-
-    private static readonly object _stableSampleLock = new();
-    private static int _stableSampleSeed = int.MinValue;
-    private static int _stableSampleIndex;
+    private static readonly object StableSampleLock = new();
+    private static int stableSampleSeed = int.MinValue;
+    private static int stableSampleIndex;
 
     public static double Clamp01(double value) => Math.Clamp(value, 0.0, 1.0);
 
@@ -81,15 +81,15 @@ internal static class UtilityMethods
     public static double NextStableSample(DateTimeOffset now)
     {
         int daySeed = GetDaySeed(now);
-        lock (_stableSampleLock)
+        lock (StableSampleLock)
         {
-            if (_stableSampleSeed != daySeed)
+            if (stableSampleSeed != daySeed)
             {
-                _stableSampleSeed = daySeed;
-                _stableSampleIndex = 0;
+                stableSampleSeed = daySeed;
+                stableSampleIndex = 0;
             }
 
-            int combined = unchecked(daySeed * 397) ^ _stableSampleIndex++;
+            int combined = unchecked(daySeed * 397) ^ stableSampleIndex++;
             combined &= int.MaxValue;
 
             var rng = new Random(combined);
@@ -102,7 +102,10 @@ internal static class UtilityMethods
         int daySeed = GetDaySeed(now);
         if (task is not null)
         {
-            unchecked { daySeed *= 31 + task.Id.GetHashCode(); }
+            unchecked
+            {
+                daySeed *= 31 + task.Id.GetHashCode();
+            }
         }
         else
         {

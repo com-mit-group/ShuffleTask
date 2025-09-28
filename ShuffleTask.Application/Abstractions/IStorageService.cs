@@ -1,9 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using ShuffleTask.Models;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Application.Abstractions;
 
 public interface IStorageService
 {

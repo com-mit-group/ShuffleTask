@@ -8,7 +8,7 @@ using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Presentation.Services;
 
 public partial class NotificationService
 {

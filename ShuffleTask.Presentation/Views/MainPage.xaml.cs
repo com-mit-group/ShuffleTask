@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Views;
 
@@ -57,7 +58,7 @@ public partial class MainPage : TabbedPage
 
     private static IServiceProvider? ResolveServiceProvider()
     {
-        if (Application.Current?.Handler?.MauiContext?.Services is IServiceProvider contextServices)
+        if (MauiApplication.Current?.Handler?.MauiContext?.Services is IServiceProvider contextServices)
         {
             return contextServices;
         }

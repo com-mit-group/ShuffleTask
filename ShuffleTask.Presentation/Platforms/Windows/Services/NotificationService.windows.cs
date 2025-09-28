@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Windows.Data.Xml.Dom;
 using Windows.UI.Notifications;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Presentation.Services;
 
 public partial class NotificationService
 {

@@ -41,8 +41,12 @@
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-        <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ShuffleTask.Application\ShuffleTask.Application.csproj" />
+        <ProjectReference Include="..\ShuffleTask.Domain\ShuffleTask.Domain.csproj" />
+        <ProjectReference Include="..\ShuffleTask.Persistence\ShuffleTask.Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>

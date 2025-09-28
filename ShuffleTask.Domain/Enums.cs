@@ -1,4 +1,4 @@
-namespace ShuffleTask.Models;
+namespace ShuffleTask.Domain.Entities;
 
 public enum RepeatType
 {
