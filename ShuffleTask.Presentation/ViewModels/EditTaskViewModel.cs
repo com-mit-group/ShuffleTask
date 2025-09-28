@@ -1,8 +1,9 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ShuffleTask.Models;
-using ShuffleTask.Services;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.ViewModels;
 

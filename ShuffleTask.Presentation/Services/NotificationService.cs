@@ -1,9 +1,12 @@
 using System;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
-using ShuffleTask.Models;
+using MauiApplication = Microsoft.Maui.Controls.Application;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Presentation.Services;
 
 /// <summary>
 /// Provides cross-platform notifications using platform primitives with a XAML alert fallback.
@@ -70,7 +73,7 @@ public partial class NotificationService : INotificationService
 
     private static async Task ShowAlertAsync(string title, string message)
     {
-        var page = Application.Current?.MainPage;
+        var page = MauiApplication.Current?.MainPage;
         if (page == null)
         {
             return;

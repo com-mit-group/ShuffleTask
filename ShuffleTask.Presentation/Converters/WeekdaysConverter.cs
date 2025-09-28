@@ -1,5 +1,5 @@
 using System.Globalization;
-using ShuffleTask.Models;
+using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Converters;
 

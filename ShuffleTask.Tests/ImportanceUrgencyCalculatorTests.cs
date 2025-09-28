@@ -1,6 +1,7 @@
 using NUnit.Framework;
-using ShuffleTask.Models;
-using ShuffleTask.Services;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Tests;
 

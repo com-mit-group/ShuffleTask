@@ -2,7 +2,7 @@
 using Android.Content.PM;
 using Android.OS;
 using Microsoft.Extensions.DependencyInjection;
-using ShuffleTask.Services;
+using ShuffleTask.Presentation.Services;
 
 namespace ShuffleTask;
 
