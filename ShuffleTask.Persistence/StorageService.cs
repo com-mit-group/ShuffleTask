@@ -4,6 +4,7 @@ using SQLite;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Persistence.Models;
 
 namespace ShuffleTask.Persistence;
 
@@ -37,7 +38,7 @@ public class StorageService : IStorageService
         SQLitePCL.Batteries_V2.Init();
         _db = new SQLiteAsyncConnection(_dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
 
-        await _db.CreateTableAsync<TaskItem>();
+        await _db.CreateTableAsync<TaskItemRecord>();
         await _db.CreateTableAsync<KeyValueEntity>();
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
@@ -89,18 +90,20 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
 
-        return await Db.Table<TaskItem>()
-                       .OrderByDescending(t => t.CreatedAt)
-                       .ToListAsync();
+        var records = await Db.Table<TaskItemRecord>()
+                              .OrderByDescending(t => t.CreatedAt)
+                              .ToListAsync();
+        return records.Select(r => r.ToDomain()).ToList();
     }
 
     public async Task<TaskItem?> GetTaskAsync(string id)
     {
         await AutoResumeDueTasksAsync();
 
-        return await Db.Table<TaskItem>()
-                       .Where(t => t.Id == id)
-                       .FirstOrDefaultAsync();
+        var record = await Db.Table<TaskItemRecord>()
+                             .Where(t => t.Id == id)
+                             .FirstOrDefaultAsync();
+        return record?.ToDomain();
     }
 
     public async Task AddTaskAsync(TaskItem item)
@@ -119,21 +122,21 @@ public class StorageService : IStorageService
         {
             item.Status = TaskLifecycleStatus.Active;
         }
-        await Db.InsertAsync(item);
+
+        var record = TaskItemRecord.FromDomain(item);
+        await Db.InsertAsync(record);
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
-        await Db.UpdateAsync(item);
+        var record = TaskItemRecord.FromDomain(item);
+        await Db.UpdateAsync(record);
     }
 
     public async Task DeleteTaskAsync(string id)
     {
-        var existing = await GetTaskAsync(id);
-        if (existing != null)
-        {
-            await Db.DeleteAsync(existing);
-        }
+        await AutoResumeDueTasksAsync();
+        await Db.DeleteAsync<TaskItemRecord>(id);
     }
 
     // Lifecycle helpers
@@ -144,7 +147,7 @@ public class StorageService : IStorageService
 
         await Db.RunInTransactionAsync(conn =>
         {
-            var existing = conn.Find<TaskItem>(id);
+            var existing = conn.Find<TaskItemRecord>(id);
             if (existing == null)
             {
                 return;
@@ -158,7 +161,7 @@ public class StorageService : IStorageService
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
 
             conn.Update(existing);
-            updated = existing;
+            updated = existing.ToDomain();
         });
 
         return updated;
@@ -176,7 +179,7 @@ public class StorageService : IStorageService
 
         await Db.RunInTransactionAsync(conn =>
         {
-            var existing = conn.Find<TaskItem>(id);
+            var existing = conn.Find<TaskItemRecord>(id);
             if (existing == null)
             {
                 return;
@@ -189,7 +192,7 @@ public class StorageService : IStorageService
             existing.CompletedAt = null;
 
             conn.Update(existing);
-            updated = existing;
+            updated = existing.ToDomain();
         });
 
         return updated;
@@ -201,7 +204,7 @@ public class StorageService : IStorageService
 
         await Db.RunInTransactionAsync(conn =>
         {
-            var existing = conn.Find<TaskItem>(id);
+            var existing = conn.Find<TaskItemRecord>(id);
             if (existing == null)
             {
                 return;
@@ -209,7 +212,7 @@ public class StorageService : IStorageService
 
             ApplyResume(existing);
             conn.Update(existing);
-            updated = existing;
+            updated = existing.ToDomain();
         });
 
         return updated;
@@ -217,7 +220,7 @@ public class StorageService : IStorageService
 
     private async Task AutoResumeDueTasksAsync()
     {
-        var pending = await Db.Table<TaskItem>()
+        var pending = await Db.Table<TaskItemRecord>()
                                .Where(t => t.Status != TaskLifecycleStatus.Active && t.NextEligibleAt != null)
                                .ToListAsync();
 
@@ -227,7 +230,7 @@ public class StorageService : IStorageService
         }
 
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
-        List<TaskItem> toUpdate = new();
+        List<TaskItemRecord> toUpdate = new();
 
         foreach (var task in pending)
         {
@@ -245,7 +248,7 @@ public class StorageService : IStorageService
         }
     }
 
-    private static void ApplyResume(TaskItem task)
+    private static void ApplyResume(TaskItemRecord task)
     {
         task.Status = TaskLifecycleStatus.Active;
         task.SnoozedUntil = null;
@@ -253,7 +256,7 @@ public class StorageService : IStorageService
         task.CompletedAt = null;
     }
 
-    private static DateTime? ComputeNextEligibleUtc(TaskItem task, DateTime nowUtc)
+    private static DateTime? ComputeNextEligibleUtc(TaskItemRecord task, DateTime nowUtc)
     {
         return task.Repeat switch
         {
