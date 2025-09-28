@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "ShuffleTask.sln",
+    "projects": [
+      "ShuffleTask.Application\\ShuffleTask.Application.csproj",
+      "ShuffleTask.Domain\\ShuffleTask.Domain.csproj",
+      "ShuffleTask.Persistence\\ShuffleTask.Persistence.csproj",
+      "ShuffleTask.Tests\\ShuffleTask.Tests.csproj"
+    ]
+  }
+}
