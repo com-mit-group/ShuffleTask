@@ -342,16 +342,15 @@ public class StorageService : IStorageService
     {
         settings = NormalizeSettings(settings);
         string json = JsonConvert.SerializeObject(settings);
-        var kv = new KeyValueEntity
-        {
-            Key = SettingsKey,
-            Value = json
-        };
-
         // Upsert
         KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey);
         if (existing == null)
         {
+            var kv = new KeyValueEntity
+            {
+                Key = SettingsKey,
+                Value = json
+            };
             await Db.InsertAsync(kv);
         }
         else
