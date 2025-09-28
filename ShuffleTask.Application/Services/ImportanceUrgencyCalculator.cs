@@ -1,6 +1,8 @@
-using ShuffleTask.Models;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Application.Services;
 
 public static class ImportanceUrgencyCalculator
 {

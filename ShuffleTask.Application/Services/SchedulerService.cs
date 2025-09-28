@@ -1,6 +1,9 @@
-using ShuffleTask.Models;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Application.Services;
 
 public class SchedulerService(bool deterministic = false) : ISchedulerService
 {
@@ -31,7 +34,10 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
 
     public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, bool deterministic)
     {
-        if (tasks == null) return null;
+        if (tasks == null)
+        {
+            return null;
+        }
 
         var candidates = tasks
             .Where(task => task is not null)
@@ -41,7 +47,9 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
             .ToList();
 
         if (candidates.Count == 0)
+        {
             return null;
+        }
 
         List<ScoredTask> scored = ComputeScores(settings, now, deterministic, candidates);
         return GetBestScoredTask(settings, now, deterministic, scored);
@@ -60,7 +68,7 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
             {
                 // jitter in [-0.5, 0.5]
                 Random rng = UtilityMethods.CreateRng(settings, now, task);
-                score += (rng.NextDouble() - 0.5);
+                score += rng.NextDouble() - 0.5;
             }
 
             scored.Add(new ScoredTask(task, score));
@@ -92,22 +100,18 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
             cumulative[i] = acc;
         }
 
-        double sample;
-        if (settings.StableRandomnessPerDay)
-        {
-            sample = UtilityMethods.NextStableSample(now);
-        }
-        else
-        {
-            sample = Random.Shared.NextDouble();
-        }
+        double sample = settings.StableRandomnessPerDay
+            ? UtilityMethods.NextStableSample(now)
+            : Random.Shared.NextDouble();
 
         double r = sample * expSum;
 
         for (int i = 0; i < cumulative.Length; i++)
         {
             if (r <= cumulative[i])
+            {
                 return scored[i].Task;
+            }
         }
 
         return scored[^1].Task;

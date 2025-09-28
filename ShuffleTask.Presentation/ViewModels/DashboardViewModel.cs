@@ -4,8 +4,11 @@ using System.Diagnostics;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ShuffleTask.Models;
-using ShuffleTask.Services;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Services;
 
 namespace ShuffleTask.ViewModels;
 

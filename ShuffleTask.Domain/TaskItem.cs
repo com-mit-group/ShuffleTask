@@ -1,6 +1,6 @@
 using SQLite;
 
-namespace ShuffleTask.Models;
+namespace ShuffleTask.Domain.Entities;
 
 public class TaskItem
 {

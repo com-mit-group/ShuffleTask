@@ -2,7 +2,9 @@ using System;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
-using ShuffleTask.Models;
+using MauiApplication = Microsoft.Maui.Controls.Application;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;
@@ -172,7 +174,7 @@ public partial class DashboardPage : ContentPage
             return _timer;
         }
 
-        var timer = Application.Current?.Dispatcher?.CreateTimer() ?? Dispatcher.CreateTimer();
+        var timer = MauiApplication.Current?.Dispatcher?.CreateTimer() ?? Dispatcher.CreateTimer();
         timer.Interval = TimeSpan.FromSeconds(1);
         timer.Tick += OnTick;
         _timer = timer;

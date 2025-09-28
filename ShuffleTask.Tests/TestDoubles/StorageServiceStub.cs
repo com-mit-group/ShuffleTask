@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ShuffleTask.Models;
-using ShuffleTask.Services;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Tests.TestDoubles;
 

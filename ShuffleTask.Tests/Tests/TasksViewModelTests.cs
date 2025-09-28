@@ -2,7 +2,8 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using ShuffleTask.Models;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 using ShuffleTask.Tests.TestDoubles;
 using ShuffleTask.ViewModels;
 

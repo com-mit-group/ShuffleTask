@@ -3,10 +3,13 @@ using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
-using ShuffleTask.Models;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Domain.Entities;
 using ShuffleTask.ViewModels;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Presentation.Services;
 
 public class ShuffleCoordinatorService : IDisposable
 {

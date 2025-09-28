@@ -1,7 +1,7 @@
-using System;
-using ShuffleTask.Models;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Application.Services;
 
 public static class TimeWindowService
 {
@@ -14,19 +14,19 @@ public static class TimeWindowService
 
         // If start == end, treat as full-day window
         if (start == end)
+        {
             return true;
+        }
 
         if (start < end)
         {
             // Same-day window
             return t >= start && t < end;
         }
-        else
-        {
-            // Overnight window (crosses midnight)
-            // Example: 22:00 - 06:00 -> allowed if time is >= 22:00 OR < 06:00
-            return t >= start || t < end;
-        }
+
+        // Overnight window (crosses midnight)
+        // Example: 22:00 - 06:00 -> allowed if time is >= 22:00 OR < 06:00
+        return t >= start || t < end;
     }
 
     public static bool AllowedNow(AllowedPeriod ap, DateTimeOffset now, AppSettings s)

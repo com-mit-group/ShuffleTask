@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Foundation;
 using UserNotifications;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Presentation.Services;
 
 public partial class NotificationService
 {

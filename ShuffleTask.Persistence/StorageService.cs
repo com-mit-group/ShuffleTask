@@ -1,14 +1,14 @@
-using System;
-using System.Collections.Generic;
+using System.Globalization;
 using Newtonsoft.Json;
 using SQLite;
-using ShuffleTask.Models;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Services;
+namespace ShuffleTask.Persistence;
 
 public class StorageService : IStorageService
 {
-    private const string DatabaseFileName = "shuffletask.db3";
     private const string SettingsKey = "app_settings";
     private const string IntegerSqlType = "INTEGER";
 
@@ -16,16 +16,23 @@ public class StorageService : IStorageService
     private readonly string _dbPath;
     private SQLiteAsyncConnection? _db;
 
-    public StorageService(TimeProvider clock)
+    public StorageService(TimeProvider clock, string databasePath)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
-        _dbPath = Path.Combine(FileSystem.AppDataDirectory, DatabaseFileName);
+        if (string.IsNullOrWhiteSpace(databasePath))
+        {
+            throw new ArgumentException("Database path must be provided.", nameof(databasePath));
+        }
+
+        _dbPath = databasePath;
     }
 
     public async Task InitializeAsync()
     {
         if (_db != null)
+        {
             return;
+        }
 
         SQLitePCL.Batteries_V2.Init();
         _db = new SQLiteAsyncConnection(_dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
@@ -248,26 +255,14 @@ public class StorageService : IStorageService
 
     private static DateTime? ComputeNextEligibleUtc(TaskItem task, DateTime nowUtc)
     {
-        switch (task.Repeat)
+        return task.Repeat switch
         {
-            case RepeatType.None:
-                return null;
-            case RepeatType.Daily:
-            {
-                var nextLocal = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(1);
-                return EnsureUtc(nextLocal.UtcDateTime);
-            }
-            case RepeatType.Weekly:
-                return ComputeWeeklyNext(task.Weekdays, nowUtc);
-            case RepeatType.Interval:
-            {
-                int interval = Math.Max(1, task.IntervalDays);
-                var nextLocal = TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(interval);
-                return EnsureUtc(nextLocal.UtcDateTime);
-            }
-            default:
-                return null;
-        }
+            RepeatType.None => null,
+            RepeatType.Daily => EnsureUtc(TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(1).UtcDateTime),
+            RepeatType.Weekly => ComputeWeeklyNext(task.Weekdays, nowUtc),
+            RepeatType.Interval => EnsureUtc(TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(Math.Max(1, task.IntervalDays)).UtcDateTime),
+            _ => null,
+        };
     }
 
     private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)
@@ -358,45 +353,38 @@ public class StorageService : IStorageService
         }
         else
         {
-            await Db.UpdateAsync(kv);
+            existing.Value = json;
+            await Db.UpdateAsync(existing);
         }
     }
-
-    // Local key-value table for settings JSON
-    [Table("KeyValue")]
-    internal class KeyValueEntity
-    {
-        [PrimaryKey]
-        public string Key { get; set; } = string.Empty;
-        public string? Value { get; set; }
-    }
-
-    private sealed class TableInfo { public int cid { get; set; } public string name { get; set; } = ""; public string type { get; set; } = ""; public int notnull { get; set; } public string? dflt_value { get; set; } public int pk { get; set; } }
 
     private static AppSettings NormalizeSettings(AppSettings settings)
     {
-        var defaults = new AppSettings();
-
-        if (settings.ReminderMinutes <= 0)
-        {
-            settings.ReminderMinutes = defaults.ReminderMinutes;
-        }
-
-        if (settings.FocusMinutes <= 0)
-        {
-            settings.FocusMinutes = defaults.FocusMinutes;
-        }
-
-        if (settings.BreakMinutes <= 0)
-        {
-            settings.BreakMinutes = defaults.BreakMinutes;
-        }
-
-        if (settings.PomodoroCycles <= 0)
-        {
-            settings.PomodoroCycles = defaults.PomodoroCycles;
-        }
-
+        settings ??= new AppSettings();
+        settings.NormalizeWeights();
+        settings.MinGapMinutes = Math.Clamp(settings.MinGapMinutes, 1, 24 * 60);
+        settings.MaxGapMinutes = Math.Max(settings.MinGapMinutes, settings.MaxGapMinutes);
+        settings.ReminderMinutes = Math.Clamp(settings.ReminderMinutes, 1, 6 * 60);
+        settings.MaxDailyShuffles = Math.Clamp(settings.MaxDailyShuffles, 1, 24);
+        settings.FocusMinutes = Math.Clamp(settings.FocusMinutes, 5, 120);
+        settings.BreakMinutes = Math.Clamp(settings.BreakMinutes, 1, 60);
+        settings.PomodoroCycles = Math.Clamp(settings.PomodoroCycles, 1, 8);
+        settings.RepeatUrgencyPenalty = Math.Clamp(settings.RepeatUrgencyPenalty, 0.0, 2.0);
+        settings.SizeBiasStrength = Math.Clamp(settings.SizeBiasStrength, 0.0, 1.0);
+        settings.UrgencyDeadlineShare = Math.Clamp(settings.UrgencyDeadlineShare, 0.0, 100.0);
         return settings;
+    }
+
+    private sealed class KeyValueEntity
+    {
+        [PrimaryKey]
+        public string Key { get; set; } = string.Empty;
+
+        public string? Value { get; set; }
+    }
+
+    private sealed class TableInfo
+    {
+        public string name { get; set; } = string.Empty;
     }
 }
