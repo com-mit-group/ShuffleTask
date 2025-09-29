@@ -100,11 +100,36 @@ jobs:
           ./**/TestResults/*.trx
         check_name: "Test Results (No GUI)"
 
-    - name: Upload Coverage Artifact
-      uses: actions/upload-artifact@v4
+    - name: Generate Coverage Summary
+      if: ${{ steps.build.outcome == 'success' }}
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.1.26
       with:
-        name: code-coverage
-        path: ./**/TestResults/**/coverage*.opencover.xml
+        reports: ./**/TestResults/**/coverage*.opencover.xml
+        targetdir: coverage-report
+        reporttypes: 'MarkdownSummaryGithub'
+
+    - name: Publish Coverage Check
+      if: ${{ steps.build.outcome == 'success' }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          const summaryPath = path.join('coverage-report', 'SummaryGithub.md');
+          const summary = fs.readFileSync(summaryPath, 'utf8');
+
+          await github.rest.checks.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            name: 'Code Coverage',
+            head_sha: context.payload.pull_request ? context.payload.pull_request.head.sha : context.sha,
+            status: 'completed',
+            conclusion: 'success',
+            output: {
+              title: 'Code Coverage Summary',
+              summary,
+            },
+          });
 
   checkWhetherGUIBuildNeeded:
     name: Check GUI Build Requirements
