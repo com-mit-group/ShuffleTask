@@ -102,11 +102,25 @@ jobs:
 
     - name: Generate Coverage Summary
       if: ${{ steps.build.outcome == 'success' }}
-      uses: danielpalme/ReportGenerator-GitHub-Action@5.1.26
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.4.16
       with:
         reports: ./**/TestResults/**/coverage*.opencover.xml
         targetdir: coverage-report
-        reporttypes: 'MarkdownSummaryGithub'
+        reporttypes: MarkdownSummaryGithub;Badges
+        title: 'Coverage report (No GUI)'
+
+    - name: Publish coverage in build summary
+      if: ${{ steps.build.outcome == 'success' }}
+      run: cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+      shell: bash
+
+    - name: Comment coverage summary on PR
+      if: ${{ steps.build.outcome == 'success' && github.event_name == 'pull_request' }}
+      run: gh pr comment $PR_NUMBER --edit-last --create-if-none --body-file coverage-report/SummaryGithub.md
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_NUMBER: ${{ github.event.number }}
+      shell: bash
 
     - name: Publish Coverage Check
       if: ${{ steps.build.outcome == 'success' }}
