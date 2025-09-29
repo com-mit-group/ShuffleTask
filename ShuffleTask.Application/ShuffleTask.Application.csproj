@@ -14,4 +14,8 @@
     <ProjectReference Include="..\ShuffleTask.Domain\ShuffleTask.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ShuffleTask.Tests" />
+  </ItemGroup>
+
 </Project>

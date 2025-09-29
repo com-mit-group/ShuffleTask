@@ -1,0 +1,314 @@
+# This workflow will build and test a .NET project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+
+name: Continuous integration pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  gitVersion:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      branchName: ${{ steps.gitversion.outputs.branchName }}
+      semVer: ${{ steps.gitversion.outputs.semVer }}
+      sha: ${{ steps.gitversion.outputs.sha }}
+      nugetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}
+      assemblySemFileVer: ${{ steps.gitversion.outputs.assemblySemFileVer }}
+      informationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v1.1.1
+      with:
+        versionSpec: '5.x'
+        preferLatestVersion: true
+
+    - name: Determine Version
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v1.1.1
+      with:
+        additionalArguments: '/updateprojectfiles'
+        useConfigFile: true
+        configFilePath: '.github/GitVersion.yaml'
+
+  buildAndTestWithoutGUI:
+    name: Build and Test (No GUI)
+    needs: [gitVersion]
+    runs-on: windows-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+      packages: read
+    outputs:
+      build_outcome: ${{ steps.expose.outputs.build_outcome }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Setup .NET
+      id: setupDotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Ensure GitHub NuGet Source
+      env:
+        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
+      run: |
+        dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
+          -n github `
+          -u Yaron-E92 `
+          -p $env:NUGET_TOKEN `
+          --store-password-in-clear-text
+
+    - name: Restore Dependencies
+      run: dotnet restore ShuffleTask.NoGUI.slnf
+
+    - name: Build
+      id: build
+      run: dotnet build -c Debug --no-restore ShuffleTask.NoGUI.slnf
+
+    - name: Test
+      run: |
+        dotnet test --logger "trx" --no-build -c Debug --verbosity normal --collect:"XPlat Code Coverage;Format=opencover" `
+          /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} `
+          /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} `
+          /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }} `
+          ShuffleTask.NoGUI.slnf
+
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: ${{ steps.build.outcome == 'success' }}
+      with:
+        files: |
+          ./**/TestResults/*.trx
+        check_name: "Test Results (No GUI)"
+
+    - name: Generate Coverage Summary
+      if: ${{ steps.build.outcome == 'success' }}
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.4.16
+      with:
+        reports: ./**/TestResults/**/coverage*.opencover.xml
+        targetdir: coverage-report
+        reporttypes: MarkdownSummaryGithub;Badges
+        title: 'Coverage report (No GUI)'
+
+    - name: Publish coverage in build summary
+      if: ${{ steps.build.outcome == 'success' }}
+      run: cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+      shell: bash
+
+    - name: Comment coverage summary on PR
+      if: ${{ steps.build.outcome == 'success' && github.event_name == 'pull_request' }}
+      run: gh pr comment $PR_NUMBER --edit-last --create-if-none --body-file coverage-report/SummaryGithub.md
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PR_NUMBER: ${{ github.event.number }}
+      shell: bash
+
+  checkWhetherGUIBuildNeeded:
+    name: Check GUI Build Requirements
+    needs: [gitVersion]
+    runs-on: ubuntu-latest
+    outputs:
+      diff: ${{steps.checkDiff.outputs.diff}}
+      override: ${{steps.determineOverride.outputs.override}}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Check diff
+      id: checkDiff
+      run: |
+        DIFF=$(git diff origin/main~1 HEAD -- ShuffleTask.Presentation/**/*.cs ShuffleTask.Presentation/*.cs ShuffleTask.Presentation/**/*.xaml ShuffleTask.Presentation/*.xaml | head -n 1)
+        echo "diff=$DIFF" >> $GITHUB_OUTPUT
+        echo "Diff found: $DIFF"
+
+    - name: Check for override in PR description
+      id: checkOverridePR
+      if: contains(needs.gitVersion.outputs.branchName, 'pull')
+      env:
+        PR_DESCRIPTION: ${{ github.event.pull_request.body }}
+      run: |
+        guiLine=$(awk -F'+includeGUI: ' '{print $2}' <<< $PR_DESCRIPTION | xargs)
+        echo "guiLine=$guiLine" >> $GITHUB_OUTPUT
+        echo "PR GUI override: $guiLine"
+
+    - name: Check for override in merge commit
+      if: contains(needs.gitVersion.outputs.branchName, 'main')
+      id: checkOverrideMerge
+      env:
+        MERGE_COMMIT: ${{ github.event.head_commit.message }}
+      run: |
+        guiLine=$(awk -F'+includeGUI: ' '{print $2}' <<< $MERGE_COMMIT | xargs)
+        echo "guiLine=$guiLine" >> $GITHUB_OUTPUT
+        echo "Merge GUI override: $guiLine"
+
+    - name: Determine override
+      id: determineOverride
+      if: |
+        steps.checkOverridePR.outputs.guiLine != '' ||
+        steps.checkOverrideMerge.outputs.guiLine != ''
+      env:
+        PR_GUILINE: ${{steps.checkOverridePR.outputs.guiLine}}
+        MERGE_GUILINE: ${{steps.checkOverrideMerge.outputs.guiLine}}
+      run: |
+        if [[ "$PR_GUILINE" == "false" || "$MERGE_GUILINE" == "false" ]]; then
+          echo "override=false" >> $GITHUB_OUTPUT
+        elif [[ "$PR_GUILINE" == "true" || "$MERGE_GUILINE" == "true" ]]; then
+          echo "override=true" >> $GITHUB_OUTPUT
+        else
+          echo "override=" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Echo override
+      id: echoOverride
+      if: |
+        steps.checkOverridePR.outputs.guiLine != '' ||
+        steps.checkOverrideMerge.outputs.guiLine != ''
+      run: |
+        echo "Final override value: ${{ steps.determineOverride.outputs.override }}"
+
+  buildAndTestGUI:
+    name: Build and Test GUI
+    needs: [checkWhetherGUIBuildNeeded, gitVersion]
+    runs-on: windows-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+      packages: read
+    env:
+      GUI_BUILD_REQUIRED: ${{ (needs.checkWhetherGUIBuildNeeded.outputs.diff != '' && needs.checkWhetherGUIBuildNeeded.outputs.override != 'false') || needs.checkWhetherGUIBuildNeeded.outputs.override == 'true' }}
+
+    steps:
+    - name: Checkout
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Setup .NET
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: setupDotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Ensure GitHub NuGet Source
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      env:
+        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
+      run: |
+        dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
+          -n github `
+          -u Yaron-E92 `
+          -p $env:NUGET_TOKEN `
+          --store-password-in-clear-text
+
+    - name: Install workload
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        dotnet workload install maui-android wasi-experimental
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to install workloads"
+          exit 1
+        }
+
+    - name: Setup Android SDK
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        Write-Host "Checking GUI changes: ${{needs.checkWhetherGUIBuildNeeded.outputs.diff}}"
+        & "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" "tools"
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to setup Android SDK"
+          exit 1
+        }
+
+    - name: Restore dependencies
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        dotnet restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to restore dependencies"
+          exit 1
+        }
+
+    - name: Build
+      id: build
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        dotnet build --no-restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Build failed"
+          exit 1
+        }
+
+    - name: Test
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      run: dotnet test ./ShuffleTask.Presentation.Tests/ShuffleTask.Presentation.Tests.csproj --logger "trx" --verbosity normal /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }}
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.build.outcome == 'success' }}
+      with:
+        files: |
+          ShuffleTask.Presentation.Tests/TestResults/*.xml
+          ShuffleTask.Presentation.Tests/TestResults/*.trx
+          ShuffleTask.Presentation.Tests/TestResults/*.json
+
+    - name: GUI build not required
+      if: ${{ env.GUI_BUILD_REQUIRED != 'true' }}
+      run: echo "GUI build not required"
+
+  tagVersion:
+    name: Tag version on main if new
+    needs: [gitVersion, buildAndTestWithoutGUI, buildAndTestGUI]
+    if:  |
+      (needs.buildAndTestGUI.result == 'skipped' || needs.buildAndTestGUI.result == 'success') &&
+      contains(needs.gitVersion.outputs.branchName, 'main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Fetch all tags
+      run: git fetch --tags --force
+    - name: Tag on main
+      run: |
+          git config --global user.name "Github actions: gitversion"
+          git config --global user.email "gitversion@github-actions.com"
+          # Check if tag already exists
+          if git rev-parse "${{ needs.gitVersion.outputs.semVer}}" >/dev/null 2>&1; then
+            echo "Tag ${{ needs.gitVersion.outputs.semVer}} already exists, skipping tag creation"
+          else
+            echo "Creating tag ${{ needs.gitVersion.outputs.semVer}}"
+            git tag -a "${{ needs.gitVersion.outputs.semVer}}" -m "Version ${{ needs.gitVersion.outputs.semVer}}"
+            git push --tags
+          fi

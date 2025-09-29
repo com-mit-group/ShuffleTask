@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../ShuffleTask.Presentation/ViewModels/TasksViewModel.cs" Link="ViewModels/TasksViewModel.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
@@ -18,5 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ShuffleTask.Application\ShuffleTask.Application.csproj" />
     <ProjectReference Include="..\ShuffleTask.Domain\ShuffleTask.Domain.csproj" />
+    <ProjectReference Include="..\ShuffleTask.Tests\ShuffleTask.Tests.csproj" />
   </ItemGroup>
+
 </Project>
