@@ -281,9 +281,9 @@ jobs:
       if: ${{steps.build.outcome == 'success'}}
       with:
         files: |
-          tests/**/TestResults/*.xml
-          tests/**/TestResults/*.trx
-          tests/**/TestResults/*.json
+          ShuffleTask.Presentation.Tests/TestResults/*.xml
+          ShuffleTask.Presentation.Tests/TestResults/*.trx
+          ShuffleTask.Presentation.Tests/TestResults/*.json
 
   tagVersion:
     name: Tag version on main if new
