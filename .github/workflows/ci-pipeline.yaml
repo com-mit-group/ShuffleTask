@@ -203,31 +203,32 @@ jobs:
   buildAndTestGUI:
     name: Build and Test GUI
     needs: [checkWhetherGUIBuildNeeded, gitVersion]
-    if: |
-      (needs.checkWhetherGUIBuildNeeded.outputs.diff != '' &&
-      needs.checkWhetherGUIBuildNeeded.outputs.override != 'false') ||
-      needs.checkWhetherGUIBuildNeeded.outputs.override == 'true'
     runs-on: windows-latest
     permissions:
       checks: write
       pull-requests: write
       contents: read
       packages: read
+    env:
+      GUI_BUILD_REQUIRED: ${{ (needs.checkWhetherGUIBuildNeeded.outputs.diff != '' && needs.checkWhetherGUIBuildNeeded.outputs.override != 'false') || needs.checkWhetherGUIBuildNeeded.outputs.override == 'true' }}
 
     steps:
     - name: Checkout
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
         persist-credentials: false
 
     - name: Setup .NET
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       id: setupDotnet
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
     - name: Ensure GitHub NuGet Source
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       run: |
         dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
@@ -237,6 +238,7 @@ jobs:
           --store-password-in-clear-text
 
     - name: Install workload
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       run: |
         dotnet workload install maui-android wasi-experimental
@@ -246,6 +248,7 @@ jobs:
         }
 
     - name: Setup Android SDK
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       run: |
         Write-Host "Checking GUI changes: ${{needs.checkWhetherGUIBuildNeeded.outputs.diff}}"
@@ -256,6 +259,7 @@ jobs:
         }
 
     - name: Restore dependencies
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       run: |
         dotnet restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
@@ -266,6 +270,7 @@ jobs:
 
     - name: Build
       id: build
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       run: |
         dotnet build --no-restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
@@ -275,15 +280,20 @@ jobs:
         }
 
     - name: Test
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       run: dotnet test ./ShuffleTask.Presentation.Tests/ShuffleTask.Presentation.Tests.csproj --logger "trx" --verbosity normal /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }}
     - name: Publish Test Results
       uses: EnricoMi/publish-unit-test-result-action@v2
-      if: ${{steps.build.outcome == 'success'}}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.build.outcome == 'success' }}
       with:
         files: |
           ShuffleTask.Presentation.Tests/TestResults/*.xml
           ShuffleTask.Presentation.Tests/TestResults/*.trx
           ShuffleTask.Presentation.Tests/TestResults/*.json
+
+    - name: GUI build not required
+      if: ${{ env.GUI_BUILD_REQUIRED != 'true' }}
+      run: echo "GUI build not required"
 
   tagVersion:
     name: Tag version on main if new
