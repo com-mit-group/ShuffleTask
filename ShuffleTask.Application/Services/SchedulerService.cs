@@ -5,9 +5,16 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Services;
 
-public class SchedulerService(bool deterministic = false) : ISchedulerService
+public class SchedulerService : ISchedulerService
 {
-    private readonly bool _deterministic = deterministic;
+    private readonly bool _deterministic;
+    private readonly IShuffleLogger? _logger;
+
+    public SchedulerService(bool deterministic = false, IShuffleLogger? logger = null)
+    {
+        _deterministic = deterministic;
+        _logger = logger;
+    }
 
     public TimeSpan NextGap(AppSettings settings, DateTimeOffset now)
     {
@@ -30,9 +37,9 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
     }
 
     public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
-        => PickNextTask(tasks, settings, now, _deterministic);
+        => PickNextTask(tasks, settings, now, _deterministic, _logger);
 
-    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, bool deterministic)
+    public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, bool deterministic, IShuffleLogger? logger = null)
     {
         if (tasks == null)
         {
@@ -48,11 +55,19 @@ public class SchedulerService(bool deterministic = false) : ISchedulerService
 
         if (candidates.Count == 0)
         {
+            logger?.LogTaskSelection("", "", "No eligible candidates", 0, TimeSpan.Zero);
             return null;
         }
 
         List<ScoredTask> scored = ComputeScores(settings, now, deterministic, candidates);
-        return GetBestScoredTask(settings, now, deterministic, scored);
+        var selected = GetBestScoredTask(settings, now, deterministic, scored);
+        
+        if (selected != null)
+        {
+            logger?.LogTaskSelection(selected.Id, selected.Title, "Task selected by scoring", candidates.Count, TimeSpan.Zero);
+        }
+        
+        return selected;
     }
 
     private static List<ScoredTask> ComputeScores(AppSettings settings, DateTimeOffset now, bool deterministic, List<TaskItem> candidates)
