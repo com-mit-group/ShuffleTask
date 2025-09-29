@@ -143,4 +143,39 @@ public class SchedulerServiceTests
 
         Assert.That(picked, Is.Null);
     }
+
+    [Test]
+    public void NextGap_DeterministicSchedulerReturnsMidpoint()
+    {
+        var settings = new AppSettings
+        {
+            MinGapMinutes = -5,
+            MaxGapMinutes = 45
+        };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        TimeSpan result = scheduler.NextGap(settings, DefaultNow);
+
+        // min value is clamped to zero before averaging with max
+        Assert.That(result, Is.EqualTo(TimeSpan.FromMinutes(22)));
+    }
+
+    [Test]
+    public void NextGap_StableRandomnessProducesRepeatableValue()
+    {
+        var settings = new AppSettings
+        {
+            MinGapMinutes = 10,
+            MaxGapMinutes = 30,
+            StableRandomnessPerDay = true
+        };
+        var scheduler = new SchedulerService();
+
+        TimeSpan first = scheduler.NextGap(settings, DefaultNow);
+        TimeSpan second = scheduler.NextGap(settings, DefaultNow.AddMinutes(5));
+
+        Assert.That(first, Is.EqualTo(second));
+        Assert.That(first, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(10)));
+        Assert.That(first, Is.LessThanOrEqualTo(TimeSpan.FromMinutes(30)));
+    }
 }
