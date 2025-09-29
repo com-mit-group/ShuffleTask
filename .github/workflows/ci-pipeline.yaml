@@ -47,6 +47,8 @@ jobs:
     needs: [gitVersion]
     runs-on: windows-latest
     permissions:
+      checks: write
+      pull-requests: write
       contents: read
       packages: read
     outputs:
@@ -90,50 +92,19 @@ jobs:
           /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }} `
           ShuffleTask.NoGUI.slnf
 
-    - name: Expose build outcome
-      id: expose
-      if: ${{ always() }}
-      shell: bash
-      run: echo "build_outcome=${{ steps.build.outcome }}" >> "$GITHUB_OUTPUT"
-
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: ${{ steps.build.outcome == 'success' }}
       with:
-        name: test-results
-        path: ./**/TestResults/**/*.trx
+        files: |
+          ./**/TestResults/*.trx
+        check_name: "Test Results (No GUI)"
 
     - name: Upload Coverage Artifact
       uses: actions/upload-artifact@v4
       with:
         name: code-coverage
         path: ./**/TestResults/**/coverage*.opencover.xml
-
-  publishTestResults:
-    runs-on: ubuntu-latest
-    name: Publish Test Results (No GUI)
-    needs: [buildAndTestWithoutGUI]
-    if: ${{ needs.buildAndTestWithoutGUI.outputs.build_outcome == 'success' }}
-    permissions:
-      checks: write
-      pull-requests: write
-      contents: read
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Download Test Results
-      uses: actions/download-artifact@v4
-      with:
-        name: test-results
-        path: ./TestResults/
-
-    - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        files: |
-          ./**/TestResults/*.trx
-        check_name: "Test Results (No GUI)"
 
   checkWhetherGUIBuildNeeded:
     name: Check GUI Build Requirements
@@ -287,7 +258,7 @@ jobs:
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       run: dotnet test ./ShuffleTask.Presentation.Tests/ShuffleTask.Presentation.Tests.csproj --logger "trx" --verbosity normal /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }}
     - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action@v2
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.build.outcome == 'success' }}
       with:
         files: |
