@@ -66,11 +66,13 @@ jobs:
         dotnet-version: 8.0.x
 
     - name: Ensure GitHub NuGet Source
+      env:
+        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
       run: |
         dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
           -n github `
           -u Yaron-E92 `
-          -p ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }} `
+          -p $env:NUGET_TOKEN `
           --store-password-in-clear-text
 
     - name: Restore Dependencies
@@ -230,11 +232,13 @@ jobs:
     - name: Ensure GitHub NuGet Source
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
+      env:
+        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
       run: |
         dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
           -n github `
           -u Yaron-E92 `
-          -p ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }} `
+          -p $env:NUGET_TOKEN `
           --store-password-in-clear-text
 
     - name: Install workload
