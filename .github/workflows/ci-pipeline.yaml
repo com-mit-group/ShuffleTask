@@ -122,29 +122,6 @@ jobs:
         PR_NUMBER: ${{ github.event.number }}
       shell: bash
 
-    - name: Publish Coverage Check
-      if: ${{ steps.build.outcome == 'success' }}
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          const path = require('path');
-          const summaryPath = path.join('coverage-report', 'SummaryGithub.md');
-          const summary = fs.readFileSync(summaryPath, 'utf8');
-
-          await github.rest.checks.create({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            name: 'Code Coverage',
-            head_sha: context.payload.pull_request ? context.payload.pull_request.head.sha : context.sha,
-            status: 'completed',
-            conclusion: 'success',
-            output: {
-              title: 'Code Coverage Summary',
-              summary,
-            },
-          });
-
   checkWhetherGUIBuildNeeded:
     name: Check GUI Build Requirements
     needs: [gitVersion]
