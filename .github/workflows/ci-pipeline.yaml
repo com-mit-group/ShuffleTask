@@ -202,7 +202,7 @@ jobs:
 
   buildAndTestGUI:
     name: Build and Test GUI
-    needs: [checkWhetherGUIBuildNeeded]
+    needs: [checkWhetherGUIBuildNeeded, gitVersion]
     if: |
       (needs.checkWhetherGUIBuildNeeded.outputs.diff != '' &&
       needs.checkWhetherGUIBuildNeeded.outputs.override != 'false') ||
