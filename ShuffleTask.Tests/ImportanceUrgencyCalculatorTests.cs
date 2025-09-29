@@ -280,4 +280,85 @@ public class ImportanceUrgencyCalculatorTests
         Assert.That(smallScore.SizeMultiplier, Is.EqualTo(largeScore.SizeMultiplier).Within(1e-6),
             "With the bias disabled, both sizes should use the same multiplier.");
     }
+
+    [Test]
+    public void Calculate_OverdueDeadlineGetsBoostedUrgency()
+    {
+        var settings = new AppSettings();
+
+        var overdueTask = new TaskItem
+        {
+            Title = "Catch up on filing",
+            Importance = 2,
+            Deadline = DefaultNow.AddHours(-5).UtcDateTime,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(overdueTask, DefaultNow, settings);
+
+        double expectedBase = 40.0 * 0.75; // default urgency weight * deadline share
+        Assert.That(score.WeightedDeadlineUrgency, Is.GreaterThan(expectedBase),
+            "Overdue work should receive an urgency boost above the base allocation.");
+    }
+
+    [Test]
+    public void Calculate_DailyRepeatUrgencyReflectsRecency()
+    {
+        var settings = new AppSettings
+        {
+            RepeatUrgencyPenalty = 1.0,
+            StreakBias = 0.0
+        };
+
+        var recentlyDone = new TaskItem
+        {
+            Title = "Journal entry",
+            Importance = 3,
+            Repeat = RepeatType.Daily,
+            LastDoneAt = DefaultNow.AddHours(1).UtcDateTime,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var overdue = new TaskItem
+        {
+            Title = "Daily inbox zero",
+            Importance = 3,
+            Repeat = RepeatType.Daily,
+            LastDoneAt = DefaultNow.AddHours(-30).UtcDateTime,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        ImportanceUrgencyScore recentScore = ImportanceUrgencyCalculator.Calculate(recentlyDone, DefaultNow, settings);
+        ImportanceUrgencyScore overdueScore = ImportanceUrgencyCalculator.Calculate(overdue, DefaultNow, settings);
+
+        Assert.That(recentScore.WeightedRepeatUrgency, Is.EqualTo(1.0).Within(1e-6));
+        Assert.That(overdueScore.WeightedRepeatUrgency, Is.GreaterThan(recentScore.WeightedRepeatUrgency));
+    }
+
+    [Test]
+    public void Calculate_IntervalRepeatAccruesOverdueUrgency()
+    {
+        var settings = new AppSettings
+        {
+            RepeatUrgencyPenalty = 1.0,
+            StreakBias = 0.0
+        };
+
+        var intervalTask = new TaskItem
+        {
+            Title = "Deep system audit",
+            Importance = 3,
+            Repeat = RepeatType.Interval,
+            IntervalDays = 2,
+            LastDoneAt = DefaultNow.AddDays(-6).UtcDateTime,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(intervalTask, DefaultNow, settings);
+
+        double overdueFloor = 40.0 * 0.25 * 0.6; // base interval urgency when just due
+        Assert.That(score.WeightedRepeatUrgency, Is.GreaterThan(overdueFloor));
+        Assert.That(score.CombinedScore, Is.GreaterThan(0.0));
+    }
 }

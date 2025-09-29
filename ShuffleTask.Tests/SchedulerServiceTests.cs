@@ -1,7 +1,9 @@
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
+using System.Reflection;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Tests;
@@ -142,6 +144,101 @@ public class SchedulerServiceTests
         var picked = SchedulerService.PickNextTask(new[] { paused, offHours }, settings, DefaultNow, deterministic: true);
 
         Assert.That(picked, Is.Null);
+    }
+
+    [Test]
+    public void PickNextTask_ReturnsNullWhenTaskCollectionIsNull()
+    {
+        var settings = new AppSettings();
+
+        TaskItem? picked = SchedulerService.PickNextTask(null!, settings, DefaultNow, deterministic: true);
+
+        Assert.That(picked, Is.Null);
+    }
+
+    [Test]
+    public void PickNextTask_NonDeterministicPrefersHigherScoreEvenWithJitter()
+    {
+        var settings = new AppSettings
+        {
+            StableRandomnessPerDay = false,
+            StreakBias = 0.0
+        };
+
+        var highPriority = new TaskItem
+        {
+            Id = "high",
+            Title = "Critical bug",
+            Importance = 5,
+            Deadline = DefaultNow.AddHours(2),
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var lowPriority = new TaskItem
+        {
+            Id = "low",
+            Title = "Inbox grooming",
+            Importance = 1,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        TaskItem? picked = SchedulerService.PickNextTask(new[] { lowPriority, highPriority }, settings, DefaultNow, deterministic: false);
+
+        Assert.That(picked, Is.EqualTo(highPriority));
+    }
+
+    [Test]
+    public void PickNextTask_StableRandomnessProducesConsistentOrderingPerDay()
+    {
+        var settings = new AppSettings
+        {
+            StableRandomnessPerDay = true,
+            StreakBias = 0.0
+        };
+
+        var taskA = new TaskItem
+        {
+            Id = "A",
+            Title = "Even odds A",
+            Importance = 3,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var taskB = new TaskItem
+        {
+            Id = "B",
+            Title = "Even odds B",
+            Importance = 3,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any
+        };
+
+        var now = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+        ResetStableSampleSequence();
+        TaskItem? firstPick = SchedulerService.PickNextTask(new[] { taskA, taskB }, settings, now, deterministic: false);
+        ResetStableSampleSequence();
+        TaskItem? repeatPick = SchedulerService.PickNextTask(new[] { taskA, taskB }, settings, now, deterministic: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstPick, Is.Not.Null);
+            Assert.That(repeatPick, Is.Not.Null);
+            Assert.That(firstPick!.Id, Is.EqualTo(repeatPick!.Id),
+                "Resetting the stable sample sequence should reproduce the same ordering for the day.");
+        });
+
+        ResetStableSampleSequence();
+    }
+
+    private static void ResetStableSampleSequence()
+    {
+        var type = typeof(UtilityMethods);
+        type.GetField("stableSampleSeed", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, int.MinValue);
+        type.GetField("stableSampleIndex", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, 0);
     }
 
     [Test]
