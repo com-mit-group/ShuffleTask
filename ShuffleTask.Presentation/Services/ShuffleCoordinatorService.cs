@@ -375,6 +375,16 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
+        // Guard: Prevent auto-shuffle from replacing an already active task.
+        // This ensures that once a task is active, it remains active until the user
+        // explicitly marks it done, snoozes it, or manually shuffles to a different task.
+        // This guard only affects automatic shuffles; manual shuffles via UI are not blocked.
+        if (HasActiveTask())
+        {
+            Debug.WriteLine("ShuffleCoordinatorService: Auto-shuffle blocked - active task already exists");
+            return false;
+        }
+
         DateTimeOffset now = GetCurrentInstant();
         ResetDailyCountIfNeeded(now);
 
@@ -599,6 +609,20 @@ public class ShuffleCoordinatorService : IDisposable
         int seconds = Math.Max(1, settings.ReminderMinutes) * 60;
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
         Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
+    }
+
+    /// <summary>
+    /// Checks if there is currently an active task based on stored preferences.
+    /// A task is considered active if both the task ID exists and there is remaining time > 0.
+    /// </summary>
+    /// <returns>True if an active task exists; otherwise, false.</returns>
+    private static bool HasActiveTask()
+    {
+        string currentTaskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
+        int remainingSeconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
+        
+        // Consider a task active if both the task ID exists and there's remaining time
+        return !string.IsNullOrEmpty(currentTaskId) && remainingSeconds > 0;
     }
 
     private static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle()
