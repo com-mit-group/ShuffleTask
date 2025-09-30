@@ -1,5 +1,30 @@
 # ShuffleTask
 
+A task prioritization and scheduling system that helps you focus by intelligently selecting what to work on next.
+
+## Architecture Overview
+
+ShuffleTask follows a clean layered architecture with structured logging and consistent state management. See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.
+
+### Core Flows
+
+**Task Selection Flow:**
+```
+Tasks → Filter (Active, Allowed Time) → Score → Weighted Selection → Timer/Notification
+```
+
+**Task Lifecycle:**
+```
+Active ⟷ Snoozed ⟷ Completed
+   ↑                    ↓
+   └── (Auto-resume) ────┘
+```
+
+**Notification Pipeline:**
+```
+Timer → Platform Notification → Fallback Alert → Logging
+```
+
 ## Prioritization formula
 
 ShuffleTask ranks tasks by combining weighted importance, urgency, and a size-aware multiplier:

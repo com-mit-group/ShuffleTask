@@ -15,9 +15,10 @@ public class StorageService : IStorageService
 
     private readonly TimeProvider _clock;
     private readonly string _dbPath;
+    private readonly IShuffleLogger? _logger;
     private SQLiteAsyncConnection? _db;
 
-    public StorageService(TimeProvider clock, string databasePath)
+    public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         if (string.IsNullOrWhiteSpace(databasePath))
@@ -26,6 +27,7 @@ public class StorageService : IStorageService
         }
 
         _dbPath = databasePath;
+        _logger = logger;
     }
 
     public async Task InitializeAsync()
@@ -144,6 +146,7 @@ public class StorageService : IStorageService
     {
         TaskItem? updated = null;
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        string? originalStatus = null;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -153,6 +156,7 @@ public class StorageService : IStorageService
                 return;
             }
 
+            originalStatus = existing.Status.ToString();
             DateTime doneAt = EnsureUtc(nowUtc);
             existing.LastDoneAt = doneAt;
             existing.CompletedAt = doneAt;
@@ -163,6 +167,11 @@ public class StorageService : IStorageService
             conn.Update(existing);
             updated = existing.ToDomain();
         });
+
+        if (updated != null && originalStatus != null)
+        {
+            _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
+        }
 
         return updated;
     }
@@ -176,6 +185,7 @@ public class StorageService : IStorageService
 
         TaskItem? updated = null;
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        string? originalStatus = null;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -185,6 +195,7 @@ public class StorageService : IStorageService
                 return;
             }
 
+            originalStatus = existing.Status.ToString();
             DateTime until = EnsureUtc(nowUtc.Add(duration));
             existing.Status = TaskLifecycleStatus.Snoozed;
             existing.SnoozedUntil = until;
@@ -195,12 +206,18 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
+        if (updated != null && originalStatus != null)
+        {
+            _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
+        }
+
         return updated;
     }
 
     public async Task<TaskItem?> ResumeTaskAsync(string id)
     {
         TaskItem? updated = null;
+        string? originalStatus = null;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -210,10 +227,16 @@ public class StorageService : IStorageService
                 return;
             }
 
+            originalStatus = existing.Status.ToString();
             ApplyResume(existing);
             conn.Update(existing);
             updated = existing.ToDomain();
         });
+
+        if (updated != null && originalStatus != null)
+        {
+            _logger?.LogStateTransition(id, originalStatus, "Active", "Task resumed");
+        }
 
         return updated;
     }
@@ -237,14 +260,17 @@ public class StorageService : IStorageService
             DateTime nextUtc = EnsureUtc(task.NextEligibleAt!.Value);
             if (nextUtc <= nowUtc)
             {
+                string originalStatus = task.Status.ToString();
                 ApplyResume(task);
                 toUpdate.Add(task);
+                _logger?.LogStateTransition(task.Id, originalStatus, "Active", "Auto-resumed due to schedule");
             }
         }
 
         if (toUpdate.Count > 0)
         {
             await Db.UpdateAllAsync(toUpdate);
+            _logger?.LogSyncEvent("AutoResume", $"Resumed {toUpdate.Count} task(s)");
         }
     }
 
