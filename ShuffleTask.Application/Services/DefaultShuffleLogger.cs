@@ -10,6 +10,7 @@ namespace ShuffleTask.Application.Services;
 /// </summary>
 public class DefaultShuffleLogger : IShuffleLogger
 {
+    private const string ClockFormat = "HH:mm:ss.fff";
     private readonly TimeProvider _clock;
 
     public DefaultShuffleLogger(TimeProvider clock)
@@ -19,13 +20,13 @@ public class DefaultShuffleLogger : IShuffleLogger
 
     public void LogTaskSelection(string taskId, string taskTitle, string reason, int candidateCount, TimeSpan nextGap)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         Debug.WriteLine($"[{timestamp}] TASK_SELECTION | TaskId={taskId} | Title=\"{taskTitle}\" | Reason={reason} | Candidates={candidateCount} | NextGap={nextGap:mm\\:ss}");
     }
 
     public void LogTimerEvent(string eventType, string? taskId = null, TimeSpan? duration = null, string? reason = null)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var taskInfo = taskId != null ? $" | TaskId={taskId}" : "";
         var durationInfo = duration.HasValue ? $" | Duration={duration.Value:mm\\:ss}" : "";
         var reasonInfo = reason != null ? $" | Reason={reason}" : "";
@@ -34,14 +35,14 @@ public class DefaultShuffleLogger : IShuffleLogger
 
     public void LogStateTransition(string taskId, string fromStatus, string toStatus, string? reason = null)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var reasonInfo = reason != null ? $" | Reason={reason}" : "";
         Debug.WriteLine($"[{timestamp}] STATE_TRANSITION | TaskId={taskId} | From={fromStatus} | To={toStatus}{reasonInfo}");
     }
 
     public void LogSyncEvent(string eventType, string? details = null, Exception? exception = null)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var detailsInfo = details != null ? $" | Details={details}" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";
         Debug.WriteLine($"[{timestamp}] SYNC_EVENT | Event={eventType}{detailsInfo}{errorInfo}");
@@ -49,7 +50,7 @@ public class DefaultShuffleLogger : IShuffleLogger
 
     public void LogNotification(string notificationType, string title, string? message = null, bool success = true, Exception? exception = null)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var status = success ? "SUCCESS" : "FAILED";
         var messageInfo = message != null ? $" | Message=\"{message}\"" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";
@@ -58,7 +59,7 @@ public class DefaultShuffleLogger : IShuffleLogger
 
     public void LogOperation(LogLevel level, string operation, string? details = null, Exception? exception = null)
     {
-        var timestamp = _clock.GetUtcNow().ToString("HH:mm:ss.fff");
+        var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var levelStr = level.ToString().ToUpper();
         var detailsInfo = details != null ? $" | Details={details}" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";

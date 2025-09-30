@@ -17,7 +17,7 @@ public static class TaskStateValidator
         return task.Status switch
         {
             TaskLifecycleStatus.Active => ValidateActiveState(task),
-            TaskLifecycleStatus.Snoozed => ValidateSnoozedState(task, now),
+            TaskLifecycleStatus.Snoozed => ValidateSnoozedState(task),
             TaskLifecycleStatus.Completed => ValidateCompletedState(task),
             _ => false
         };
@@ -59,7 +59,7 @@ public static class TaskStateValidator
         return task.SnoozedUntil == null && task.CompletedAt == null;
     }
 
-    private static bool ValidateSnoozedState(TaskItem task, DateTimeOffset now)
+    private static bool ValidateSnoozedState(TaskItem task)
     {
         // Snoozed tasks should have a snooze timestamp and NextEligibleAt
         return task.SnoozedUntil.HasValue 
