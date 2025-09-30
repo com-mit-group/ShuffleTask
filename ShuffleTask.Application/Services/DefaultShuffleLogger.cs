@@ -21,7 +21,7 @@ public class DefaultShuffleLogger : IShuffleLogger
     public void LogTaskSelection(string taskId, string taskTitle, string reason, int candidateCount, TimeSpan nextGap)
     {
         var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
-        Debug.WriteLine($"[{timestamp}] TASK_SELECTION | TaskId={taskId} | Title=\"{taskTitle}\" | Reason={reason} | Candidates={candidateCount} | NextGap={nextGap:mm\\:ss}");
+        Trace.WriteLine($"[{timestamp}] TASK_SELECTION | TaskId={taskId} | Title=\"{taskTitle}\" | Reason={reason} | Candidates={candidateCount} | NextGap={nextGap:mm\\:ss}");
     }
 
     public void LogTimerEvent(string eventType, string? taskId = null, TimeSpan? duration = null, string? reason = null)
@@ -30,14 +30,14 @@ public class DefaultShuffleLogger : IShuffleLogger
         var taskInfo = taskId != null ? $" | TaskId={taskId}" : "";
         var durationInfo = duration.HasValue ? $" | Duration={duration.Value:mm\\:ss}" : "";
         var reasonInfo = reason != null ? $" | Reason={reason}" : "";
-        Debug.WriteLine($"[{timestamp}] TIMER_EVENT | Event={eventType}{taskInfo}{durationInfo}{reasonInfo}");
+        Trace.WriteLine($"[{timestamp}] TIMER_EVENT | Event={eventType}{taskInfo}{durationInfo}{reasonInfo}");
     }
 
     public void LogStateTransition(string taskId, string fromStatus, string toStatus, string? reason = null)
     {
         var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var reasonInfo = reason != null ? $" | Reason={reason}" : "";
-        Debug.WriteLine($"[{timestamp}] STATE_TRANSITION | TaskId={taskId} | From={fromStatus} | To={toStatus}{reasonInfo}");
+        Trace.WriteLine($"[{timestamp}] STATE_TRANSITION | TaskId={taskId} | From={fromStatus} | To={toStatus}{reasonInfo}");
     }
 
     public void LogSyncEvent(string eventType, string? details = null, Exception? exception = null)
@@ -45,7 +45,7 @@ public class DefaultShuffleLogger : IShuffleLogger
         var timestamp = _clock.GetUtcNow().ToString(ClockFormat);
         var detailsInfo = details != null ? $" | Details={details}" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";
-        Debug.WriteLine($"[{timestamp}] SYNC_EVENT | Event={eventType}{detailsInfo}{errorInfo}");
+        Trace.WriteLine($"[{timestamp}] SYNC_EVENT | Event={eventType}{detailsInfo}{errorInfo}");
     }
 
     public void LogNotification(string notificationType, string title, string? message = null, bool success = true, Exception? exception = null)
@@ -54,7 +54,7 @@ public class DefaultShuffleLogger : IShuffleLogger
         var status = success ? "SUCCESS" : "FAILED";
         var messageInfo = message != null ? $" | Message=\"{message}\"" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";
-        Debug.WriteLine($"[{timestamp}] NOTIFICATION | Type={notificationType} | Title=\"{title}\" | Status={status}{messageInfo}{errorInfo}");
+        Trace.WriteLine($"[{timestamp}] NOTIFICATION | Type={notificationType} | Title=\"{title}\" | Status={status}{messageInfo}{errorInfo}");
     }
 
     public void LogOperation(LogLevel level, string operation, string? details = null, Exception? exception = null)
@@ -63,6 +63,6 @@ public class DefaultShuffleLogger : IShuffleLogger
         var levelStr = level.ToString().ToUpper();
         var detailsInfo = details != null ? $" | Details={details}" : "";
         var errorInfo = exception != null ? $" | Error={exception.Message}" : "";
-        Debug.WriteLine($"[{timestamp}] {levelStr} | Operation={operation}{detailsInfo}{errorInfo}");
+        Trace.WriteLine($"[{timestamp}] {levelStr} | Operation={operation}{detailsInfo}{errorInfo}");
     }
 }

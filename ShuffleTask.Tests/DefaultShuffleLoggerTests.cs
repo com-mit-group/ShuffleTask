@@ -5,8 +5,6 @@ using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using ShuffleTask.Application.Services;
 
-using Debug = System.Diagnostics.Debug;
-
 namespace ShuffleTask.Tests;
 
 [TestFixture]
@@ -34,7 +32,7 @@ public class DefaultShuffleLoggerTests
         using var writer = new StringWriter();
         using var listener = new TextWriterTraceListener(writer);
 
-        Debug.Listeners.Add(listener);
+        Trace.Listeners.Add(listener);
 
         try
         {
@@ -49,11 +47,11 @@ public class DefaultShuffleLoggerTests
             logger.LogOperation(LogLevel.Warning, "Cleanup", "pruned backlog", new Exception("io"));
             logger.LogOperation(LogLevel.Information, "Heartbeat");
 
-            Debug.Flush();
+            Trace.Flush();
         }
         finally
         {
-            Debug.Listeners.Remove(listener);
+            Trace.Listeners.Remove(listener);
         }
 
         var output = writer.ToString();
