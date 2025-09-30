@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using ShuffleTask.Application.Services;
 
+using Debug = System.Diagnostics.Debug;
+
 namespace ShuffleTask.Tests;
 
 [TestFixture]
