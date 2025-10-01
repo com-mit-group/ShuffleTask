@@ -71,6 +71,7 @@ jobs:
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
           -c Release
           -f net8.0-android
+          /p:AndroidPackageFormat=apk
           -o ./artifacts/android
 
       - name: Normalize artifact names
