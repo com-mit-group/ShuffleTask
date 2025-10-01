@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branchName: ${{ steps.gitversion.outputs.branchName }}
-      semVer: ${{ steps.gitversion.outputs.semVer }}
+      semVer: ${{ steps.gitversion.outputs.majorMinorPatch }}
       sha: ${{ steps.gitversion.outputs.sha }}
       nugetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}
       assemblySemFileVer: ${{ steps.gitversion.outputs.assemblySemFileVer }}
@@ -291,8 +291,7 @@ jobs:
     needs: [gitVersion, buildAndTestWithoutGUI, buildAndTestGUI]
     if:  |
       (needs.buildAndTestGUI.result == 'skipped' || needs.buildAndTestGUI.result == 'success') &&
-      contains(needs.gitVersion.outputs.branchName, 'main') &&
-      !contains(needs.gitVersion.outputs.semVer, '-ci')
+      contains(needs.gitVersion.outputs.branchName, 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: write
