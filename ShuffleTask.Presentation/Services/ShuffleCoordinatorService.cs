@@ -375,6 +375,8 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
+        DateTimeOffset now = GetCurrentInstant();
+
         // Guard: Prevent auto-shuffle from replacing an already active task.
         // This ensures that once a task is active, it remains active until the user
         // explicitly marks it done, snoozes it, or manually shuffles to a different task.
@@ -382,10 +384,11 @@ public class ShuffleCoordinatorService : IDisposable
         if (HasActiveTask())
         {
             Debug.WriteLine("ShuffleCoordinatorService: Auto-shuffle blocked - active task already exists");
+            DateTimeOffset resumeAt = ComputeNextTarget(now, settings);
+            StartTimer(resumeAt, taskId);
             return false;
         }
 
-        DateTimeOffset now = GetCurrentInstant();
         ResetDailyCountIfNeeded(now);
 
         if (HandleQuietHoursOrLimit(settings, now, taskId))
