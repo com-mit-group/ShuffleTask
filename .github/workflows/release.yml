@@ -49,10 +49,10 @@ jobs:
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
-            Write-Error "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
+            throw "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
           }
           if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_B64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
-            Write-Error "Android signing secrets missing. After generating your keystore (.jks/.keystore), base64-encode it into ANDROID_KEYSTORE and place the password in ANDROID_KEY_PASS."
+            throw "Android signing secrets missing. After generating your keystore (.jks/.keystore), base64-encode it into ANDROID_KEYSTORE and place the password in ANDROID_KEY_PASS."
           }
 
       - name: Build Windows self-contained executable
