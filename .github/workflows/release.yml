@@ -79,10 +79,10 @@ jobs:
         shell: pwsh
         run: |
           $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $winOutput) { Write-Error 'Windows publish output missing expected .exe file.' }
+          if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
           Rename-Item -Path $winOutput.FullName -NewName 'ShuffleTask.exe' -Force
           $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $apkOutput) { Write-Error 'Android publish output missing expected .apk file.' }
+          if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
           Rename-Item -Path $apkOutput.FullName -NewName 'ShuffleTask.apk' -Force
 
       - name: Prepare Windows signing certificate
@@ -112,15 +112,35 @@ jobs:
           /fd sha256
           artifacts\win\ShuffleTask.exe
 
-      - name: Sign Android APK
-        # Sign the Android package with jarsigner.
+      - name: Align and sign Android APK
+        # Align the APK and sign it with apksigner to produce v2/v3 signatures.
         shell: pwsh
         run: |
-          $apkPath = Resolve-Path 'artifacts/android/ShuffleTask.apk'
+          $apkPath = (Resolve-Path 'artifacts/android/ShuffleTask.apk').ProviderPath
+          $apkDirectory = Split-Path $apkPath -Parent
+          $androidSdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $null }
+          if (-not $androidSdkRoot) { throw 'ANDROID_SDK_ROOT/ANDROID_HOME environment variable is not set.' }
+
+          $buildToolsDir = Get-ChildItem -Path (Join-Path $androidSdkRoot 'build-tools') -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $buildToolsDir) { throw 'Android SDK build-tools directory could not be located.' }
+
+          $zipalignPath = Join-Path $buildToolsDir.FullName 'zipalign.exe'
+          if (-not (Test-Path $zipalignPath)) { throw "zipalign tool not found at $zipalignPath" }
+
+          $alignedApkPath = Join-Path $apkDirectory 'ShuffleTask-aligned.apk'
+          & $zipalignPath -f -p 4 $apkPath $alignedApkPath
+          Move-Item $alignedApkPath $apkPath -Force
+
+          $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
+          if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
+
           $alias = if ($env:ANDROID_KEY_ALIAS) { $env:ANDROID_KEY_ALIAS } else { 'android' }
           $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
           Set-Content -Path $storePassFile -Value $env:ANDROID_KEY_PASS -NoNewline
-          jarsigner -keystore "$env:ANDROID_KEYSTORE_PATH" -storepass:file "$storePassFile" -keypass:file "$storePassFile" "$apkPath" $alias
+
+          & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
+
+          & $apksignerPath verify --print-certs $apkPath
           Remove-Item $storePassFile -Force
 
       - name: Create GitHub Release
