@@ -291,7 +291,8 @@ jobs:
     needs: [gitVersion, buildAndTestWithoutGUI, buildAndTestGUI]
     if:  |
       (needs.buildAndTestGUI.result == 'skipped' || needs.buildAndTestGUI.result == 'success') &&
-      contains(needs.gitVersion.outputs.branchName, 'main')
+      contains(needs.gitVersion.outputs.branchName, 'main') &&
+      !contains(needs.gitVersion.outputs.semVer, '-ci')
     runs-on: ubuntu-latest
     permissions:
       contents: write
