@@ -40,65 +40,86 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           echo "Checking for existing release for version: $VERSION"
 
-          # Check if public release already exists
           if gh release view "$VERSION" &>/dev/null; then
             echo "✓ Release already exists for version $VERSION"
             echo "exists=true" >> $GITHUB_OUTPUT
-            exit 0
+          else
+            echo "No existing release found"
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-          echo "No existing release found"
-          echo "exists=false" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if signed artifacts exist
         if: steps.check-release.outputs.exists == 'false'
         id: check-signed
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "Checking for signed artifacts for version: $VERSION"
-
-          # Check if signed artifacts exist
-          if ! gh release view "signed-$VERSION" &>/dev/null; then
-            echo "✗ Signed artifacts not found for version $VERSION"
-            echo "Please run the Sign Artifacts workflow first with version $VERSION"
-            exit 1
-          fi
-
-          echo "✓ Signed artifacts found for version $VERSION"
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $version = "${{ github.event.inputs.version }}"
+          $expected = @(
+            "signed-$version-windows",
+            "signed-$version-android",
+            "signed-$version-metadata"
+          )
+
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $existing = $artifacts | Where-Object { $_.name -in $expected -and $_.expired -eq $false } | Select-Object -ExpandProperty name -Unique
+
+          if ($existing.Count -lt $expected.Count) {
+            Write-Host "✗ Signed artifacts not found for version $version"
+            Write-Host "Ensure the Sign Artifacts workflow has been completed for this version."
+            throw "Signed artifacts missing."
+          }
+
+          Write-Host "✓ Signed artifacts found for version $version"
 
       - name: Download signed artifacts
         if: steps.check-release.outputs.exists == 'false'
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "Downloading signed artifacts for version: $VERSION"
-
-          # Create artifacts directory
-          mkdir -p ./release-artifacts
-
-          # Download artifacts from signed release
-          gh release download "signed-$VERSION" --pattern "*.exe" --dir ./release-artifacts
-          gh release download "signed-$VERSION" --pattern "*.apk" --dir ./release-artifacts
-          gh release download "signed-$VERSION" --pattern "VERSION.txt" --dir ./release-artifacts
-
-          # Verify artifacts were downloaded
-          if [ ! -f ./release-artifacts/*.exe ]; then
-            echo "✗ Windows .exe not found in signed artifacts"
-            exit 1
-          fi
-
-          if [ ! -f ./release-artifacts/*.apk ]; then
-            echo "✗ Android .apk not found in signed artifacts"
-            exit 1
-          fi
-
-          echo "✓ Downloaded signed artifacts:"
-          ls -lh ./release-artifacts/
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $version = "${{ github.event.inputs.version }}"
+          $windowsName = "signed-$version-windows"
+          $androidName = "signed-$version-android"
+          $metadataName = "signed-$version-metadata"
+
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $windowsArtifact = $artifacts | Where-Object { $_.name -eq $windowsName -and $_.expired -eq $false } | Select-Object -First 1
+          $androidArtifact = $artifacts | Where-Object { $_.name -eq $androidName -and $_.expired -eq $false } | Select-Object -First 1
+          $metadataArtifact = $artifacts | Where-Object { $_.name -eq $metadataName -and $_.expired -eq $false } | Select-Object -First 1
+
+          if (-not $windowsArtifact) { throw "Signed Windows artifact $windowsName not found." }
+          if (-not $androidArtifact) { throw "Signed Android artifact $androidName not found." }
+          if (-not $metadataArtifact) { throw "Metadata artifact $metadataName not found." }
+
+          New-Item -ItemType Directory -Force -Path ./release-artifacts | Out-Null
+
+          $winZip = Join-Path (Get-Location) 'signed-windows.zip'
+          $androidZip = Join-Path (Get-Location) 'signed-android.zip'
+          $metadataZip = Join-Path (Get-Location) 'signed-metadata.zip'
+
+          gh api --method GET --header "Accept: application/octet-stream" $windowsArtifact.archive_download_url --output $winZip
+          gh api --method GET --header "Accept: application/octet-stream" $androidArtifact.archive_download_url --output $androidZip
+          gh api --method GET --header "Accept: application/octet-stream" $metadataArtifact.archive_download_url --output $metadataZip
+
+          Expand-Archive -Path $winZip -DestinationPath ./release-artifacts -Force
+          Expand-Archive -Path $androidZip -DestinationPath ./release-artifacts -Force
+          Expand-Archive -Path $metadataZip -DestinationPath ./release-artifacts -Force
+
+          Remove-Item $winZip, $androidZip, $metadataZip -Force
+
+          Get-ChildItem -Path ./release-artifacts
 
       - name: Create release notes
         if: steps.check-release.outputs.exists == 'false'
@@ -107,7 +128,6 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           USER_NOTES="${{ github.event.inputs.notes }}"
 
-          # Create release notes file
           cat > release-notes.md << EOF
           # ShuffleTask v$VERSION
 
@@ -132,69 +152,34 @@ jobs:
 
           echo "Release notes created"
 
-      - name: Tag repository
-        if: steps.check-release.outputs.exists == 'false'
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-
-          # Configure git
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-          # Check if tag already exists
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists"
-          else
-            echo "Creating tag v$VERSION"
-            git tag -a "v$VERSION" -m "Release version $VERSION"
-            git push origin "v$VERSION"
-            echo "✓ Tag v$VERSION created and pushed"
-          fi
-
       - name: Create GitHub Release
         if: steps.check-release.outputs.exists == 'false'
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Creating GitHub release for version: $VERSION"
 
-          # Create the release with signed artifacts
           gh release create "$VERSION" \
             --title "ShuffleTask v$VERSION" \
             --notes-file release-notes.md \
             ./release-artifacts/*.exe \
-            ./release-artifacts/*.apk
+            ./release-artifacts/*.apk \
+            ./release-artifacts/VERSION.txt
 
           echo "✓ Release created successfully"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Mark release status as success
+      - name: Mark release status
         id: release-status
-        if: steps.check-release.outputs.exists == 'false'
+        if: always()
         run: |
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Clean up pre-release artifacts
-        if: steps.check-release.outputs.exists == 'false'
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "Cleaning up intermediate releases..."
-
-          # Delete build and signed pre-releases (optional, can be kept for debugging)
-          if gh release view "build-$VERSION" &>/dev/null; then
-            echo "Deleting build-$VERSION pre-release..."
-            gh release delete "build-$VERSION" --yes --cleanup-tag
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check-release.outputs.exists }}" = "true" ]; then
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
           fi
-
-          if gh release view "signed-$VERSION" &>/dev/null; then
-            echo "Deleting signed-$VERSION pre-release..."
-            gh release delete "signed-$VERSION" --yes --cleanup-tag
-          fi
-
-          echo "✓ Cleanup completed"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Skip message
         if: steps.check-release.outputs.exists == 'true'
@@ -223,7 +208,7 @@ jobs:
             echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "The release is now public and available for download." >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.release.outputs.release-status }}" == "" ]; then
+          elif [ "${{ needs.release.outputs.release-status }}" == "skipped" ]; then
             echo "✓ Release already exists for this version." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
