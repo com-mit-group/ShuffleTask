@@ -99,4 +99,70 @@ public class TimeWindowServiceTests
             Assert.That(outsideResult, Is.EqualTo(TimeSpan.FromHours(1.5)));
         });
     }
+
+    [Test]
+    public void AutoShuffleAllowedNow_RespectsFlagWhenFalse()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var now = LocalDate(2024, 1, 2, 11, 0);
+
+        var task = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Any,
+            AutoShuffleAllowed = false
+        };
+
+        Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, now, settings), Is.False,
+            "Task with AutoShuffleAllowed=false should not be eligible for auto-shuffle");
+    }
+
+    [Test]
+    public void AutoShuffleAllowedNow_WorksWithCustomTimeWindow()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var inside = LocalDate(2024, 1, 2, 11, 0);
+        var outside = LocalDate(2024, 1, 2, 19, 0);
+
+        var task = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Custom,
+            AutoShuffleAllowed = true,
+            CustomStartTime = new TimeSpan(10, 0, 0),
+            CustomEndTime = new TimeSpan(14, 0, 0)
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, inside, settings), Is.True,
+                "Task should be allowed during custom time window");
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, outside, settings), Is.False,
+                "Task should not be allowed outside custom time window");
+        });
+    }
+
+    [Test]
+    public void AutoShuffleAllowedNow_CustomWithNullTimesDefaultsToAllowed()
+    {
+        var settings = new AppSettings();
+        var now = LocalDate(2024, 1, 2, 11, 0);
+
+        var task = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Custom,
+            AutoShuffleAllowed = true,
+            CustomStartTime = null,
+            CustomEndTime = null
+        };
+
+        Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, now, settings), Is.True,
+            "Task with Custom period but null times should default to allowed");
+    }
 }

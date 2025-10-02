@@ -50,7 +50,7 @@ public class SchedulerService : ISchedulerService
             .Where(task => task is not null)
             .Where(task => UtilityMethods.LifecycleEligible(task, now.UtcDateTime))
             .Where(task => !task.Paused)
-            .Where(task => TimeWindowService.AllowedNow(task.AllowedPeriod, now, settings))
+            .Where(task => TimeWindowService.AutoShuffleAllowedNow(task, now, settings))
             .ToList();
 
         if (candidates.Count == 0)
