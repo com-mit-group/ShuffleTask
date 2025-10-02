@@ -9,6 +9,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
@@ -186,7 +187,7 @@ public partial class DashboardViewModel : ObservableObject
 
             BindTask(next);
 
-            var effectiveSettings = GetEffectiveTimerSettings(next, settings);
+            var effectiveSettings = TaskTimerSettings.Resolve(next, settings);
             var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = effectiveSettings;
 
             if (mode == TimerMode.Pomodoro)
@@ -364,7 +365,7 @@ public partial class DashboardViewModel : ObservableObject
         _settings = settings;
         BindTask(task);
 
-        var effectiveSettings = GetEffectiveTimerSettings(task, settings);
+        var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = effectiveSettings;
 
         if (mode == TimerMode.Pomodoro)
@@ -403,20 +404,6 @@ public partial class DashboardViewModel : ObservableObject
     public void ClearActiveTask()
     {
         ShowDefaultState();
-    }
-
-    private (TimerMode mode, int reminderMinutes, int focusMinutes, int breakMinutes, int pomodoroCycles) GetEffectiveTimerSettings(TaskItem task, AppSettings settings)
-    {
-        TimerMode mode = task.CustomTimerMode.HasValue 
-            ? (TimerMode)task.CustomTimerMode.Value 
-            : settings.TimerMode;
-        
-        int reminderMinutes = task.CustomReminderMinutes ?? settings.ReminderMinutes;
-        int focusMinutes = task.CustomFocusMinutes ?? settings.FocusMinutes;
-        int breakMinutes = task.CustomBreakMinutes ?? settings.BreakMinutes;
-        int pomodoroCycles = task.CustomPomodoroCycles ?? settings.PomodoroCycles;
-
-        return (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles);
     }
 
     private void BindTask(TaskItem task)
