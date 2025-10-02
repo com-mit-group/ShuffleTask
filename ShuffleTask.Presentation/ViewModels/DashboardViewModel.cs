@@ -675,6 +675,7 @@ public partial class DashboardViewModel : ObservableObject
             AllowedPeriod.Any => "Any time",
             AllowedPeriod.Work => "Work hours",
             AllowedPeriod.OffWork => "Off hours",
+            AllowedPeriod.Custom => FormatCustomWindow(task),
             _ => "Any time"
         };
 
@@ -707,5 +708,15 @@ public partial class DashboardViewModel : ObservableObject
         Add(Weekdays.Sun, "Sun");
 
         return string.Join(", ", names);
+    }
+
+    private static string FormatCustomWindow(TaskItem task)
+    {
+        if (task.CustomStartTime.HasValue && task.CustomEndTime.HasValue)
+        {
+            return $"Custom hours ({task.CustomStartTime:hh\\:mm}–{task.CustomEndTime:hh\\:mm})";
+        }
+
+        return "Custom hours";
     }
 }

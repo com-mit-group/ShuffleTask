@@ -63,7 +63,7 @@ public static class TimeWindowService
     // Check if current time is within custom hours defined for a task
     private static bool IsWithinCustomHours(DateTimeOffset now, TimeSpan? start, TimeSpan? end)
     {
-        // If custom times are not set, default to allowing
+        // If either custom bound is not set, default to allowing
         if (!start.HasValue || !end.HasValue)
         {
             return true;

@@ -31,6 +31,10 @@ internal sealed class TaskItemRecord : TaskItemData
 
     public TaskItem ToDomain()
     {
+        // Legacy compatibility: builds prior to the AutoShuffleAllowed/Custom window feature
+        // stored OffWork as the integer value 3. After renumbering, 3 now maps to Custom, so
+        // older records deserialize with Custom selected but without explicit hours. Reset them
+        // to OffWork so their scheduling behavior remains unchanged for upgraded installs.
         if (AllowedPeriod == AllowedPeriod.Custom && CustomStartTime is null && CustomEndTime is null)
         {
             AllowedPeriod = AllowedPeriod.OffWork;
