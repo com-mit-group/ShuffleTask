@@ -94,6 +94,11 @@ Tasks progress through well-defined states with structured logging:
 The `SchedulerService` implements intelligent task selection:
 
 1. **Filtering**: Only eligible, unpaused tasks in allowed time windows
+   - Respects `AutoShuffleAllowed` flag to prevent auto-selection of certain tasks
+   - Checks `AllowedPeriod` (Any/Work/OffWork/Custom) with time windows
+   - For Custom periods, validates against task's `CustomStartTime` and `CustomEndTime`
+   - **Note**: Manual shuffle (via UI) always bypasses the `AutoShuffleAllowed` flag and can optionally respect
+     `AllowedPeriod` based on the "Manual shuffle respects allowed hours" setting
 2. **Scoring**: Multi-factor scoring based on:
    - Importance weight (user-defined priority)
    - Urgency weight (deadline proximity, overdue status)
@@ -141,7 +146,9 @@ public enum TaskLifecycleStatus
 
 ### Key Properties
 - **NextEligibleAt**: When snoozed/completed tasks become active again
-- **AllowedPeriod**: Time window constraints (Any/Work/Off/OffWork)
+- **AllowedPeriod**: Time window constraints (Any/Work/OffWork/Custom)
+- **AutoShuffleAllowed**: Flag to control whether auto-shuffle can select this task
+- **CustomStartTime/CustomEndTime**: Custom time ranges when task can be auto-shuffled (used with Custom period)
 - **Repeat**: None/Daily/Weekly/Interval with proper next occurrence calculation
 
 ## Logging Structure
@@ -161,10 +168,12 @@ Structured logging provides comprehensive debugging information:
 ### Task Flow
 1. User creates task → `StorageService.AddTaskAsync()`
 2. Task enters `Active` state, eligible for selection
-3. `SchedulerService.PickNextTask()` selects based on scoring
+3. `SchedulerService.PickNextTask()` selects based on scoring (respects `AutoShuffleAllowed` and time windows)
 4. `ShuffleCoordinatorService` manages timer and notifications
-5. User completes → `StorageService.MarkTaskDoneAsync()` → `Completed` state
-6. If repeating → Auto-transition to `Active` based on schedule
+5. User can manually shuffle to pick a different task. Manual shuffle always ignores `AutoShuffleAllowed` and respects
+   `AllowedPeriod` when the corresponding setting is enabled.
+6. User completes → `StorageService.MarkTaskDoneAsync()` → `Completed` state
+7. If repeating → Auto-transition to `Active` based on schedule
 
 ### Notification Flow  
 1. Timer expires → `ShuffleCoordinatorService.NotifyAsync()`

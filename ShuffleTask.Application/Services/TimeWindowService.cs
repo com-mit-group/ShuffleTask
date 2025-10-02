@@ -35,9 +35,42 @@ public static class TimeWindowService
             AllowedPeriod.Any => true,
             AllowedPeriod.Work => IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             AllowedPeriod.OffWork => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
-            AllowedPeriod.Off => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             _ => true,
         };
+
+    // Check if auto-shuffle is allowed for a specific task at the current time.
+    // Manual shuffle uses a separate candidate pool that always bypasses the AutoShuffleAllowed flag
+    // and may optionally ignore AllowedPeriod based on user settings.
+    public static bool AutoShuffleAllowedNow(TaskItem task, DateTimeOffset now, AppSettings s)
+    {
+        // If task explicitly disallows auto-shuffle, return false
+        if (!task.AutoShuffleAllowed)
+        {
+            return false;
+        }
+
+        // Check the allowed period
+        return task.AllowedPeriod switch
+        {
+            AllowedPeriod.Any => true,
+            AllowedPeriod.Work => IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.OffWork => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
+            AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime),
+            _ => true,
+        };
+    }
+
+    // Check if current time is within custom hours defined for a task
+    private static bool IsWithinCustomHours(DateTimeOffset now, TimeSpan? start, TimeSpan? end)
+    {
+        // If either custom bound is not set, default to allowing
+        if (!start.HasValue || !end.HasValue)
+        {
+            return true;
+        }
+
+        return IsWithinWorkHours(now, start.Value, end.Value);
+    }
 
     // Compute minutes until the next work window boundary (open or close)
     public static TimeSpan UntilNextBoundary(DateTimeOffset now, AppSettings s)

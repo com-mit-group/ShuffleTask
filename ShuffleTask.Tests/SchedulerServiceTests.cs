@@ -108,7 +108,8 @@ public class SchedulerServiceTests
             Title = "Off-hours task",
             Importance = 5,
             Repeat = RepeatType.None,
-            AllowedPeriod = AllowedPeriod.Off
+            AllowedPeriod = AllowedPeriod.OffWork,
+            AutoShuffleAllowed = false
         };
 
         var picked = scheduler.PickNextTask(new[] { paused, offHours, eligible }, settings, DefaultNow);
@@ -138,7 +139,8 @@ public class SchedulerServiceTests
             Title = "Off-hours task",
             Importance = 5,
             Repeat = RepeatType.None,
-            AllowedPeriod = AllowedPeriod.Off
+            AllowedPeriod = AllowedPeriod.OffWork,
+            AutoShuffleAllowed = false
         };
 
         var picked = SchedulerService.PickNextTask(new[] { paused, offHours }, settings, DefaultNow, deterministic: true);
@@ -274,5 +276,72 @@ public class SchedulerServiceTests
         Assert.That(first, Is.EqualTo(second));
         Assert.That(first, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(10)));
         Assert.That(first, Is.LessThanOrEqualTo(TimeSpan.FromMinutes(30)));
+    }
+
+    [Test]
+    public void PickNextTask_RespectsAutoShuffleAllowedFlag()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        var allowedTask = new TaskItem
+        {
+            Id = "allowed",
+            Title = "Auto-shuffle allowed",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            AutoShuffleAllowed = true
+        };
+
+        var disallowedTask = new TaskItem
+        {
+            Id = "disallowed",
+            Title = "Auto-shuffle disallowed",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            AutoShuffleAllowed = false
+        };
+
+        var picked = scheduler.PickNextTask(new[] { disallowedTask, allowedTask }, settings, DefaultNow);
+
+        Assert.That(picked, Is.EqualTo(allowedTask),
+            "Scheduler should skip tasks with AutoShuffleAllowed = false");
+    }
+
+    [Test]
+    public void PickNextTask_RespectsCustomTimeWindow()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        // DefaultNow is 9:00 AM
+        var insideWindow = new TaskItem
+        {
+            Id = "inside",
+            Title = "Inside custom window",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Custom,
+            CustomStartTime = new TimeSpan(8, 0, 0),  // 8 AM
+            CustomEndTime = new TimeSpan(10, 0, 0)    // 10 AM
+        };
+
+        var outsideWindow = new TaskItem
+        {
+            Id = "outside",
+            Title = "Outside custom window",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Custom,
+            CustomStartTime = new TimeSpan(14, 0, 0), // 2 PM
+            CustomEndTime = new TimeSpan(16, 0, 0)    // 4 PM
+        };
+
+        var picked = scheduler.PickNextTask(new[] { outsideWindow, insideWindow }, settings, DefaultNow);
+
+        Assert.That(picked, Is.EqualTo(insideWindow),
+            "Scheduler should only pick tasks within their custom time window");
     }
 }
