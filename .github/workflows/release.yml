@@ -101,6 +101,31 @@ jobs:
           [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_B64))
           "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Ensure signtool is available
+        shell: pwsh
+        run: |
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            Write-Host "signtool.exe not found. Attempting to add Windows SDK signtool to PATH..."
+            $sdkDirs = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory -ErrorAction SilentlyContinue
+            $signtoolPath = $null
+            foreach ($sdkDir in $sdkDirs) {
+              $possible = Join-Path $sdkDir.FullName 'x64\signtool.exe'
+              if (Test-Path $possible) {
+                $signtoolPath = Split-Path $possible -Parent
+                break
+              }
+            }
+            if ($signtoolPath) {
+              echo $signtoolPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              Write-Host "Added $signtoolPath to PATH."
+            } else {
+              throw "signtool.exe could not be found or installed automatically."
+            }
+          } else {
+            Write-Host "signtool.exe found: $($signtool.Source)"
+          }
+
       - name: Sign Windows executable
         # Apply Authenticode signature to the Windows binary.
         run: >-
