@@ -59,6 +59,16 @@ public class SchedulerService : ISchedulerService
             return null;
         }
 
+        // Check for cut-in-line tasks first
+        var cutInLineTask = candidates
+            .FirstOrDefault(task => task.CutInLineMode != CutInLineMode.None);
+        
+        if (cutInLineTask != null)
+        {
+            logger?.LogTaskSelection(cutInLineTask.Id, cutInLineTask.Title, "Task selected via cut-in-line priority", candidates.Count, TimeSpan.Zero);
+            return cutInLineTask;
+        }
+
         List<ScoredTask> scored = ComputeScores(settings, now, deterministic, candidates);
         var selected = GetBestScoredTask(settings, now, deterministic, scored);
         

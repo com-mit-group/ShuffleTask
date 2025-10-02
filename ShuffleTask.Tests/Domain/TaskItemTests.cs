@@ -108,6 +108,7 @@ public class TaskItemTests
             CustomFocusMinutes = 25,
             CustomBreakMinutes = 5,
             CustomPomodoroCycles = 4
+            CutInLineMode = CutInLineMode.Once
         };
     }
 
@@ -137,6 +138,7 @@ public class TaskItemTests
             Assert.That(actual.CustomFocusMinutes, Is.EqualTo(expected.CustomFocusMinutes));
             Assert.That(actual.CustomBreakMinutes, Is.EqualTo(expected.CustomBreakMinutes));
             Assert.That(actual.CustomPomodoroCycles, Is.EqualTo(expected.CustomPomodoroCycles));
+            Assert.That(actual.CutInLineMode, Is.EqualTo(expected.CutInLineMode));
         });
     }
 

@@ -35,3 +35,10 @@ public enum TaskLifecycleStatus
     Snoozed = 1,
     Completed = 2
 }
+
+public enum CutInLineMode
+{
+    None = 0,
+    Once = 1,
+    UntilCompletion = 2
+}

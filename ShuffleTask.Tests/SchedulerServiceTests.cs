@@ -344,4 +344,137 @@ public class SchedulerServiceTests
         Assert.That(picked, Is.EqualTo(insideWindow),
             "Scheduler should only pick tasks within their custom time window");
     }
+
+    [Test]
+    public void PickNextTask_SelectsCutInLineTaskWithOnceMode()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        var normalTask = new TaskItem
+        {
+            Id = "normal",
+            Title = "Normal high priority task",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.None
+        };
+
+        var cutInLineTask = new TaskItem
+        {
+            Id = "cutInLine",
+            Title = "Cut-in-line task",
+            Importance = 1,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.Once
+        };
+
+        var picked = scheduler.PickNextTask(new[] { normalTask, cutInLineTask }, settings, DefaultNow);
+
+        Assert.That(picked, Is.Not.Null);
+        Assert.That(picked!.Id, Is.EqualTo("cutInLine"),
+            "Cut-in-line task should be selected even with lower importance.");
+    }
+
+    [Test]
+    public void PickNextTask_SelectsCutInLineTaskWithUntilCompletionMode()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        var normalTask = new TaskItem
+        {
+            Id = "normal",
+            Title = "Normal high priority task",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.None
+        };
+
+        var cutInLineTask = new TaskItem
+        {
+            Id = "cutInLine",
+            Title = "Cut-in-line task until completion",
+            Importance = 2,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.UntilCompletion
+        };
+
+        var picked = scheduler.PickNextTask(new[] { normalTask, cutInLineTask }, settings, DefaultNow);
+
+        Assert.That(picked, Is.Not.Null);
+        Assert.That(picked!.Id, Is.EqualTo("cutInLine"),
+            "Cut-in-line task with UntilCompletion mode should be selected.");
+    }
+
+    [Test]
+    public void PickNextTask_NormalBehaviorWhenNoCutInLineTasks()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        var highPriorityTask = new TaskItem
+        {
+            Id = "high",
+            Title = "High priority task",
+            Importance = 5,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.None
+        };
+
+        var lowPriorityTask = new TaskItem
+        {
+            Id = "low",
+            Title = "Low priority task",
+            Importance = 1,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.None
+        };
+
+        var picked = scheduler.PickNextTask(new[] { lowPriorityTask, highPriorityTask }, settings, DefaultNow);
+
+        Assert.That(picked, Is.Not.Null);
+        Assert.That(picked!.Id, Is.EqualTo("high"),
+            "Without cut-in-line tasks, scheduler should use normal scoring.");
+    }
+
+    [Test]
+    public void PickNextTask_CutInLineTaskMustBeEligible()
+    {
+        var settings = new AppSettings { StableRandomnessPerDay = true };
+        var scheduler = new SchedulerService(deterministic: true);
+
+        var normalTask = new TaskItem
+        {
+            Id = "normal",
+            Title = "Normal task",
+            Importance = 3,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            CutInLineMode = CutInLineMode.None
+        };
+
+        var pausedCutInLineTask = new TaskItem
+        {
+            Id = "pausedCutInLine",
+            Title = "Paused cut-in-line task",
+            Importance = 1,
+            Repeat = RepeatType.None,
+            AllowedPeriod = AllowedPeriod.Any,
+            Paused = true,
+            CutInLineMode = CutInLineMode.Once
+        };
+
+        var picked = scheduler.PickNextTask(new[] { normalTask, pausedCutInLineTask }, settings, DefaultNow);
+
+        Assert.That(picked, Is.Not.Null);
+        Assert.That(picked!.Id, Is.EqualTo("normal"),
+            "Paused cut-in-line task should not be selected.");
+    }
 }

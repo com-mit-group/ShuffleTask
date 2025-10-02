@@ -406,6 +406,7 @@ public class ShuffleCoordinatorService : IDisposable
         ClearPendingShuffle();
         var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
+        await HandleCutInLineModeAsync(task).ConfigureAwait(false);
         await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
@@ -461,6 +462,17 @@ public class ShuffleCoordinatorService : IDisposable
 
         int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+    }
+
+    private async Task HandleCutInLineModeAsync(TaskItem task)
+    {
+        if (task.CutInLineMode == CutInLineMode.Once)
+        {
+            // Clear "Once" mode after the task has been selected
+            task.CutInLineMode = CutInLineMode.None;
+            await _storage.UpdateTaskAsync(task).ConfigureAwait(false);
+        }
+        // UntilCompletion mode is handled when the task is marked done
     }
 
     private static bool ShouldAutoShuffle(AppSettings settings)

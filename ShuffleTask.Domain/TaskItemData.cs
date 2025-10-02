@@ -53,6 +53,8 @@ public abstract class TaskItemData
 
     public int? CustomPomodoroCycles { get; set; }
 
+    public CutInLineMode CutInLineMode { get; set; }
+
     protected void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -82,5 +84,6 @@ public abstract class TaskItemData
         CustomFocusMinutes = source.CustomFocusMinutes;
         CustomBreakMinutes = source.CustomBreakMinutes;
         CustomPomodoroCycles = source.CustomPomodoroCycles;
+        CutInLineMode = source.CutInLineMode;
     }
 }
