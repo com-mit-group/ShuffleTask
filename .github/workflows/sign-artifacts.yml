@@ -112,22 +112,45 @@ jobs:
           if (-not $windowsArtifact) { throw "Windows artifact $windowsName not found." }
           if (-not $androidArtifact) { throw "Android artifact $androidName not found." }
 
-          New-Item -ItemType Directory -Force -Path ./artifacts/win | Out-Null
-          New-Item -ItemType Directory -Force -Path ./artifacts/android | Out-Null
+          $downloadRoot = Join-Path (Get-Location) 'artifact-downloads'
+          if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
 
-          $winZip = Join-Path (Get-Location) 'windows-artifact.zip'
-          $androidZip = Join-Path (Get-Location) 'android-artifact.zip'
+          $winExtract = Join-Path $downloadRoot 'windows'
+          $androidExtract = Join-Path $downloadRoot 'android'
+          New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
+          New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
+
+          $winZip = Join-Path $downloadRoot 'windows-artifact.zip'
+          $androidZip = Join-Path $downloadRoot 'android-artifact.zip'
 
           gh api --method GET --header "Accept: application/octet-stream" $windowsArtifact.archive_download_url --output $winZip
           gh api --method GET --header "Accept: application/octet-stream" $androidArtifact.archive_download_url --output $androidZip
 
-          Expand-Archive -Path $winZip -DestinationPath ./artifacts/win -Force
-          Expand-Archive -Path $androidZip -DestinationPath ./artifacts/android -Force
+          Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
+          Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
+
+          $winSource = Join-Path (Join-Path $winExtract 'artifacts') 'win'
+          $androidSource = Join-Path (Join-Path $androidExtract 'artifacts') 'android'
+
+          if (-not (Test-Path $winSource)) { throw "Windows artifact contents could not be located at $winSource" }
+          if (-not (Test-Path $androidSource)) { throw "Android artifact contents could not be located at $androidSource" }
+
+          $artifactsRoot = Join-Path (Get-Location) 'artifacts'
+          if (Test-Path $artifactsRoot) { Remove-Item $artifactsRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
+
+          Copy-Item -Path $winSource -Destination $artifactsRoot -Recurse -Force
+          Copy-Item -Path $androidSource -Destination $artifactsRoot -Recurse -Force
 
           Remove-Item $winZip, $androidZip -Force
+          Remove-Item $downloadRoot -Recurse -Force
 
-          $winExe = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
-          $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
+          $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
+          if (-not $winExe) {
+            $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
+          }
+          $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
 
           if (-not $winExe) { throw "Windows .exe not found in downloaded artifacts" }
           if (-not $androidApk) { throw "Android .apk not found in downloaded artifacts" }
@@ -197,9 +220,12 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
+          $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
+          if (-not $exeFile) {
+            $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
+          }
 
-          Write-Host "Signing Windows executable: $($exeFile.Name)"
+          Write-Host "Signing Windows executable: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $exeFile.FullName))"
 
           signtool sign `
             /f "$env:WINDOWS_CERT_PATH" `
@@ -214,15 +240,18 @@ jobs:
           }
 
           $signedName = "ShuffleTask-$version.exe"
+          $signedPath = Join-Path (Split-Path $exeFile.FullName -Parent) $signedName
+          if (Test-Path $signedPath) { Remove-Item $signedPath -Force }
           Rename-Item -Path $exeFile.FullName -NewName $signedName -Force
-          Write-Host "✓ Signed and renamed to: $signedName"
+          $relativeSigned = [System.IO.Path]::GetRelativePath((Get-Location).Path, $signedPath)
+          Write-Host "✓ Signed and renamed to: $relativeSigned"
 
       - name: Align and sign Android APK
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
+          $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
           $apkPath = $apkFile.FullName
           $apkDirectory = Split-Path $apkPath -Parent
 
@@ -259,7 +288,8 @@ jobs:
 
           $signedName = "ShuffleTask-$version.apk"
           Rename-Item -Path $apkPath -NewName $signedName -Force
-          Write-Host "✓ Signed and renamed to: $signedName"
+          $relativeApk = [System.IO.Path]::GetRelativePath((Get-Location).Path, (Join-Path $apkDirectory $signedName))
+          Write-Host "✓ Signed and renamed to: $relativeApk"
 
       - name: Write metadata
         if: steps.check-signed.outputs.exists == 'false'
@@ -287,7 +317,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: signed-${{ github.event.inputs.version }}-windows
-          path: artifacts/win/*.exe
+          path: artifacts/win
           if-no-files-found: error
 
       - name: Upload signed Android artifact
