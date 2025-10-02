@@ -8,4 +8,5 @@ internal static class PreferenceKeys
     public const string PendingShuffleTaskId = "pref.pendingTaskId";
     public const string ShuffleCountDate = "pref.shuffleCountDate";
     public const string ShuffleCount = "pref.shuffleCount";
+    public const string CutInLineTaskId = "pref.cutInLineTaskId";
 }

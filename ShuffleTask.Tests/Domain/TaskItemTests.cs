@@ -102,7 +102,8 @@ public class TaskItemTests
             Status = TaskLifecycleStatus.Completed,
             SnoozedUntil = new DateTime(2025, 9, 20, 7, 0, 0, DateTimeKind.Utc),
             CompletedAt = new DateTime(2025, 9, 18, 16, 0, 0, DateTimeKind.Utc),
-            NextEligibleAt = new DateTime(2025, 9, 21, 9, 0, 0, DateTimeKind.Utc)
+            NextEligibleAt = new DateTime(2025, 9, 21, 9, 0, 0, DateTimeKind.Utc),
+            CutInLineMode = CutInLineMode.Once
         };
     }
 
@@ -127,6 +128,7 @@ public class TaskItemTests
             Assert.That(actual.SnoozedUntil, Is.EqualTo(expected.SnoozedUntil));
             Assert.That(actual.CompletedAt, Is.EqualTo(expected.CompletedAt));
             Assert.That(actual.NextEligibleAt, Is.EqualTo(expected.NextEligibleAt));
+            Assert.That(actual.CutInLineMode, Is.EqualTo(expected.CutInLineMode));
         });
     }
 

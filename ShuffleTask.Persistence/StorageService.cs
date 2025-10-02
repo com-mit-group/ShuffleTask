@@ -163,6 +163,7 @@ public class StorageService : IStorageService
             existing.Status = TaskLifecycleStatus.Completed;
             existing.SnoozedUntil = null;
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
+            existing.CutInLineMode = CutInLineMode.None;
 
             conn.Update(existing);
             updated = existing.ToDomain();
