@@ -4,8 +4,15 @@ A task prioritization and scheduling system that helps you focus by intelligentl
 
 ## Documentation
 
+### Architecture & Design
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Clean layered architecture with structured logging and state management
-- **[RELEASE_PIPELINE.md](RELEASE_PIPELINE.md)** - Release pipeline documentation (Build → Sign → Release stages)
+
+### Release Pipeline
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference card for the release pipeline ⭐ **Start here!**
+- **[RELEASE_PIPELINE.md](RELEASE_PIPELINE.md)** - Complete release pipeline documentation
+- **[WORKFLOW_DIAGRAM.md](WORKFLOW_DIAGRAM.md)** - Visual workflow diagram
+- **[TESTING_RELEASE_PIPELINE.md](TESTING_RELEASE_PIPELINE.md)** - Testing guide with scenarios
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Implementation details and benefits
 
 ### Core Flows
 
