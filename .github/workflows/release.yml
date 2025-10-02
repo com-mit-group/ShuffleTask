@@ -151,5 +151,5 @@ jobs:
           name: ${{ github.event.inputs.version }}
           body: ${{ github.event.inputs.notes }}
           files: |
-            artifacts/win/ShuffleTask.exe
+            artifacts/win/*
             artifacts/android/ShuffleTask.apk
