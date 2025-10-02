@@ -1,0 +1,180 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (e.g. 1.0.0)
+        type: string
+        required: true
+      notes:
+        description: Release notes
+        type: string
+        required: false
+
+jobs:
+  release:
+    # Run the release process on Windows runners to build native binaries.
+    runs-on: windows-latest
+    env:
+      # Secrets must be provided via repository/environment settings once signing assets are available.
+      WINDOWS_CERT_PFX_B64: ${{ secrets.WINDOWS_CERT_PFX }}
+      WINDOWS_CERT_PASS: ${{ secrets.WINDOWS_CERT_PASS }}
+      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
+      ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - name: Checkout repository
+        # Fetch full history so tags/releases can be created accurately.
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 8 SDK
+        # Ensure the required .NET SDK and workloads are available.
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install MAUI workload
+        # Install MAUI tooling needed for Android build targets.
+        run: dotnet workload install maui --skip-manifest-update
+
+      - name: Restore dependencies
+        # Restore all solution dependencies before building.
+        run: dotnet restore ShuffleTask.sln
+
+      - name: Validate signing prerequisites
+        # Fail fast with guidance if signing assets are not yet configured.
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
+            throw "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_B64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
+            throw "Android signing secrets missing. After generating your keystore (.jks/.keystore), base64-encode it into ANDROID_KEYSTORE and place the password in ANDROID_KEY_PASS."
+          }
+
+      - name: Build Windows self-contained executable
+        # Publish the Windows desktop application to the artifacts directory.
+        run: >-
+          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -f net8.0-windows10.0.19041.0
+          -o ./artifacts/win
+
+      - name: Build Android APK
+        # Publish the Android application package via MAUI.
+        run: >-
+          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          -c Release
+          -f net8.0-android
+          /p:AndroidPackageFormat=apk
+          -o ./artifacts/android
+
+      - name: Normalize artifact names
+        # Ensure predictable artifact names for signing and release packaging.
+        shell: pwsh
+        run: |
+          $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
+          Rename-Item -Path $winOutput.FullName -NewName 'ShuffleTask.exe' -Force
+          $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
+          Rename-Item -Path $apkOutput.FullName -NewName 'ShuffleTask.apk' -Force
+
+      - name: Prepare Windows signing certificate
+        # Decode the base64-encoded PFX certificate from environment secrets.
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.pfx'
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_B64))
+          "WINDOWS_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Prepare Android keystore
+        # Decode the base64-encoded Android keystore from environment secrets.
+        shell: pwsh
+        run: |
+          $keystorePath = Join-Path $env:RUNNER_TEMP 'android-signing-key.jks'
+          [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_B64))
+          "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Ensure signtool is available
+        shell: pwsh
+        run: |
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            Write-Host "signtool.exe not found. Attempting to add Windows SDK signtool to PATH..."
+            $sdkDirs = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory -ErrorAction SilentlyContinue
+            $signtoolPath = $null
+            foreach ($sdkDir in $sdkDirs) {
+              $possible = Join-Path $sdkDir.FullName 'x64\signtool.exe'
+              if (Test-Path $possible) {
+                $signtoolPath = Split-Path $possible -Parent
+                break
+              }
+            }
+            if ($signtoolPath) {
+              echo $signtoolPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              Write-Host "Added $signtoolPath to PATH."
+            } else {
+              throw "signtool.exe could not be found or installed automatically."
+            }
+          } else {
+            Write-Host "signtool.exe found: $($signtool.Source)"
+          }
+
+      - name: Sign Windows executable
+        # Apply Authenticode signature to the Windows binary.
+        run: >-
+          signtool sign
+          /f "$env:WINDOWS_CERT_PATH"
+          /p "$env:WINDOWS_CERT_PASS"
+          /tr http://timestamp.digicert.com
+          /td sha256
+          /fd sha256
+          artifacts\win\ShuffleTask.exe
+
+      - name: Align and sign Android APK
+        # Align the APK and sign it with apksigner to produce v2/v3 signatures.
+        shell: pwsh
+        run: |
+          $apkPath = (Resolve-Path 'artifacts/android/ShuffleTask.apk').ProviderPath
+          $apkDirectory = Split-Path $apkPath -Parent
+          $androidSdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $null }
+          if (-not $androidSdkRoot) { throw 'ANDROID_SDK_ROOT/ANDROID_HOME environment variable is not set.' }
+
+          $buildToolsDir = Get-ChildItem -Path (Join-Path $androidSdkRoot 'build-tools') -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $buildToolsDir) { throw 'Android SDK build-tools directory could not be located.' }
+
+          $zipalignPath = Join-Path $buildToolsDir.FullName 'zipalign.exe'
+          if (-not (Test-Path $zipalignPath)) { throw "zipalign tool not found at $zipalignPath" }
+
+          $alignedApkPath = Join-Path $apkDirectory 'ShuffleTask-aligned.apk'
+          & $zipalignPath -f -p 4 $apkPath $alignedApkPath
+          Move-Item $alignedApkPath $apkPath -Force
+
+          $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
+          if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
+
+          $alias = if ($env:ANDROID_KEY_ALIAS) { $env:ANDROID_KEY_ALIAS } else { 'android' }
+          $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
+          Set-Content -Path $storePassFile -Value $env:ANDROID_KEY_PASS -NoNewline
+
+          & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
+
+          & $apksignerPath verify --print-certs $apkPath
+          Remove-Item $storePassFile -Force
+
+      - name: Create GitHub Release
+        # Publish the signed artifacts as a GitHub Release.
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.notes }}
+          files: |
+            artifacts/win/*
+            artifacts/android/ShuffleTask.apk
