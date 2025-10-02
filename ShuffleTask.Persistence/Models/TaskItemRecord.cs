@@ -31,6 +31,11 @@ internal sealed class TaskItemRecord : TaskItemData
 
     public TaskItem ToDomain()
     {
+        if (AllowedPeriod == AllowedPeriod.Custom && CustomStartTime is null && CustomEndTime is null)
+        {
+            AllowedPeriod = AllowedPeriod.OffWork;
+        }
+
         return TaskItem.FromData(this);
     }
 }
