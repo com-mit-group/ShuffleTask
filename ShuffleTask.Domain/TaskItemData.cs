@@ -24,6 +24,12 @@ public abstract class TaskItemData
 
     public AllowedPeriod AllowedPeriod { get; set; }
 
+    public bool AutoShuffleAllowed { get; set; } = true;
+
+    public TimeSpan? CustomStartTime { get; set; }
+
+    public TimeSpan? CustomEndTime { get; set; }
+
     public bool Paused { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -62,6 +68,9 @@ public abstract class TaskItemData
         IntervalDays = source.IntervalDays;
         LastDoneAt = source.LastDoneAt;
         AllowedPeriod = source.AllowedPeriod;
+        AutoShuffleAllowed = source.AutoShuffleAllowed;
+        CustomStartTime = source.CustomStartTime;
+        CustomEndTime = source.CustomEndTime;
         Paused = source.Paused;
         CreatedAt = source.CreatedAt;
         Status = source.Status;

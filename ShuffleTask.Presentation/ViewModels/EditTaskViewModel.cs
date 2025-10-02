@@ -69,6 +69,15 @@ public partial class EditTaskViewModel : ObservableObject
     private AllowedPeriod allowedPeriod;
 
     [ObservableProperty]
+    private bool autoShuffleAllowed = true;
+
+    [ObservableProperty]
+    private TimeSpan customStartTime = new(9, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan customEndTime = new(17, 0, 0);
+
+    [ObservableProperty]
     private bool isPaused;
 
     [ObservableProperty]
@@ -114,7 +123,7 @@ public partial class EditTaskViewModel : ObservableObject
         AllowedPeriod.Any,
         AllowedPeriod.Work,
         AllowedPeriod.OffWork,
-        AllowedPeriod.Off
+        AllowedPeriod.Custom
     };
 
     public string[] TimerModeOptions { get; } = new[] { "Long Interval", "Pomodoro" };
@@ -188,6 +197,9 @@ public partial class EditTaskViewModel : ObservableObject
         Repeat = _workingCopy.Repeat;
         IntervalDays = _workingCopy.IntervalDays > 0 ? _workingCopy.IntervalDays : 1;
         AllowedPeriod = _workingCopy.AllowedPeriod;
+        AutoShuffleAllowed = _workingCopy.AutoShuffleAllowed;
+        CustomStartTime = _workingCopy.CustomStartTime ?? new TimeSpan(9, 0, 0);
+        CustomEndTime = _workingCopy.CustomEndTime ?? new TimeSpan(17, 0, 0);
         IsPaused = _workingCopy.Paused;
         SelectedWeekdays = _workingCopy.Weekdays;
 
@@ -252,6 +264,9 @@ public partial class EditTaskViewModel : ObservableObject
             int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
             _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
             _workingCopy.AllowedPeriod = AllowedPeriod;
+            _workingCopy.AutoShuffleAllowed = AutoShuffleAllowed;
+            _workingCopy.CustomStartTime = AllowedPeriod == AllowedPeriod.Custom ? CustomStartTime : null;
+            _workingCopy.CustomEndTime = AllowedPeriod == AllowedPeriod.Custom ? CustomEndTime : null;
             _workingCopy.Paused = IsPaused;
 
             // Save custom timer settings

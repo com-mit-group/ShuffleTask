@@ -71,6 +71,9 @@ public class StorageService : IStorageService
             await AddCol("IntervalDays", IntegerSqlType, "0");
             await AddCol("LastDoneAt", "TEXT", "NULL");
             await AddCol("AllowedPeriod", IntegerSqlType, "0");
+            await AddCol("AutoShuffleAllowed", IntegerSqlType, "1");
+            await AddCol("CustomStartTime", "TEXT", "NULL");
+            await AddCol("CustomEndTime", "TEXT", "NULL");
             await AddCol("Paused", IntegerSqlType, "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
             await AddCol("Description", "TEXT", "''");
