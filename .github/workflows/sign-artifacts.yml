@@ -38,65 +38,119 @@ jobs:
 
       - name: Check if signing already completed
         id: check-signed
-        run: |
-          $version = "${{ github.event.inputs.version }}"
-          Write-Host "Checking for existing signed artifacts for version: $version"
-
-          # Check if signed artifacts already exist
-          $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
-          $signedRelease = $releases | Where-Object { $_.tagName -eq "signed-$version" -or $_.name -eq "signed-$version" }
-
-          if ($signedRelease) {
-            Write-Host "✓ Signed artifacts already exist for version $version"
-            echo "exists=true" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
-
-          Write-Host "No existing signed artifacts found"
-          echo "exists=false" >> $env:GITHUB_OUTPUT
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
+        run: |
+          $repo = "${{ github.repository }}"
+          $version = "${{ github.event.inputs.version }}"
+          $expected = @(
+            "signed-$version-windows",
+            "signed-$version-android"
+          )
 
-      - name: Check if build exists
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $existing = $artifacts | Where-Object { $_.name -in $expected -and $_.expired -eq $false } | Select-Object -ExpandProperty name -Unique
+
+          if ($existing.Count -eq $expected.Count) {
+            Write-Host "✓ Signed artifacts already exist for version $version"
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Signed artifacts not found for version $version"
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Check if build artifacts exist
         if: steps.check-signed.outputs.exists == 'false'
         id: check-build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
-          Write-Host "Checking for build artifacts for version: $version"
+          $expected = @(
+            "build-$version-windows-unsigned",
+            "build-$version-android-unsigned"
+          )
 
-          $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
-          $buildRelease = $releases | Where-Object { $_.tagName -eq "build-$version" -or $_.name -eq "build-$version" }
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
 
-          if (-not $buildRelease) {
+          $existing = $artifacts | Where-Object { $_.name -in $expected -and $_.expired -eq $false } | Select-Object -ExpandProperty name -Unique
+
+          if ($existing.Count -lt $expected.Count) {
             Write-Host "✗ Build artifacts not found for version $version"
             Write-Host "Please run the Build Artifacts workflow first with version $version"
             throw "Build artifacts not found. Cannot proceed with signing."
           }
 
           Write-Host "✓ Build artifacts found for version $version"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
 
       - name: Download build artifacts
         if: steps.check-signed.outputs.exists == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
-          Write-Host "Downloading build artifacts for version: $version"
+          $windowsName = "build-$version-windows-unsigned"
+          $androidName = "build-$version-android-unsigned"
 
-          # Create artifacts directory
-          New-Item -ItemType Directory -Force -Path ./artifacts/win
-          New-Item -ItemType Directory -Force -Path ./artifacts/android
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
 
-          # Download artifacts from build release
-          gh release download "build-$version" --pattern "*.exe" --dir ./artifacts/win
-          gh release download "build-$version" --pattern "*.apk" --dir ./artifacts/android
-          gh release download "build-$version" --pattern "VERSION.txt" --dir ./artifacts
+          $windowsArtifact = $artifacts | Where-Object { $_.name -eq $windowsName -and $_.expired -eq $false } | Select-Object -First 1
+          $androidArtifact = $artifacts | Where-Object { $_.name -eq $androidName -and $_.expired -eq $false } | Select-Object -First 1
 
-          # Verify artifacts were downloaded
-          $winExe = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
-          $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
+          if (-not $windowsArtifact) { throw "Windows artifact $windowsName not found." }
+          if (-not $androidArtifact) { throw "Android artifact $androidName not found." }
+
+          $downloadRoot = Join-Path (Get-Location) 'artifact-downloads'
+          if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
+
+          $winExtract = Join-Path $downloadRoot 'windows'
+          $androidExtract = Join-Path $downloadRoot 'android'
+          New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
+          New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
+
+          $winZip = Join-Path $downloadRoot 'windows-artifact.zip'
+          $androidZip = Join-Path $downloadRoot 'android-artifact.zip'
+
+          gh api --method GET --header "Accept: application/octet-stream" $windowsArtifact.archive_download_url --output $winZip
+          gh api --method GET --header "Accept: application/octet-stream" $androidArtifact.archive_download_url --output $androidZip
+
+          Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
+          Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
+
+          $winSource = Join-Path (Join-Path $winExtract 'artifacts') 'win'
+          $androidSource = Join-Path (Join-Path $androidExtract 'artifacts') 'android'
+
+          if (-not (Test-Path $winSource)) { throw "Windows artifact contents could not be located at $winSource" }
+          if (-not (Test-Path $androidSource)) { throw "Android artifact contents could not be located at $androidSource" }
+
+          $artifactsRoot = Join-Path (Get-Location) 'artifacts'
+          if (Test-Path $artifactsRoot) { Remove-Item $artifactsRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
+
+          Copy-Item -Path $winSource -Destination $artifactsRoot -Recurse -Force
+          Copy-Item -Path $androidSource -Destination $artifactsRoot -Recurse -Force
+
+          Remove-Item $winZip, $androidZip -Force
+          Remove-Item $downloadRoot -Recurse -Force
+
+          $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
+          if (-not $winExe) {
+            $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
+          }
+          $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
 
           if (-not $winExe) { throw "Windows .exe not found in downloaded artifacts" }
           if (-not $androidApk) { throw "Android .apk not found in downloaded artifacts" }
@@ -104,9 +158,6 @@ jobs:
           Write-Host "✓ Downloaded artifacts:"
           Write-Host "  Windows: $($winExe.Name)"
           Write-Host "  Android: $($androidApk.Name)"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
 
       - name: Validate signing prerequisites
         if: steps.check-signed.outputs.exists == 'false'
@@ -169,9 +220,12 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
+          $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
+          if (-not $exeFile) {
+            $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
+          }
 
-          Write-Host "Signing Windows executable: $($exeFile.Name)"
+          Write-Host "Signing Windows executable: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $exeFile.FullName))"
 
           signtool sign `
             /f "$env:WINDOWS_CERT_PATH" `
@@ -185,17 +239,19 @@ jobs:
             throw "Windows signing failed with exit code $LASTEXITCODE"
           }
 
-          # Rename to signed version
           $signedName = "ShuffleTask-$version.exe"
+          $signedPath = Join-Path (Split-Path $exeFile.FullName -Parent) $signedName
+          if (Test-Path $signedPath) { Remove-Item $signedPath -Force }
           Rename-Item -Path $exeFile.FullName -NewName $signedName -Force
-          Write-Host "✓ Signed and renamed to: $signedName"
+          $relativeSigned = [System.IO.Path]::GetRelativePath((Get-Location).Path, $signedPath)
+          Write-Host "✓ Signed and renamed to: $relativeSigned"
 
       - name: Align and sign Android APK
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
+          $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
           $apkPath = $apkFile.FullName
           $apkDirectory = Split-Path $apkPath -Parent
 
@@ -230,45 +286,64 @@ jobs:
           & $apksignerPath verify --print-certs $apkPath
           Remove-Item $storePassFile -Force
 
-          # Rename to signed version
           $signedName = "ShuffleTask-$version.apk"
           Rename-Item -Path $apkPath -NewName $signedName -Force
-          Write-Host "✓ Signed and renamed to: $signedName"
+          $relativeApk = [System.IO.Path]::GetRelativePath((Get-Location).Path, (Join-Path $apkDirectory $signedName))
+          Write-Host "✓ Signed and renamed to: $relativeApk"
+
+      - name: Write metadata
+        if: steps.check-signed.outputs.exists == 'false'
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
+          Set-Content -Path ./artifacts/VERSION.txt -Value $version
 
       - name: Mark signing status as success
         id: sign-status
-        if: steps.check-signed.outputs.exists == 'false'
-        run: |
-          echo "status=success" >> $env:GITHUB_OUTPUT
+        if: always()
         shell: pwsh
-
-      - name: Create signed release for artifact storage
-        if: steps.check-signed.outputs.exists == 'false'
         run: |
-          $version = "${{ github.event.inputs.version }}"
-          Write-Host "Creating signed release for version: $version"
+          if ("${{ job.status }}" -ne "success") {
+            echo "status=failed" >> $env:GITHUB_OUTPUT
+          } elseif ("${{ steps.check-signed.outputs.exists }}" -eq "true") {
+            echo "status=skipped" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "status=success" >> $env:GITHUB_OUTPUT
+          }
 
-          gh release create "signed-$version" `
-            --title "Signed Artifacts v$version" `
-            --notes "Signed artifacts for version $version. Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" `
-            --prerelease `
-            ./artifacts/VERSION.txt `
-            ./artifacts/win/*.exe `
-            ./artifacts/android/*.apk
+      - name: Upload signed Windows artifact
+        if: steps.check-signed.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ github.event.inputs.version }}-windows
+          path: artifacts/win
+          if-no-files-found: error
 
-          Write-Host "✓ Signed artifacts uploaded to release signed-$version"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
+      - name: Upload signed Android artifact
+        if: steps.check-signed.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ github.event.inputs.version }}-android
+          path: artifacts/android/*.apk
+          if-no-files-found: error
+
+      - name: Upload metadata
+        if: steps.check-signed.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ github.event.inputs.version }}-metadata
+          path: artifacts/VERSION.txt
+          if-no-files-found: error
 
       - name: Skip message
         if: steps.check-signed.outputs.exists == 'true'
+        shell: pwsh
         run: |
           Write-Host "================================================"
           Write-Host "Signed artifacts already exist for version ${{ github.event.inputs.version }}"
-          Write-Host "Skipping signing. To re-sign, delete the signed-${{ github.event.inputs.version }} release first."
+          Write-Host "Skipping signing. Delete the workflow artifacts if you need to re-run the signing process."
           Write-Host "================================================"
-        shell: pwsh
 
   summary:
     runs-on: ubuntu-latest
@@ -285,14 +360,14 @@ jobs:
           if [ "${{ needs.sign.outputs.sign-status }}" == "success" ]; then
             echo "✓ Signing completed successfully." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Signed artifacts have been uploaded to release \`signed-${{ needs.sign.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts uploaded with names prefixed by \`signed-${{ needs.sign.outputs.version }}\`." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
             echo "Run the **Release** workflow with version: \`${{ needs.sign.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.sign.outputs.sign-status }}" == "" ]; then
+          elif [ "${{ needs.sign.outputs.sign-status }}" == "skipped" ]; then
             echo "✓ Signed artifacts already exist for this version." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "To re-sign, delete the \`signed-${{ needs.sign.outputs.version }}\` release first." >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts: \`signed-${{ needs.sign.outputs.version }}-windows\`, \`signed-${{ needs.sign.outputs.version }}-android\`, and \`signed-${{ needs.sign.outputs.version }}-metadata\`." >> $GITHUB_STEP_SUMMARY
           else
             echo "✗ Signing failed or status unknown." >> $GITHUB_STEP_SUMMARY
           fi

@@ -4,12 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Semantic version (e.g., 1.0.0). Leave empty to auto-generate from GitVersion.'
+        description: 'Semantic version (e.g., 1.0.0). Leave empty to use the tag this workflow runs on.'
         type: string
         required: false
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   build:
@@ -25,91 +22,69 @@ jobs:
           fetch-depth: 0
 
       - name: Determine version
-        id: determine-version
+        id: set-version
+        shell: pwsh
         run: |
-          if ("${{ github.event.inputs.version }}" -ne "") {
-            $version = "${{ github.event.inputs.version }}"
+          $manualVersion = "${{ github.event.inputs.version }}"
+          if (-not [string]::IsNullOrWhiteSpace($manualVersion)) {
+            $version = $manualVersion
             Write-Host "Using manual version: $version"
-          } elseif ("${{ github.ref_type }}" -eq "tag") {
-            $version = "${{ github.ref_name }}"
+          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref }}".Substring(10)
             Write-Host "Using tag version: $version"
           } else {
-            Write-Host "No version provided, will use GitVersion"
-            $version = ""
+            throw "Version input is required when the workflow is not run from a tag."
           }
-          echo "manual_version=$version" >> $env:GITHUB_OUTPUT
+
+          New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
+          Set-Content -Path ./artifacts/VERSION.txt -Value $version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Check for existing build artifacts
+        id: check-artifacts
+        if: always()
         shell: pwsh
-
-      - name: Install GitVersion
-        if: steps.determine-version.outputs.manual_version == ''
-        uses: gittools/actions/gitversion/setup@v1.1.1
-        with:
-          versionSpec: '5.x'
-          preferLatestVersion: true
-
-      - name: Execute GitVersion
-        id: gitversion
-        if: steps.determine-version.outputs.manual_version == ''
-        uses: gittools/actions/gitversion/execute@v1.1.1
-        with:
-          useConfigFile: true
-          configFilePath: '.github/GitVersion.yaml'
-
-      - name: Set final version
-        id: set-version
-        run: |
-          $manualVersion = "${{ steps.determine-version.outputs.manual_version }}"
-          if ($manualVersion -ne "") {
-            $finalVersion = $manualVersion
-          } else {
-            $finalVersion = "${{ steps.gitversion.outputs.majorMinorPatch }}"
-          }
-          Write-Host "Final version: $finalVersion"
-          echo "version=$finalVersion" >> $env:GITHUB_OUTPUT
-          # Create version file for artifact metadata
-          New-Item -ItemType Directory -Force -Path ./artifacts
-          echo $finalVersion > ./artifacts/VERSION.txt
-        shell: pwsh
-
-      - name: Check if build already exists
-        id: check-build
-        run: |
-          $version = "${{ steps.set-version.outputs.version }}"
-          Write-Host "Checking for existing build artifacts for version: $version"
-
-          # Check if artifacts already exist in releases
-          $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
-          $buildRelease = $releases | Where-Object { $_.tagName -eq "build-$version" -or $_.name -eq "build-$version" }
-
-          if ($buildRelease) {
-            Write-Host "✓ Build artifacts already exist for version $version"
-            echo "exists=true" >> $env:GITHUB_OUTPUT
-            echo "status=skipped" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "No existing build found, proceeding with build"
-            echo "exists=false" >> $env:GITHUB_OUTPUT
-            echo "status=new" >> $env:GITHUB_OUTPUT
-          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
+        run: |
+          $repo = "${{ github.repository }}"
+          $version = "${{ steps.set-version.outputs.version }}"
+          $expected = @(
+            "build-$version-windows-unsigned",
+            "build-$version-android-unsigned",
+            "build-$version-metadata"
+          )
+
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $existing = $artifacts | Where-Object { $_.name -in $expected -and $_.expired -eq $false } | Select-Object -ExpandProperty name -Unique
+
+          if ($existing.Count -eq $expected.Count) {
+            Write-Host "✓ Build artifacts already exist for version $version"
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No complete build artifact set found for version $version. Proceeding with build."
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Set up .NET 8 SDK
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 8.0.x
 
       - name: Install MAUI workload
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         run: dotnet workload install maui --skip-manifest-update
 
       - name: Restore dependencies
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         run: dotnet restore ShuffleTask.sln
 
       - name: Build Windows self-contained executable
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         run: >-
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
           -c Release
@@ -121,7 +96,7 @@ jobs:
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
       - name: Build Android APK
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         run: >-
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
           -c Release
@@ -132,7 +107,7 @@ jobs:
           -o ./artifacts/android
 
       - name: Normalize artifact names
-        if: steps.check-build.outputs.exists == 'false'
+        if: steps.check-artifacts.outputs.exists == 'false'
         shell: pwsh
         run: |
           $version = "${{ steps.set-version.outputs.version }}"
@@ -149,38 +124,42 @@ jobs:
           Rename-Item -Path $apkOutput.FullName -NewName $apkName -Force
           Write-Host "Renamed Android artifact to: $apkName"
 
-      - name: Mark build status as success
+      - name: Upload Windows artifact
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-windows-unsigned
+          path: artifacts/win/*.exe
+          if-no-files-found: error
+
+      - name: Upload Android artifact
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-android-unsigned
+          path: artifacts/android/*.apk
+          if-no-files-found: error
+
+      - name: Upload metadata
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-metadata
+          path: artifacts/VERSION.txt
+          if-no-files-found: error
+
+      - name: Record build status
         id: build-status
-        if: steps.check-build.outputs.exists == 'false'
-        run: |
-          echo "status=success" >> $env:GITHUB_OUTPUT
+        if: always()
         shell: pwsh
-
-      - name: Create build release for artifact storage
-        if: steps.check-build.outputs.exists == 'false'
         run: |
-          $version = "${{ steps.set-version.outputs.version }}"
-          Write-Host "Creating build release for version: $version"
-
-          gh release create "build-$version" `
-            --title "Build Artifacts v$version" `
-            --notes "Unsigned build artifacts for version $version. Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" `
-            --prerelease `
-            ./artifacts/VERSION.txt `
-            ./artifacts/win/*.exe `
-            ./artifacts/android/*.apk
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
-
-      - name: Skip message
-        if: steps.check-build.outputs.exists == 'true'
-        run: |
-          Write-Host "================================================"
-          Write-Host "Build artifacts already exist for version ${{ steps.set-version.outputs.version }}"
-          Write-Host "Skipping build. To rebuild, delete the build-${{ steps.set-version.outputs.version }} release first."
-          Write-Host "================================================"
-        shell: pwsh
+          if ("${{ job.status }}" -ne "success") {
+            echo "status=failed" >> $env:GITHUB_OUTPUT
+          } elseif ("${{ steps.check-artifacts.outputs.exists }}" -eq "true") {
+            echo "status=skipped" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "status=success" >> $env:GITHUB_OUTPUT
+          }
 
   summary:
     runs-on: ubuntu-latest
@@ -197,11 +176,11 @@ jobs:
           if [ "${{ needs.build.outputs.build-status }}" == "skipped" ]; then
             echo "✓ Build artifacts already exist for this version." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "To rebuild, delete the \`build-${{ needs.build.outputs.version }}\` release first." >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts: \`build-${{ needs.build.outputs.version }}-windows-unsigned\`, \`build-${{ needs.build.outputs.version }}-android-unsigned\`, and \`build-${{ needs.build.outputs.version }}-metadata\`." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.build.outputs.build-status }}" == "success" ]; then
             echo "✓ Build completed successfully." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts have been uploaded to release \`build-${{ needs.build.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts uploaded with names prefixed by \`build-${{ needs.build.outputs.version }}\`." >> $GITHUB_STEP_SUMMARY
           else
             echo "✗ Build status unknown or failed." >> $GITHUB_STEP_SUMMARY
           fi
