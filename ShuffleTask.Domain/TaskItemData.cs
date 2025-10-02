@@ -42,6 +42,17 @@ public abstract class TaskItemData
 
     public DateTime? NextEligibleAt { get; set; }
 
+    // Per-task timer override settings (nullable means use global defaults)
+    public int? CustomTimerMode { get; set; }
+
+    public int? CustomReminderMinutes { get; set; }
+
+    public int? CustomFocusMinutes { get; set; }
+
+    public int? CustomBreakMinutes { get; set; }
+
+    public int? CustomPomodoroCycles { get; set; }
+
     protected void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -66,5 +77,10 @@ public abstract class TaskItemData
         SnoozedUntil = source.SnoozedUntil;
         CompletedAt = source.CompletedAt;
         NextEligibleAt = source.NextEligibleAt;
+        CustomTimerMode = source.CustomTimerMode;
+        CustomReminderMinutes = source.CustomReminderMinutes;
+        CustomFocusMinutes = source.CustomFocusMinutes;
+        CustomBreakMinutes = source.CustomBreakMinutes;
+        CustomPomodoroCycles = source.CustomPomodoroCycles;
     }
 }

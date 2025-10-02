@@ -202,7 +202,97 @@
                         IsToggled="{Binding IsPaused}" />
             </Grid>
 
+            <!-- Custom Timer Override Section -->
             <Grid Grid.Row="12"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="8">
+                <Grid Grid.Row="0"
+                      ColumnDefinitions="Auto,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Override Timer Settings"
+                           VerticalOptions="Center"
+                           FontAttributes="Bold" />
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding UseCustomTimer}" />
+                </Grid>
+
+                <Grid Grid.Row="1"
+                      IsVisible="{Binding UseCustomTimer}"
+                      ColumnDefinitions="Auto,*"
+                      ColumnSpacing="12">
+                    <Label Text="Timer Mode"
+                           VerticalOptions="Center" />
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding TimerModeOptions}"
+                            SelectedIndex="{Binding CustomTimerMode}" />
+                </Grid>
+
+                <Grid Grid.Row="2"
+                      IsVisible="{Binding UseCustomTimer}"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Reminder (min)"
+                           VerticalOptions="Center" />
+                    <Stepper Grid.Column="1"
+                             Minimum="1"
+                             Maximum="360"
+                             Increment="5"
+                             Value="{Binding CustomReminderMinutes}" />
+                    <Label Grid.Column="2"
+                           Text="{Binding CustomReminderMinutes, StringFormat='{0:0}'}"
+                           VerticalOptions="Center" />
+                </Grid>
+
+                <Grid Grid.Row="3"
+                      IsVisible="{Binding UseCustomTimer}"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Focus (min)"
+                           VerticalOptions="Center" />
+                    <Stepper Grid.Column="1"
+                             Minimum="5"
+                             Maximum="120"
+                             Increment="5"
+                             Value="{Binding CustomFocusMinutes}" />
+                    <Label Grid.Column="2"
+                           Text="{Binding CustomFocusMinutes, StringFormat='{0:0}'}"
+                           VerticalOptions="Center" />
+                </Grid>
+
+                <Grid Grid.Row="4"
+                      IsVisible="{Binding UseCustomTimer}"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Break (min)"
+                           VerticalOptions="Center" />
+                    <Stepper Grid.Column="1"
+                             Minimum="1"
+                             Maximum="60"
+                             Increment="1"
+                             Value="{Binding CustomBreakMinutes}" />
+                    <Label Grid.Column="2"
+                           Text="{Binding CustomBreakMinutes, StringFormat='{0:0}'}"
+                           VerticalOptions="Center" />
+                </Grid>
+
+                <Grid Grid.Row="5"
+                      IsVisible="{Binding UseCustomTimer}"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="Pomodoro Cycles"
+                           VerticalOptions="Center" />
+                    <Stepper Grid.Column="1"
+                             Minimum="1"
+                             Maximum="8"
+                             Increment="1"
+                             Value="{Binding CustomPomodoroCycles}" />
+                    <Label Grid.Column="2"
+                           Text="{Binding CustomPomodoroCycles, StringFormat='{0:0}'}"
+                           VerticalOptions="Center" />
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="13"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -213,7 +303,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="13"
+            <ActivityIndicator Grid.Row="14"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />

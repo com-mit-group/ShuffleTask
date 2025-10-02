@@ -9,6 +9,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
@@ -186,9 +187,12 @@ public partial class DashboardViewModel : ObservableObject
 
             BindTask(next);
 
-            if (settings.TimerMode == TimerMode.Pomodoro)
+            var effectiveSettings = TaskTimerSettings.Resolve(next, settings);
+            var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = effectiveSettings;
+
+            if (mode == TimerMode.Pomodoro)
             {
-                _pomodoroSession = PomodoroSession.Create(settings);
+                _pomodoroSession = PomodoroSession.Create(focusMinutes, breakMinutes, pomodoroCycles);
                 var request = _pomodoroSession.CurrentRequest();
                 _currentTimer = request;
                 UpdateIndicators(request);
@@ -204,7 +208,7 @@ public partial class DashboardViewModel : ObservableObject
             else
             {
                 _pomodoroSession = null;
-                int minutes = Math.Max(1, settings.ReminderMinutes);
+                int minutes = Math.Max(1, reminderMinutes);
                 var request = TimerRequest.LongIntervalFromMinutes(minutes);
                 _currentTimer = request;
                 UpdateIndicators(request);
@@ -361,9 +365,12 @@ public partial class DashboardViewModel : ObservableObject
         _settings = settings;
         BindTask(task);
 
-        if (settings.TimerMode == TimerMode.Pomodoro)
+        var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
+        var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = effectiveSettings;
+
+        if (mode == TimerMode.Pomodoro)
         {
-            _pomodoroSession = PomodoroSession.Create(settings);
+            _pomodoroSession = PomodoroSession.Create(focusMinutes, breakMinutes, pomodoroCycles);
             var request = _pomodoroSession.CurrentRequest();
             _currentTimer = request;
             UpdateIndicators(request);
@@ -373,7 +380,7 @@ public partial class DashboardViewModel : ObservableObject
         else
         {
             _pomodoroSession = null;
-            int minutes = Math.Max(1, settings.ReminderMinutes);
+            int minutes = Math.Max(1, reminderMinutes);
             var request = TimerRequest.LongIntervalFromMinutes(minutes);
             _currentTimer = request;
             UpdateIndicators(request);
@@ -556,6 +563,9 @@ public partial class DashboardViewModel : ObservableObject
 
         public static PomodoroSession Create(AppSettings settings)
             => new PomodoroSession(settings.FocusMinutes, settings.BreakMinutes, settings.PomodoroCycles);
+
+        public static PomodoroSession Create(int focusMinutes, int breakMinutes, int cycles)
+            => new PomodoroSession(focusMinutes, breakMinutes, cycles);
 
         public static PomodoroSession FromState(TimerRequest state)
             => new PomodoroSession(state.FocusMinutes, state.BreakMinutes, state.CycleCount, state.CycleIndex, state.Phase ?? PomodoroPhase.Focus);

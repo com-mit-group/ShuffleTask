@@ -83,6 +83,25 @@ public partial class EditTaskViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
+    // Per-task timer override settings
+    [ObservableProperty]
+    private bool useCustomTimer;
+
+    [ObservableProperty]
+    private int customTimerMode; // 0=LongInterval, 1=Pomodoro
+
+    [ObservableProperty]
+    private double customReminderMinutes = 60;
+
+    [ObservableProperty]
+    private double customFocusMinutes = 15;
+
+    [ObservableProperty]
+    private double customBreakMinutes = 5;
+
+    [ObservableProperty]
+    private double customPomodoroCycles = 3;
+
     private bool _isNew = true;
     public bool IsNew
     {
@@ -106,6 +125,8 @@ public partial class EditTaskViewModel : ObservableObject
         AllowedPeriod.OffWork,
         AllowedPeriod.Custom
     };
+
+    public string[] TimerModeOptions { get; } = new[] { "Long Interval", "Pomodoro" };
 
     private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
     {
@@ -182,6 +203,25 @@ public partial class EditTaskViewModel : ObservableObject
         IsPaused = _workingCopy.Paused;
         SelectedWeekdays = _workingCopy.Weekdays;
 
+        // Load custom timer settings
+        UseCustomTimer = _workingCopy.CustomTimerMode.HasValue;
+        if (UseCustomTimer)
+        {
+            CustomTimerMode = _workingCopy.CustomTimerMode ?? 0;
+            CustomReminderMinutes = _workingCopy.CustomReminderMinutes ?? 60;
+            CustomFocusMinutes = _workingCopy.CustomFocusMinutes ?? 15;
+            CustomBreakMinutes = _workingCopy.CustomBreakMinutes ?? 5;
+            CustomPomodoroCycles = _workingCopy.CustomPomodoroCycles ?? 3;
+        }
+        else
+        {
+            CustomTimerMode = 0;
+            CustomReminderMinutes = 60;
+            CustomFocusMinutes = 15;
+            CustomBreakMinutes = 5;
+            CustomPomodoroCycles = 3;
+        }
+
         if (_workingCopy.Deadline.HasValue)
         {
             HasDeadline = true;
@@ -228,6 +268,24 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.CustomStartTime = AllowedPeriod == AllowedPeriod.Custom ? CustomStartTime : null;
             _workingCopy.CustomEndTime = AllowedPeriod == AllowedPeriod.Custom ? CustomEndTime : null;
             _workingCopy.Paused = IsPaused;
+
+            // Save custom timer settings
+            if (UseCustomTimer)
+            {
+                _workingCopy.CustomTimerMode = CustomTimerMode;
+                _workingCopy.CustomReminderMinutes = (int)Math.Max(1, Math.Round(CustomReminderMinutes));
+                _workingCopy.CustomFocusMinutes = (int)Math.Max(1, Math.Round(CustomFocusMinutes));
+                _workingCopy.CustomBreakMinutes = (int)Math.Max(1, Math.Round(CustomBreakMinutes));
+                _workingCopy.CustomPomodoroCycles = (int)Math.Max(1, Math.Round(CustomPomodoroCycles));
+            }
+            else
+            {
+                _workingCopy.CustomTimerMode = null;
+                _workingCopy.CustomReminderMinutes = null;
+                _workingCopy.CustomFocusMinutes = null;
+                _workingCopy.CustomBreakMinutes = null;
+                _workingCopy.CustomPomodoroCycles = null;
+            }
 
             if (HasDeadline)
             {

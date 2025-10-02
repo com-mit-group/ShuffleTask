@@ -7,6 +7,7 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Presentation.Services;
@@ -403,8 +404,9 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         ClearPendingShuffle();
-        PersistActiveTask(task, settings);
-        await NotifyAsync(task, settings).ConfigureAwait(false);
+        var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
+        PersistActiveTask(task, effectiveSettings);
+        await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
     }
@@ -449,7 +451,7 @@ public class ShuffleCoordinatorService : IDisposable
         return null;
     }
 
-    private async Task NotifyAsync(TaskItem task, AppSettings settings)
+    private async Task NotifyAsync(TaskItem task, AppSettings settings, EffectiveTimerSettings effectiveSettings)
     {
         if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
         {
@@ -457,7 +459,8 @@ public class ShuffleCoordinatorService : IDisposable
             await applyTask.ConfigureAwait(false);
         }
 
-        await _notifications.NotifyTaskAsync(task, Math.Max(1, settings.ReminderMinutes), settings).ConfigureAwait(false);
+        int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
+        await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
     }
 
     private static bool ShouldAutoShuffle(AppSettings settings)
@@ -607,9 +610,9 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
-    private static void PersistActiveTask(TaskItem task, AppSettings settings)
+    private static void PersistActiveTask(TaskItem task, EffectiveTimerSettings timerSettings)
     {
-        int seconds = Math.Max(1, settings.ReminderMinutes) * 60;
+        int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
         Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
     }
