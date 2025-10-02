@@ -18,7 +18,7 @@ jobs:
     outputs:
       version: ${{ github.event.inputs.version }}
       release-status: ${{ steps.release-status.outputs.status }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,14 +39,14 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Checking for existing release for version: $VERSION"
-          
+
           # Check if public release already exists
           if gh release view "$VERSION" &>/dev/null; then
             echo "✓ Release already exists for version $VERSION"
             echo "exists=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           echo "No existing release found"
           echo "exists=false" >> $GITHUB_OUTPUT
         env:
@@ -58,14 +58,14 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Checking for signed artifacts for version: $VERSION"
-          
+
           # Check if signed artifacts exist
           if ! gh release view "signed-$VERSION" &>/dev/null; then
             echo "✗ Signed artifacts not found for version $VERSION"
             echo "Please run the Sign Artifacts workflow first with version $VERSION"
             exit 1
           fi
-          
+
           echo "✓ Signed artifacts found for version $VERSION"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,26 +75,26 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Downloading signed artifacts for version: $VERSION"
-          
+
           # Create artifacts directory
           mkdir -p ./release-artifacts
-          
+
           # Download artifacts from signed release
           gh release download "signed-$VERSION" --pattern "*.exe" --dir ./release-artifacts
           gh release download "signed-$VERSION" --pattern "*.apk" --dir ./release-artifacts
           gh release download "signed-$VERSION" --pattern "VERSION.txt" --dir ./release-artifacts
-          
+
           # Verify artifacts were downloaded
           if [ ! -f ./release-artifacts/*.exe ]; then
             echo "✗ Windows .exe not found in signed artifacts"
             exit 1
           fi
-          
+
           if [ ! -f ./release-artifacts/*.apk ]; then
             echo "✗ Android .apk not found in signed artifacts"
             exit 1
           fi
-          
+
           echo "✓ Downloaded signed artifacts:"
           ls -lh ./release-artifacts/
         env:
@@ -106,41 +106,41 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           USER_NOTES="${{ github.event.inputs.notes }}"
-          
+
           # Create release notes file
           cat > release-notes.md << EOF
           # ShuffleTask v$VERSION
-          
+
           $USER_NOTES
-          
+
           ## Installation
-          
+
           ### Windows
           Download \`ShuffleTask-$VERSION.exe\` and run it. No installation required.
-          
+
           ### Android
           Download \`ShuffleTask-$VERSION.apk\` and install it on your Android device. You may need to enable "Install from unknown sources" in your device settings.
-          
+
           ## What's Changed
-          
+
           See the [full changelog](https://github.com/yaron-E92/ShuffleTask/compare/v$VERSION...main) for details.
-          
+
           ---
-          
+
           *Built on $(date -u '+%Y-%m-%d %H:%M:%S UTC')*
           EOF
-          
+
           echo "Release notes created"
 
       - name: Tag repository
         if: steps.check-release.outputs.exists == 'false'
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          
+
           # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          
+
           # Check if tag already exists
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
             echo "Tag v$VERSION already exists"
@@ -156,14 +156,14 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Creating GitHub release for version: $VERSION"
-          
+
           # Create the release with signed artifacts
           gh release create "$VERSION" \
             --title "ShuffleTask v$VERSION" \
             --notes-file release-notes.md \
             ./release-artifacts/*.exe \
             ./release-artifacts/*.apk
-          
+
           echo "✓ Release created successfully"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -179,18 +179,18 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "Cleaning up intermediate releases..."
-          
+
           # Delete build and signed pre-releases (optional, can be kept for debugging)
           if gh release view "build-$VERSION" &>/dev/null; then
             echo "Deleting build-$VERSION pre-release..."
             gh release delete "build-$VERSION" --yes --cleanup-tag
           fi
-          
+
           if gh release view "signed-$VERSION" &>/dev/null; then
             echo "Deleting signed-$VERSION pre-release..."
             gh release delete "signed-$VERSION" --yes --cleanup-tag
           fi
-          
+
           echo "✓ Cleanup completed"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

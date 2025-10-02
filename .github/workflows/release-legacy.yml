@@ -1,4 +1,14 @@
-name: Manual Release
+# ⚠️ LEGACY WORKFLOW - DEPRECATED
+# This is the original single-stage release pipeline that builds, signs, and releases in one job.
+# It has been replaced by the new three-stage pipeline:
+#   1. build-artifacts.yml
+#   2. sign-artifacts.yml
+#   3. release.yml
+#
+# This file is kept for backward compatibility and reference.
+# For new releases, use the new pipeline documented in RELEASE_PIPELINE.md
+
+name: Manual Release (Legacy)
 
 on:
   workflow_dispatch:

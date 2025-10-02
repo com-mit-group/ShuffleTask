@@ -20,7 +20,7 @@ jobs:
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
       ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,17 +41,17 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           Write-Host "Checking for existing signed artifacts for version: $version"
-          
+
           # Check if signed artifacts already exist
           $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
           $signedRelease = $releases | Where-Object { $_.tagName -eq "signed-$version" -or $_.name -eq "signed-$version" }
-          
+
           if ($signedRelease) {
             Write-Host "✓ Signed artifacts already exist for version $version"
             echo "exists=true" >> $env:GITHUB_OUTPUT
             exit 0
           }
-          
+
           Write-Host "No existing signed artifacts found"
           echo "exists=false" >> $env:GITHUB_OUTPUT
         env:
@@ -64,16 +64,16 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           Write-Host "Checking for build artifacts for version: $version"
-          
+
           $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
           $buildRelease = $releases | Where-Object { $_.tagName -eq "build-$version" -or $_.name -eq "build-$version" }
-          
+
           if (-not $buildRelease) {
             Write-Host "✗ Build artifacts not found for version $version"
             Write-Host "Please run the Build Artifacts workflow first with version $version"
             throw "Build artifacts not found. Cannot proceed with signing."
           }
-          
+
           Write-Host "✓ Build artifacts found for version $version"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -84,23 +84,23 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           Write-Host "Downloading build artifacts for version: $version"
-          
+
           # Create artifacts directory
           New-Item -ItemType Directory -Force -Path ./artifacts/win
           New-Item -ItemType Directory -Force -Path ./artifacts/android
-          
+
           # Download artifacts from build release
           gh release download "build-$version" --pattern "*.exe" --dir ./artifacts/win
           gh release download "build-$version" --pattern "*.apk" --dir ./artifacts/android
           gh release download "build-$version" --pattern "VERSION.txt" --dir ./artifacts
-          
+
           # Verify artifacts were downloaded
           $winExe = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
           $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
-          
+
           if (-not $winExe) { throw "Windows .exe not found in downloaded artifacts" }
           if (-not $androidApk) { throw "Android .apk not found in downloaded artifacts" }
-          
+
           Write-Host "✓ Downloaded artifacts:"
           Write-Host "  Windows: $($winExe.Name)"
           Write-Host "  Android: $($androidApk.Name)"
@@ -170,9 +170,9 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe | Select-Object -First 1
-          
+
           Write-Host "Signing Windows executable: $($exeFile.Name)"
-          
+
           signtool sign `
             /f "$env:WINDOWS_CERT_PATH" `
             /p "$env:WINDOWS_CERT_PASS" `
@@ -180,11 +180,11 @@ jobs:
             /td sha256 `
             /fd sha256 `
             $exeFile.FullName
-          
+
           if ($LASTEXITCODE -ne 0) {
             throw "Windows signing failed with exit code $LASTEXITCODE"
           }
-          
+
           # Rename to signed version
           $signedName = "ShuffleTask-$version.exe"
           Rename-Item -Path $exeFile.FullName -NewName $signedName -Force
@@ -198,9 +198,9 @@ jobs:
           $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk | Select-Object -First 1
           $apkPath = $apkFile.FullName
           $apkDirectory = Split-Path $apkPath -Parent
-          
+
           Write-Host "Processing Android APK: $($apkFile.Name)"
-          
+
           $androidSdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $null }
           if (-not $androidSdkRoot) { throw 'ANDROID_SDK_ROOT/ANDROID_HOME environment variable is not set.' }
 
@@ -229,7 +229,7 @@ jobs:
           Write-Host "Verifying signature..."
           & $apksignerPath verify --print-certs $apkPath
           Remove-Item $storePassFile -Force
-          
+
           # Rename to signed version
           $signedName = "ShuffleTask-$version.apk"
           Rename-Item -Path $apkPath -NewName $signedName -Force
@@ -247,7 +247,7 @@ jobs:
         run: |
           $version = "${{ github.event.inputs.version }}"
           Write-Host "Creating signed release for version: $version"
-          
+
           gh release create "signed-$version" `
             --title "Signed Artifacts v$version" `
             --notes "Signed artifacts for version $version. Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" `
@@ -255,7 +255,7 @@ jobs:
             ./artifacts/VERSION.txt `
             ./artifacts/win/*.exe `
             ./artifacts/android/*.apk
-          
+
           Write-Host "✓ Signed artifacts uploaded to release signed-$version"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

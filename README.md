@@ -2,9 +2,10 @@
 
 A task prioritization and scheduling system that helps you focus by intelligently selecting what to work on next.
 
-## Architecture Overview
+## Documentation
 
-ShuffleTask follows a clean layered architecture with structured logging and consistent state management. See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Clean layered architecture with structured logging and state management
+- **[RELEASE_PIPELINE.md](RELEASE_PIPELINE.md)** - Release pipeline documentation (Build → Sign → Release stages)
 
 ### Core Flows
 

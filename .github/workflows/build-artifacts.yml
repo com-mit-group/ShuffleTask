@@ -17,7 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.set-version.outputs.version }}
       build-status: ${{ steps.build-status.outputs.status }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -76,11 +76,11 @@ jobs:
         run: |
           $version = "${{ steps.set-version.outputs.version }}"
           Write-Host "Checking for existing build artifacts for version: $version"
-          
+
           # Check if artifacts already exist in releases
           $releases = gh release list --limit 100 --json tagName,name | ConvertFrom-Json
           $buildRelease = $releases | Where-Object { $_.tagName -eq "build-$version" -or $_.name -eq "build-$version" }
-          
+
           if ($buildRelease) {
             Write-Host "✓ Build artifacts already exist for version $version"
             echo "exists=true" >> $env:GITHUB_OUTPUT
@@ -136,13 +136,13 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.set-version.outputs.version }}"
-          
+
           $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
           $winName = "ShuffleTask-$version-unsigned.exe"
           Rename-Item -Path $winOutput.FullName -NewName $winName -Force
           Write-Host "Renamed Windows artifact to: $winName"
-          
+
           $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
           $apkName = "ShuffleTask-$version-unsigned.apk"
@@ -161,7 +161,7 @@ jobs:
         run: |
           $version = "${{ steps.set-version.outputs.version }}"
           Write-Host "Creating build release for version: $version"
-          
+
           gh release create "build-$version" `
             --title "Build Artifacts v$version" `
             --notes "Unsigned build artifacts for version $version. Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')" `
