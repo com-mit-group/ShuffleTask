@@ -126,6 +126,58 @@ public class TasksViewModelTests
     }
 
     [Test]
+    public async Task MarkDoneAsync_MarksTaskAsCompletedAndRefreshesList()
+    {
+        var task = CreateTask("task1", TimeSpan.Zero);
+        task.Status = TaskLifecycleStatus.Active;
+
+        await _storage.AddTaskAsync(task);
+
+        await _viewModel.LoadAsync();
+        Assert.AreEqual(1, _viewModel.Tasks.Count, "Precondition: one task before marking done.");
+
+        var toMarkDone = _viewModel.Tasks.Single().Task;
+        Assert.AreEqual(TaskLifecycleStatus.Active, toMarkDone.Status, "Task should start as Active.");
+
+        await _viewModel.MarkDoneAsync(toMarkDone);
+
+        Assert.AreEqual(1, _viewModel.Tasks.Count, "MarkDoneAsync should refresh the list.");
+        Assert.AreEqual(1, _storage.MarkDoneCallCount, "MarkDoneAsync should call storage mark done.");
+
+        var updated = await _storage.GetTaskAsync(task.Id);
+        Assert.IsNotNull(updated, "Task should still exist after marking done.");
+        Assert.AreEqual(TaskLifecycleStatus.Completed, updated!.Status, "Task status should be Completed.");
+        Assert.IsNotNull(updated.CompletedAt, "CompletedAt timestamp should be set.");
+    }
+
+    [Test]
+    public async Task MarkDoneAsync_WithNullTask_DoesNothing()
+    {
+        await _viewModel.MarkDoneAsync(null!);
+
+        Assert.AreEqual(0, _storage.MarkDoneCallCount, "MarkDoneAsync with null should not call storage.");
+    }
+
+    [Test]
+    public async Task MarkDoneAsync_UpdatesTaskStatusInUI()
+    {
+        var task = CreateTask("task1", TimeSpan.Zero);
+        task.Status = TaskLifecycleStatus.Active;
+
+        await _storage.AddTaskAsync(task);
+        await _viewModel.LoadAsync();
+
+        var beforeMarkDone = _viewModel.Tasks.Single();
+        Assert.AreEqual("Active", beforeMarkDone.StatusText, "Task should initially show as Active.");
+
+        await _viewModel.MarkDoneAsync(beforeMarkDone.Task);
+
+        var afterMarkDone = _viewModel.Tasks.Single();
+        Assert.IsTrue(afterMarkDone.StatusText.Contains("Completed"), "Task should show as Completed after marking done.");
+        Assert.IsTrue(afterMarkDone.HasStatusBadge, "Completed task should have a status badge.");
+    }
+
+    [Test]
     public void Clone_CreatesIndependentCopy()
     {
         var source = CreateTask("clone", TimeSpan.Zero, paused: true);
