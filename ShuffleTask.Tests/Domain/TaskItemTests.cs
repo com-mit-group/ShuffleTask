@@ -102,7 +102,12 @@ public class TaskItemTests
             Status = TaskLifecycleStatus.Completed,
             SnoozedUntil = new DateTime(2025, 9, 20, 7, 0, 0, DateTimeKind.Utc),
             CompletedAt = new DateTime(2025, 9, 18, 16, 0, 0, DateTimeKind.Utc),
-            NextEligibleAt = new DateTime(2025, 9, 21, 9, 0, 0, DateTimeKind.Utc)
+            NextEligibleAt = new DateTime(2025, 9, 21, 9, 0, 0, DateTimeKind.Utc),
+            CustomTimerMode = 1,
+            CustomReminderMinutes = 45,
+            CustomFocusMinutes = 25,
+            CustomBreakMinutes = 5,
+            CustomPomodoroCycles = 4
         };
     }
 
@@ -127,6 +132,11 @@ public class TaskItemTests
             Assert.That(actual.SnoozedUntil, Is.EqualTo(expected.SnoozedUntil));
             Assert.That(actual.CompletedAt, Is.EqualTo(expected.CompletedAt));
             Assert.That(actual.NextEligibleAt, Is.EqualTo(expected.NextEligibleAt));
+            Assert.That(actual.CustomTimerMode, Is.EqualTo(expected.CustomTimerMode));
+            Assert.That(actual.CustomReminderMinutes, Is.EqualTo(expected.CustomReminderMinutes));
+            Assert.That(actual.CustomFocusMinutes, Is.EqualTo(expected.CustomFocusMinutes));
+            Assert.That(actual.CustomBreakMinutes, Is.EqualTo(expected.CustomBreakMinutes));
+            Assert.That(actual.CustomPomodoroCycles, Is.EqualTo(expected.CustomPomodoroCycles));
         });
     }
 

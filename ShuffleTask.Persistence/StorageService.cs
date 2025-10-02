@@ -78,6 +78,11 @@ public class StorageService : IStorageService
             await AddCol("SnoozedUntil", "TEXT", "NULL");
             await AddCol("CompletedAt", "TEXT", "NULL");
             await AddCol("NextEligibleAt", "TEXT", "NULL");
+            await AddCol("CustomTimerMode", IntegerSqlType, "NULL");
+            await AddCol("CustomReminderMinutes", IntegerSqlType, "NULL");
+            await AddCol("CustomFocusMinutes", IntegerSqlType, "NULL");
+            await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
+            await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
         }
         catch
         {
