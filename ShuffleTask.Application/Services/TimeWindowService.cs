@@ -39,7 +39,8 @@ public static class TimeWindowService
         };
 
     // Check if auto-shuffle is allowed for a specific task at the current time.
-    // Manual shuffle should always work regardless of this check.
+    // Manual shuffle uses a separate candidate pool that always bypasses the AutoShuffleAllowed flag
+    // and may optionally ignore AllowedPeriod based on user settings.
     public static bool AutoShuffleAllowedNow(TaskItem task, DateTimeOffset now, AppSettings s)
     {
         // If task explicitly disallows auto-shuffle, return false

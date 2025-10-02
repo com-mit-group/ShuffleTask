@@ -97,7 +97,8 @@ The `SchedulerService` implements intelligent task selection:
    - Respects `AutoShuffleAllowed` flag to prevent auto-selection of certain tasks
    - Checks `AllowedPeriod` (Any/Work/OffWork/Custom) with time windows
    - For Custom periods, validates against task's `CustomStartTime` and `CustomEndTime`
-   - **Note**: Manual shuffle (via UI) bypasses these restrictions
+   - **Note**: Manual shuffle (via UI) always bypasses the `AutoShuffleAllowed` flag and can optionally respect
+     `AllowedPeriod` based on the "Manual shuffle respects allowed hours" setting
 2. **Scoring**: Multi-factor scoring based on:
    - Importance weight (user-defined priority)
    - Urgency weight (deadline proximity, overdue status)
@@ -169,7 +170,8 @@ Structured logging provides comprehensive debugging information:
 2. Task enters `Active` state, eligible for selection
 3. `SchedulerService.PickNextTask()` selects based on scoring (respects `AutoShuffleAllowed` and time windows)
 4. `ShuffleCoordinatorService` manages timer and notifications
-5. User can manually shuffle to pick a different task (not restricted by `AllowedPeriod` or `AutoShuffleAllowed`)
+5. User can manually shuffle to pick a different task. Manual shuffle always ignores `AutoShuffleAllowed` and respects
+   `AllowedPeriod` when the corresponding setting is enabled.
 6. User completes → `StorageService.MarkTaskDoneAsync()` → `Completed` state
 7. If repeating → Auto-transition to `Active` based on schedule
 

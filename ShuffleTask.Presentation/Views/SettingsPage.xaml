@@ -42,6 +42,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -145,9 +146,16 @@
                     IsToggled="{Binding Settings.Active}" />
 
             <Label Grid.Row="12"
+                   Text="Manual shuffle respects allowed hours"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="12"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.ManualShuffleRespectsAllowedPeriod}" />
+
+            <Label Grid.Row="13"
                    Text="Streak bias"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="12"
+            <Grid Grid.Row="13"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -159,17 +167,17 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="13"
+            <Label Grid.Row="14"
                    Text="Stable randomness"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="13"
+            <Switch Grid.Row="14"
                     Grid.Column="1"
                     IsToggled="{Binding Settings.StableRandomnessPerDay}" />
 
-            <Label Grid.Row="14"
+            <Label Grid.Row="15"
                    Text="Importance vs urgency"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="14"
+            <Grid Grid.Row="15"
                   Grid.Column="1"
                   RowDefinitions="Auto,Auto"
                   ColumnDefinitions="*,Auto"
@@ -191,10 +199,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="15"
+            <Label Grid.Row="16"
                    Text="Deadline share"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="15"
+            <Grid Grid.Row="16"
                   Grid.Column="1"
                   RowDefinitions="Auto,Auto"
                   ColumnDefinitions="*,Auto"
@@ -216,10 +224,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="16"
+            <Label Grid.Row="17"
                    Text="Repeat penalty"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="16"
+            <Grid Grid.Row="17"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -231,10 +239,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="17"
+            <Label Grid.Row="18"
                    Text="Size bias strength"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="17"
+            <Grid Grid.Row="18"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -246,18 +254,18 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="18"
+            <Label Grid.Row="19"
                    Text="Pomodoro mode"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="18"
+            <Switch Grid.Row="19"
                     Grid.Column="1"
                     IsToggled="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="19"
+            <Label Grid.Row="20"
                    Text="Focus length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="19"
+            <controls:NumericStepper Grid.Row="20"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="240"
@@ -266,11 +274,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="20"
+            <Label Grid.Row="21"
                    Text="Break length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="20"
+            <controls:NumericStepper Grid.Row="21"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="120"
@@ -279,11 +287,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="21"
+            <Label Grid.Row="22"
                    Text="Cycles"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="21"
+            <controls:NumericStepper Grid.Row="22"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="12"
@@ -292,7 +300,7 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Grid Grid.Row="22"
+            <Grid Grid.Row="23"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -304,7 +312,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="23"
+            <ActivityIndicator Grid.Row="24"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
