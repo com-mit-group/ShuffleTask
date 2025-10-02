@@ -158,7 +158,6 @@ public class TaskListItem
             AllowedPeriod.Any => "Auto shuffle: Any time",
             AllowedPeriod.Work => "Auto shuffle: Work hours",
             AllowedPeriod.OffWork => "Auto shuffle: Off hours",
-            AllowedPeriod.Off => "Auto shuffle: Off",
             _ => "Auto shuffle: Any time"
         };
 

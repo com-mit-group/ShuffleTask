@@ -600,8 +600,20 @@ public partial class DashboardViewModel : ObservableObject
 
     private TaskItem? PickNextCandidate(IList<TaskItem> tasks, AppSettings settings, DateTimeOffset now, string? previousId)
     {
-        var chosen = _scheduler.PickNextTask(tasks, settings, now);
-        if (chosen == null || string.IsNullOrEmpty(previousId) || !string.Equals(chosen.Id, previousId, StringComparison.Ordinal))
+        List<TaskItem> candidatePool = ManualShuffleService.CreateCandidatePool(tasks, settings);
+        var chosenClone = _scheduler.PickNextTask(candidatePool, settings, now);
+        if (chosenClone == null)
+        {
+            return null;
+        }
+
+        var chosen = FindOriginal(tasks, chosenClone.Id);
+        if (chosen == null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(previousId) || !string.Equals(chosen.Id, previousId, StringComparison.Ordinal))
         {
             return chosen;
         }
@@ -615,9 +627,22 @@ public partial class DashboardViewModel : ObservableObject
             return chosen;
         }
 
-        var alternative = _scheduler.PickNextTask(alternatives, settings, now);
+        List<TaskItem> alternativePool = ManualShuffleService.CreateCandidatePool(alternatives, settings);
+        var alternativeClone = _scheduler.PickNextTask(alternativePool, settings, now);
+        if (alternativeClone == null)
+        {
+            return chosen;
+        }
+
+        var alternative = FindOriginal(alternatives, alternativeClone.Id);
         return alternative ?? chosen;
     }
+
+    private static TaskItem? FindOriginal(IEnumerable<TaskItem> tasks, string id)
+    {
+        return tasks.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
+    }
+
 
     private static void EmitTimerResetTelemetry(string reason, TaskItem? task)
     {
@@ -650,7 +675,6 @@ public partial class DashboardViewModel : ObservableObject
             AllowedPeriod.Any => "Any time",
             AllowedPeriod.Work => "Work hours",
             AllowedPeriod.OffWork => "Off hours",
-            AllowedPeriod.Off => "Off days",
             _ => "Any time"
         };
 

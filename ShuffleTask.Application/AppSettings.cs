@@ -53,6 +53,9 @@ public partial class AppSettings : ObservableObject
 
     public bool AutoShuffleEnabled { get; set; } = true;
 
+    [ObservableProperty]
+    private bool manualShuffleRespectsAllowedPeriod = true;
+
     public int MaxDailyShuffles { get; set; } = 6;
 
     public TimeSpan QuietHoursStart { get; set; } = new TimeSpan(22, 0, 0);
