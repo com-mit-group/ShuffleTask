@@ -23,6 +23,8 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -162,13 +164,45 @@
             <Grid Grid.Row="9"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
+                <Label Text="Auto-shuffle allowed"
+                       VerticalOptions="Center" />
+                <Switch Grid.Column="1"
+                        IsToggled="{Binding AutoShuffleAllowed}" />
+            </Grid>
+
+            <Grid Grid.Row="10"
+                  RowDefinitions="Auto,Auto"
+                  RowSpacing="8"
+                  IsVisible="False">
+                <Grid.Triggers>
+                    <DataTrigger TargetType="Grid"
+                                Binding="{Binding AllowedPeriod}"
+                                Value="Custom">
+                        <Setter Property="IsVisible" Value="True" />
+                    </DataTrigger>
+                </Grid.Triggers>
+                <Label Grid.Row="0"
+                       Text="Custom time range" />
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <TimePicker Grid.Column="0"
+                                Time="{Binding CustomStartTime}" />
+                    <TimePicker Grid.Column="1"
+                                Time="{Binding CustomEndTime}" />
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="11"
+                  ColumnDefinitions="Auto,Auto"
+                  ColumnSpacing="12">
                 <Label Text="Paused"
                        VerticalOptions="Center" />
                 <Switch Grid.Column="1"
                         IsToggled="{Binding IsPaused}" />
             </Grid>
 
-            <Grid Grid.Row="10"
+            <Grid Grid.Row="12"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -179,7 +213,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="11"
+            <ActivityIndicator Grid.Row="13"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />
