@@ -36,6 +36,8 @@ public abstract class TaskItemData
 
     public DateTime? NextEligibleAt { get; set; }
 
+    public CutInLineMode CutInLineMode { get; set; }
+
     protected void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -57,5 +59,6 @@ public abstract class TaskItemData
         SnoozedUntil = source.SnoozedUntil;
         CompletedAt = source.CompletedAt;
         NextEligibleAt = source.NextEligibleAt;
+        CutInLineMode = source.CutInLineMode;
     }
 }
