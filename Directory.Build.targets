@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
-    <!-- Prefer CI-supplied semantic version values but fall back to the shared version prefix. -->
-    <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(SemanticVersion)' != ''">$(SemanticVersion)</_SemanticVersionCandidate>
+    <!-- Prefer the shared version prefix, which CI is expected to stamp, before falling back to other version properties. -->
     <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(VersionPrefix)' != ''">$(VersionPrefix)</_SemanticVersionCandidate>
     <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(Version)' != ''">$(Version)</_SemanticVersionCandidate>
     <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(ApplicationDisplayVersion)' != ''">$(ApplicationDisplayVersion)</_SemanticVersionCandidate>
