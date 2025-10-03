@@ -62,6 +62,22 @@ public partial class TasksViewModel : ObservableObject
         await LoadAsync();
     }
 
+    public async Task SetCutInLineModeAsync(TaskItem task, CutInLineMode mode)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        if (task.CutInLineMode != mode)
+        {
+            task.CutInLineMode = mode;
+            await _storage.UpdateTaskAsync(task);
+        }
+
+        await LoadAsync();
+    }
+
     public async Task ResumeAsync(TaskItem task)
     {
         if (task is null)
@@ -112,6 +128,29 @@ public class TaskListItem
     public string StatusTextColor { get; }
 
     public bool CanResume { get; }
+
+    public bool HasCutInLineBadge => Task.CutInLineMode != CutInLineMode.None;
+
+    public string CutInLineBadgeText => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "Cut-in-line: Once",
+        CutInLineMode.UntilCompletion => "Cut-in-line: Until complete",
+        _ => string.Empty
+    };
+
+    public string CutInLineBadgeBackgroundColor => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "#DBEAFE",
+        CutInLineMode.UntilCompletion => "#FEEBC8",
+        _ => "Transparent"
+    };
+
+    public string CutInLineBadgeTextColor => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "#1D4ED8",
+        CutInLineMode.UntilCompletion => "#92400E",
+        _ => "#1F2937"
+    };
 
     private TaskListItem(
         TaskItem task,

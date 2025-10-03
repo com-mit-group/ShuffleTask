@@ -81,6 +81,9 @@ public partial class EditTaskViewModel : ObservableObject
     private bool isPaused;
 
     [ObservableProperty]
+    private CutInLineMode cutInLineMode;
+
+    [ObservableProperty]
     private bool isBusy;
 
     // Per-task timer override settings
@@ -117,6 +120,8 @@ public partial class EditTaskViewModel : ObservableObject
     }
 
     public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
+
+    public CutInLineMode[] CutInLineModeOptions { get; } = Enum.GetValues<CutInLineMode>();
 
     public AllowedPeriod[] AllowedPeriodOptions { get; } = new[]
     {
@@ -201,6 +206,7 @@ public partial class EditTaskViewModel : ObservableObject
         CustomStartTime = _workingCopy.CustomStartTime ?? new TimeSpan(9, 0, 0);
         CustomEndTime = _workingCopy.CustomEndTime ?? new TimeSpan(17, 0, 0);
         IsPaused = _workingCopy.Paused;
+        CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
 
         // Load custom timer settings
@@ -268,6 +274,7 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.CustomStartTime = AllowedPeriod == AllowedPeriod.Custom ? CustomStartTime : null;
             _workingCopy.CustomEndTime = AllowedPeriod == AllowedPeriod.Custom ? CustomEndTime : null;
             _workingCopy.Paused = IsPaused;
+            _workingCopy.CutInLineMode = CutInLineMode;
 
             // Save custom timer settings
             if (UseCustomTimer)

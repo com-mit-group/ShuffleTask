@@ -86,6 +86,7 @@ public class StorageService : IStorageService
             await AddCol("CustomFocusMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
+            await AddCol("CutInLineMode", IntegerSqlType, "0");
         }
         catch
         {
