@@ -67,19 +67,6 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
-    - name: Restore cached .NET workloads
-      id: restore-dotnet-workloads
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          ~/.dotnet/packs
-          ~/.dotnet/sdk-manifests
-          ~/.dotnet/workload*
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
-        restore-keys: |
-          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
-          ${{ runner.os }}-dotnet-
-
     - name: Ensure GitHub NuGet Source
       env:
         NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
@@ -134,16 +121,6 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         PR_NUMBER: ${{ github.event.number }}
       shell: bash
-
-    - name: Save .NET workloads cache
-      if: ${{ steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ~/.dotnet/packs
-          ~/.dotnet/sdk-manifests
-          ~/.dotnet/workload*
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
 
   checkWhetherGUIBuildNeeded:
     name: Check GUI Build Requirements
