@@ -216,6 +216,33 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    - name: Restore cached .NET workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: restore-dotnet-workloads
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.dotnet/packs
+          ~/.dotnet/sdk-manifests
+          ~/.dotnet/workload*
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+        restore-keys: |
+          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
+          ${{ runner.os }}-dotnet-
+
+    - name: Restore cached Android SDK
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: restore-android-sdk
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ env.ANDROID_HOME }}
+          ${{ env.ANDROID_SDK_ROOT }}
+          C:\\Users\\runneradmin\\.android
+        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
+        restore-keys: |
+          ${{ runner.os }}-android-sdk-
+
     - name: Ensure GitHub NuGet Source
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
@@ -229,17 +256,17 @@ jobs:
           --store-password-in-clear-text
 
     - name: Install workload
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
       shell: pwsh
       run: |
-        dotnet workload install maui-android wasi-experimental
+        dotnet workload install maui-android wasi-experimental --skip-manifest-update
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Failed to install workloads"
           exit 1
         }
 
     - name: Setup Android SDK
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
       shell: pwsh
       run: |
         Write-Host "Checking GUI changes: ${{needs.checkWhetherGUIBuildNeeded.outputs.diff}}"
@@ -248,6 +275,26 @@ jobs:
           Write-Error "Failed to setup Android SDK"
           exit 1
         }
+
+    - name: Save .NET workloads cache
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ~/.dotnet/packs
+          ~/.dotnet/sdk-manifests
+          ~/.dotnet/workload*
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+
+    - name: Save Android SDK cache
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ env.ANDROID_HOME }}
+          ${{ env.ANDROID_SDK_ROOT }}
+          C:\\Users\\runneradmin\\.android
+        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
 
     - name: Restore dependencies
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}

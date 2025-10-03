@@ -71,13 +71,71 @@ jobs:
 
       - name: Set up .NET 8 SDK
         if: steps.check-artifacts.outputs.exists == 'false'
-        uses: actions/setup-dotnet@v3
+        id: setup-dotnet
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Install MAUI workload
+      - name: Restore cached .NET workloads
         if: steps.check-artifacts.outputs.exists == 'false'
+        id: restore-dotnet-workloads
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.dotnet/packs
+            ~/.dotnet/sdk-manifests
+            ~/.dotnet/workload*
+          key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-
+            ${{ runner.os }}-dotnet-
+
+      - name: Restore cached Android SDK
+        if: steps.check-artifacts.outputs.exists == 'false'
+        id: restore-android-sdk
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}
+            ${{ env.ANDROID_SDK_ROOT }}
+            C:\\Users\\runneradmin\\.android
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
+      - name: Install MAUI workload
+        if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true'
         run: dotnet workload install maui --skip-manifest-update
+
+      - name: Install Android SDK components
+        if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-android-sdk.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          & "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" "tools"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to install Android SDK components"
+            exit 1
+          }
+
+      - name: Save .NET workloads cache
+        if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.dotnet/packs
+            ~/.dotnet/sdk-manifests
+            ~/.dotnet/workload*
+          key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+
+      - name: Save Android SDK cache
+        if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-android-sdk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}
+            ${{ env.ANDROID_SDK_ROOT }}
+            C:\\Users\\runneradmin\\.android
+          key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
 
       - name: Restore dependencies
         if: steps.check-artifacts.outputs.exists == 'false'
