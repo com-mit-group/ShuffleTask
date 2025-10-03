@@ -6,5 +6,7 @@
     <FileVersion Condition="'$(FileVersion)' == ''">$(VersionPrefix).0</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
     <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(VersionPrefix)</ApplicationDisplayVersion>
+    <ApplicationTitle Condition="'$(ApplicationTitle)' == ''">ShuffleTask</ApplicationTitle>
+    <ApplicationId Condition="'$(ApplicationId)' == ''">com.commit-group.shuffletask</ApplicationId>
   </PropertyGroup>
 </Project>
