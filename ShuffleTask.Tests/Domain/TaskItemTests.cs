@@ -107,8 +107,8 @@ public class TaskItemTests
             CustomReminderMinutes = 45,
             CustomFocusMinutes = 25,
             CustomBreakMinutes = 5,
-            CustomPomodoroCycles = 4
-            CutInLineMode = CutInLineMode.Once
+            CustomPomodoroCycles = 4,
+            CutInLineMode = CutInLineMode.Once,
         };
     }
 
