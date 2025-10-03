@@ -78,6 +78,7 @@ public class StorageService : IStorageService
             await AddCol("SnoozedUntil", "TEXT", "NULL");
             await AddCol("CompletedAt", "TEXT", "NULL");
             await AddCol("NextEligibleAt", "TEXT", "NULL");
+            await AddCol("CutInLineMode", IntegerSqlType, "0");
         }
         catch
         {
