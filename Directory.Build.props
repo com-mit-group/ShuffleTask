@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <!-- CI can override VersionPrefix/Version to stamp builds; default keeps local builds consistent. -->
+    <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.1.0</VersionPrefix>
+    <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>
+    <FileVersion Condition="'$(FileVersion)' == ''">$(VersionPrefix).0</FileVersion>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
+    <ApplicationDisplayVersion Condition="'$(ApplicationDisplayVersion)' == ''">$(VersionPrefix)</ApplicationDisplayVersion>
+  </PropertyGroup>
+</Project>
