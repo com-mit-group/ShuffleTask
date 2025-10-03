@@ -45,7 +45,7 @@ jobs:
         if: always()
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ steps.set-version.outputs.version }}"

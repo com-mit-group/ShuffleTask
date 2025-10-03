@@ -40,7 +40,7 @@ jobs:
         id: check-signed
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -69,7 +69,7 @@ jobs:
         id: check-build
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -96,7 +96,7 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
