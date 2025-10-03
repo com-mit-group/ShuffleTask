@@ -17,8 +17,14 @@
 
         <ApplicationTitle>ShuffleTask</ApplicationTitle>
         <ApplicationId>com.commit-group.shuffletask</ApplicationId>
-        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
+        <_SemanticDisplayVersion Condition="'$([System.String]::IsNullOrWhiteSpace('$(ApplicationDisplayVersion)'))' == 'False' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(ApplicationDisplayVersion)', '^\d+\.\d+\.\d+$')) == 'True'">$(ApplicationDisplayVersion)</_SemanticDisplayVersion>
+        <_SemanticVersionMajor Condition="'$(_SemanticDisplayVersion)' != ''">$([System.Version]::Parse('$(_SemanticDisplayVersion)').Major)</_SemanticVersionMajor>
+        <_SemanticVersionMinor Condition="'$(_SemanticDisplayVersion)' != ''">$([System.Version]::Parse('$(_SemanticDisplayVersion)').Minor)</_SemanticVersionMinor>
+        <_SemanticVersionPatch Condition="'$(_SemanticDisplayVersion)' != ''">$([System.Version]::Parse('$(_SemanticDisplayVersion)').Build)</_SemanticVersionPatch>
+        <!-- Android version code maps semantic versions via base-1000 weighting (major * 1,000,000 + minor * 1,000 + patch), keeping each <=999 component unique within Int32 while leaving 1 as the fallback when parsing fails. -->
+        <ApplicationVersion Condition="'$(_SemanticDisplayVersion)' != ''">$([System.Convert]::ToInt32($([System.Decimal]::Add($([System.Decimal]::Add($([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_SemanticVersionMajor)')), $([System.Decimal]::Parse('1000000'))), $([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_SemanticVersionMinor)')), $([System.Decimal]::Parse('1000'))))), $([System.Decimal]::Parse('$(_SemanticVersionPatch)'))))))</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">11.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">13.1</SupportedOSPlatformVersion>
