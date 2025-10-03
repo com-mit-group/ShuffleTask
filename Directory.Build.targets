@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <!-- Prefer the shared version prefix, which CI is expected to stamp, before falling back to other version properties. -->
+    <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(VersionPrefix)' != ''">$(VersionPrefix)</_SemanticVersionCandidate>
+    <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(Version)' != ''">$(Version)</_SemanticVersionCandidate>
+    <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(ApplicationDisplayVersion)' != ''">$(ApplicationDisplayVersion)</_SemanticVersionCandidate>
+    <_SemanticVersion Condition="'$(_SemanticVersionCandidate)' != '' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(_SemanticVersionCandidate)', '^\d+\.\d+\.\d+$')) == 'True'">$(_SemanticVersionCandidate)</_SemanticVersion>
+    <_VersionMajor Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Major)</_VersionMajor>
+    <_VersionMinor Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Minor)</_VersionMinor>
+    <_VersionPatch Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Build)</_VersionPatch>
+    <!-- Android version code packs major/minor/patch into base-1000 slots (major * 1_000_000 + minor * 1_000 + patch) so every semantic version stays unique within Int32. -->
+    <AndroidVersionCode Condition="'$(_SemanticVersion)' != ''">$([System.Convert]::ToInt32($([System.Decimal]::Add($([System.Decimal]::Add($([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_VersionMajor)')), $([System.Decimal]::Parse('1000000'))), $([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_VersionMinor)')), $([System.Decimal]::Parse('1000'))))), $([System.Decimal]::Parse('$(_VersionPatch)'))))))</AndroidVersionCode>
+    <!-- Fallback to the legacy version code when parsing fails or nothing is supplied. -->
+    <AndroidVersionCode Condition="'$(AndroidVersionCode)' == ''">1</AndroidVersionCode>
+    <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">$(AndroidVersionCode)</ApplicationVersion>
+  </PropertyGroup>
+</Project>
