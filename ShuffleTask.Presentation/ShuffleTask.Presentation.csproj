@@ -16,7 +16,7 @@
         <Nullable>enable</Nullable>
 
         <ApplicationTitle>ShuffleTask</ApplicationTitle>
-        <ApplicationId>com.companyname.shuffletask</ApplicationId>
+        <ApplicationId>com.commit-group.shuffletask</ApplicationId>
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
 

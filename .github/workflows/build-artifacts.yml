@@ -1,0 +1,189 @@
+name: Build Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version (e.g., 1.0.0). Leave empty to use the tag this workflow runs on.'
+        type: string
+        required: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+      build-status: ${{ steps.build-status.outputs.status }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: set-version
+        shell: pwsh
+        run: |
+          $manualVersion = "${{ github.event.inputs.version }}"
+          if (-not [string]::IsNullOrWhiteSpace($manualVersion)) {
+            $version = $manualVersion
+            Write-Host "Using manual version: $version"
+          } elseif ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref }}".Substring(10)
+            Write-Host "Using tag version: $version"
+          } else {
+            throw "Version input is required when the workflow is not run from a tag."
+          }
+
+          New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
+          Set-Content -Path ./artifacts/VERSION.txt -Value $version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Check for existing build artifacts
+        id: check-artifacts
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $version = "${{ steps.set-version.outputs.version }}"
+          $expected = @(
+            "build-$version-windows-unsigned",
+            "build-$version-android-unsigned",
+            "build-$version-metadata"
+          )
+
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $existing = $artifacts | Where-Object { $_.name -in $expected -and $_.expired -eq $false } | Select-Object -ExpandProperty name -Unique
+
+          if ($existing.Count -eq $expected.Count) {
+            Write-Host "✓ Build artifacts already exist for version $version"
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No complete build artifact set found for version $version. Proceeding with build."
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Set up .NET 8 SDK
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install MAUI workload
+        if: steps.check-artifacts.outputs.exists == 'false'
+        run: dotnet workload install maui --skip-manifest-update
+
+      - name: Restore dependencies
+        if: steps.check-artifacts.outputs.exists == 'false'
+        run: dotnet restore ShuffleTask.sln
+
+      - name: Build Windows self-contained executable
+        if: steps.check-artifacts.outputs.exists == 'false'
+        run: >-
+          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -f net8.0-windows10.0.19041.0
+          -o ./artifacts/win
+          /p:Version=${{ steps.set-version.outputs.version }}
+          /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
+
+      - name: Build Android APK
+        if: steps.check-artifacts.outputs.exists == 'false'
+        run: >-
+          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          -c Release
+          -f net8.0-android
+          /p:AndroidPackageFormat=apk
+          /p:Version=${{ steps.set-version.outputs.version }}
+          /p:ApplicationVersion=${{ steps.set-version.outputs.version }}
+          -o ./artifacts/android
+
+      - name: Normalize artifact names
+        if: steps.check-artifacts.outputs.exists == 'false'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.set-version.outputs.version }}"
+
+          $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
+          $winName = "ShuffleTask-$version-unsigned.exe"
+          Rename-Item -Path $winOutput.FullName -NewName $winName -Force
+          Write-Host "Renamed Windows artifact to: $winName"
+
+          $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
+          $apkName = "ShuffleTask-$version-unsigned.apk"
+          Rename-Item -Path $apkOutput.FullName -NewName $apkName -Force
+          Write-Host "Renamed Android artifact to: $apkName"
+
+      - name: Upload Windows artifact
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-windows-unsigned
+          path: artifacts/win/*.exe
+          if-no-files-found: error
+
+      - name: Upload Android artifact
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-android-unsigned
+          path: artifacts/android/*.apk
+          if-no-files-found: error
+
+      - name: Upload metadata
+        if: steps.check-artifacts.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ steps.set-version.outputs.version }}-metadata
+          path: artifacts/VERSION.txt
+          if-no-files-found: error
+
+      - name: Record build status
+        id: build-status
+        if: always()
+        shell: pwsh
+        run: |
+          if ("${{ job.status }}" -ne "success") {
+            echo "status=failed" >> $env:GITHUB_OUTPUT
+          } elseif ("${{ steps.check-artifacts.outputs.exists }}" -eq "true") {
+            echo "status=skipped" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "status=success" >> $env:GITHUB_OUTPUT
+          }
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+      - name: Build summary
+        run: |
+          echo "## Build Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ needs.build.outputs.build-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build.outputs.build-status }}" == "skipped" ]; then
+            echo "✓ Build artifacts already exist for this version." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts: \`build-${{ needs.build.outputs.version }}-windows-unsigned\`, \`build-${{ needs.build.outputs.version }}-android-unsigned\`, and \`build-${{ needs.build.outputs.version }}-metadata\`." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build.outputs.build-status }}" == "success" ]; then
+            echo "✓ Build completed successfully." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts uploaded with names prefixed by \`build-${{ needs.build.outputs.version }}\`." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✗ Build status unknown or failed." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "Run the **Sign Artifacts** workflow with version: \`${{ needs.build.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
