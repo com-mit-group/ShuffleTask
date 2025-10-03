@@ -72,6 +72,9 @@ public partial class EditTaskViewModel : ObservableObject
     private bool isPaused;
 
     [ObservableProperty]
+    private CutInLineMode cutInLineMode;
+
+    [ObservableProperty]
     private bool isBusy;
 
     private bool _isNew = true;
@@ -89,6 +92,8 @@ public partial class EditTaskViewModel : ObservableObject
     }
 
     public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
+
+    public CutInLineMode[] CutInLineModeOptions { get; } = Enum.GetValues<CutInLineMode>();
 
     public AllowedPeriod[] AllowedPeriodOptions { get; } = new[]
     {
@@ -168,6 +173,7 @@ public partial class EditTaskViewModel : ObservableObject
         IntervalDays = _workingCopy.IntervalDays > 0 ? _workingCopy.IntervalDays : 1;
         AllowedPeriod = _workingCopy.AllowedPeriod;
         IsPaused = _workingCopy.Paused;
+        CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
 
         if (_workingCopy.Deadline.HasValue)
@@ -213,6 +219,7 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
             _workingCopy.AllowedPeriod = AllowedPeriod;
             _workingCopy.Paused = IsPaused;
+            _workingCopy.CutInLineMode = CutInLineMode;
 
             if (HasDeadline)
             {

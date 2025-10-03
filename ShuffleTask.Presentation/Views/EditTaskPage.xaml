@@ -23,6 +23,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -160,6 +161,17 @@
                     SelectedItem="{Binding AllowedPeriod}" />
 
             <Grid Grid.Row="9"
+                  ColumnDefinitions="Auto,*"
+                  ColumnSpacing="12">
+                <Label Text="Cut-in-line priority"
+                       VerticalOptions="Center" />
+                <Picker Grid.Column="1"
+                        ItemsSource="{Binding CutInLineModeOptions}"
+                        SelectedItem="{Binding CutInLineMode}"
+                        ItemDisplayBinding="{Binding .}" />
+            </Grid>
+
+            <Grid Grid.Row="10"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
                 <Label Text="Paused"
@@ -168,7 +180,7 @@
                         IsToggled="{Binding IsPaused}" />
             </Grid>
 
-            <Grid Grid.Row="10"
+            <Grid Grid.Row="11"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -179,7 +191,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="11"
+            <ActivityIndicator Grid.Row="12"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />
