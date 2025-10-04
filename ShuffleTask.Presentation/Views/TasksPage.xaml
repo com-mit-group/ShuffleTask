@@ -50,6 +50,18 @@
                                        BackgroundColor="#f2c94c"
                                        CommandParameter="{Binding Task}"
                                        Invoked="OnTogglePauseSwipe" />
+                            <SwipeItem Text="Cut-In Once"
+                                       BackgroundColor="#38b2ac"
+                                       CommandParameter="{Binding Task}"
+                                       Invoked="OnCutInOnceSwipe" />
+                            <SwipeItem Text="Cut-In Until Done"
+                                       BackgroundColor="#f59e0b"
+                                       CommandParameter="{Binding Task}"
+                                       Invoked="OnCutInUntilDoneSwipe" />
+                            <SwipeItem Text="Clear Cut-In"
+                                       BackgroundColor="#9ca3af"
+                                       CommandParameter="{Binding Task}"
+                                       Invoked="OnClearCutInSwipe" />
                             <SwipeItem Text="Delete"
                                        BackgroundColor="#eb5757"
                                        CommandParameter="{Binding Task}"
@@ -70,10 +82,23 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <Label Grid.Row="0"
-                                   Text="{Binding Title}"
-                                   FontSize="18"
-                                   FontAttributes="Bold" />
+                            <Grid Grid.Row="0"
+                                  ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="8">
+                                <Label Text="{Binding Title}"
+                                       FontSize="18"
+                                       FontAttributes="Bold" />
+                                <Border Grid.Column="1"
+                                        Padding="8,4"
+                                        StrokeThickness="0"
+                                        BackgroundColor="{Binding CutInLineBadgeBackgroundColor}"
+                                        StrokeShape="RoundRectangle 8"
+                                        IsVisible="{Binding HasCutInLineBadge}">
+                                    <Label Text="{Binding CutInLineBadgeText}"
+                                           FontSize="12"
+                                           TextColor="{Binding CutInLineBadgeTextColor}" />
+                                </Border>
+                            </Grid>
 
                             <Label Grid.Row="1"
                                    Text="{Binding Description}"

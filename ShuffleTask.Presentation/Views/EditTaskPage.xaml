@@ -25,6 +25,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -162,6 +163,17 @@
                     SelectedItem="{Binding AllowedPeriod}" />
 
             <Grid Grid.Row="9"
+                  ColumnDefinitions="Auto,*"
+                  ColumnSpacing="12">
+                <Label Text="Cut-in-line priority"
+                       VerticalOptions="Center" />
+                <Picker Grid.Column="1"
+                        ItemsSource="{Binding CutInLineModeOptions}"
+                        SelectedItem="{Binding CutInLineMode}"
+                        ItemDisplayBinding="{Binding .}" />
+            </Grid>
+
+            <Grid Grid.Row="10"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
                 <Label Text="Auto-shuffle allowed"
@@ -170,7 +182,7 @@
                         IsToggled="{Binding AutoShuffleAllowed}" />
             </Grid>
 
-            <Grid Grid.Row="10"
+            <Grid Grid.Row="11"
                   RowDefinitions="Auto,Auto"
                   RowSpacing="8"
                   IsVisible="False">
@@ -193,7 +205,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="11"
+            <Grid Grid.Row="12"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
                 <Label Text="Paused"
@@ -203,7 +215,7 @@
             </Grid>
 
             <!-- Custom Timer Override Section -->
-            <Grid Grid.Row="12"
+            <Grid Grid.Row="13"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="8">
                 <Grid Grid.Row="0"
@@ -292,7 +304,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="13"
+            <Grid Grid.Row="14"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -303,7 +315,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="14"
+            <ActivityIndicator Grid.Row="15"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />

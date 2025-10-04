@@ -86,6 +86,7 @@ public class StorageService : IStorageService
             await AddCol("CustomFocusMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
+            await AddCol("CutInLineMode", IntegerSqlType, "0");
         }
         catch
         {
@@ -171,6 +172,7 @@ public class StorageService : IStorageService
             existing.Status = TaskLifecycleStatus.Completed;
             existing.SnoozedUntil = null;
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
+            existing.CutInLineMode = CutInLineMode.None;
 
             conn.Update(existing);
             updated = existing.ToDomain();

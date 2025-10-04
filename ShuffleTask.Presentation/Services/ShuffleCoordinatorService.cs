@@ -5,6 +5,7 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
@@ -406,6 +407,7 @@ public class ShuffleCoordinatorService : IDisposable
         ClearPendingShuffle();
         var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
+        await HandleCutInLineModeAsync(task).ConfigureAwait(false);
         await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
@@ -461,6 +463,12 @@ public class ShuffleCoordinatorService : IDisposable
 
         int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+    }
+
+    private async Task HandleCutInLineModeAsync(TaskItem task)
+    {
+        await CutInLineUtilities.ClearCutInLineOnceAsync(task, _storage).ConfigureAwait(false);
+        // UntilCompletion mode is handled when the task is marked done
     }
 
     private static bool ShouldAutoShuffle(AppSettings settings)

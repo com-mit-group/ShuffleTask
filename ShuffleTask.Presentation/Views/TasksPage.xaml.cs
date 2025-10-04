@@ -72,6 +72,30 @@ public partial class TasksPage : ContentPage
         }
     }
 
+    private async void OnCutInOnceSwipe(object sender, EventArgs e)
+    {
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
+        {
+            await _vm.SetCutInLineModeAsync(task, CutInLineMode.Once);
+        }
+    }
+
+    private async void OnCutInUntilDoneSwipe(object sender, EventArgs e)
+    {
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
+        {
+            await _vm.SetCutInLineModeAsync(task, CutInLineMode.UntilCompletion);
+        }
+    }
+
+    private async void OnClearCutInSwipe(object sender, EventArgs e)
+    {
+        if (sender is SwipeItem { CommandParameter: TaskItem task })
+        {
+            await _vm.SetCutInLineModeAsync(task, CutInLineMode.None);
+        }
+    }
+
     private async void OnDeleteSwipe(object sender, EventArgs e)
     {
         var task = sender switch
