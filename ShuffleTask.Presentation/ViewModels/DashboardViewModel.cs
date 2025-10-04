@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Utilities;
@@ -185,7 +186,7 @@ public partial class DashboardViewModel : ObservableObject
                 return;
             }
 
-            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
+            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage).ConfigureAwait(false);
 
             BindTask(next);
 
