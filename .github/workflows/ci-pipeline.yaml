@@ -228,16 +228,33 @@ jobs:
           }
         }
 
-    - name: Cache .NET workloads
+    - name: Restore cached .NET workloads
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      uses: actions/cache@v4
+      id: restore-dotnet-workloads
+      uses: actions/cache/restore@v4
       with:
         path: |
           ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\packs
           ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\sdk-manifests
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workloadinstall
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workload*
           ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\metadata
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+        restore-keys: |
+          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
+          ${{ runner.os }}-dotnet-
+
+    - name: Restore cached Android SDK
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: restore-android-sdk
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ env.ANDROID_HOME }}
+          ${{ env.ANDROID_SDK_ROOT }}
+          C:\\Users\\runneradmin\\.android
+        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
+        restore-keys: |
+          ${{ runner.os }}-android-sdk-
 
     - name: Ensure GitHub NuGet Source
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
@@ -252,17 +269,17 @@ jobs:
           --store-password-in-clear-text
 
     - name: Install workload
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
       shell: pwsh
       run: |
-        dotnet workload install maui-android wasi-experimental
+        dotnet workload install maui-android wasi-experimental --skip-manifest-update
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Failed to install workloads"
           exit 1
         }
 
     - name: Setup Android SDK
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
       shell: pwsh
       run: |
         Write-Host "Checking GUI changes: ${{needs.checkWhetherGUIBuildNeeded.outputs.diff}}"
@@ -271,6 +288,27 @@ jobs:
           Write-Error "Failed to setup Android SDK"
           exit 1
         }
+
+    - name: Save .NET workloads cache
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\packs
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\sdk-manifests
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workload*
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\metadata
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+
+    - name: Save Android SDK cache
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ env.ANDROID_HOME }}
+          ${{ env.ANDROID_SDK_ROOT }}
+          C:\\Users\\runneradmin\\.android
+        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
 
     - name: Restore dependencies
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
@@ -324,14 +362,22 @@ jobs:
     - name: Fetch all tags
       run: git fetch --tags --force
     - name: Tag on main
+      id: tag_release
       run: |
           git config --global user.name "Github actions: gitversion"
           git config --global user.email "gitversion@github-actions.com"
           # Check if tag already exists
           if git rev-parse "${{ needs.gitVersion.outputs.semVer}}" >/dev/null 2>&1; then
             echo "Tag ${{ needs.gitVersion.outputs.semVer}} already exists, skipping tag creation"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             echo "Creating tag ${{ needs.gitVersion.outputs.semVer}}"
             git tag -a "${{ needs.gitVersion.outputs.semVer}}" -m "Version ${{ needs.gitVersion.outputs.semVer}}"
             git push --tags
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
+    - name: Export semantic version as VersionPrefix
+      if: steps.tag_release.outputs.created == 'true'
+      run: |
+        echo "Stamping VersionPrefix with ${{ needs.gitVersion.outputs.semVer }} for downstream automation"
+        echo "VersionPrefix=${{ needs.gitVersion.outputs.semVer }}" >> $GITHUB_ENV

@@ -48,6 +48,14 @@ public partial class TasksPage : ContentPage
         }
     }
 
+    private async void OnMarkDoneButtonClicked(object sender, EventArgs e)
+    {
+        if (sender is Button { CommandParameter: TaskItem task })
+        {
+            await _vm.MarkDoneAsync(task);
+        }
+    }
+
     private async void OnEditSwipe(object sender, EventArgs e)
     {
         if (sender is SwipeItem { CommandParameter: TaskItem task })

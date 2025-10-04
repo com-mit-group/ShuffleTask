@@ -138,6 +138,17 @@
                                                      Spacing="6"
                                                      HorizontalOptions="End"
                                                      VerticalOptions="Start">
+                                    <Button Text="Mark Done"
+                                            FontSize="12"
+                                            Padding="12,4"
+                                            BackgroundColor="#2f855a"
+                                            TextColor="White"
+                                            BorderColor="#2f855a"
+                                            CornerRadius="8"
+                                            HorizontalOptions="End"
+                                            Clicked="OnMarkDoneButtonClicked"
+                                            CommandParameter="{Binding Task}"
+                                            SemanticProperties.Description="{Binding Title, StringFormat='Mark task {0} as done'}" />
                                     <Button Text="Edit"
                                             FontSize="12"
                                             Padding="12,4"

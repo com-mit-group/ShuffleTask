@@ -1,180 +1,271 @@
-name: Manual Release
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version (e.g. 1.0.0)
+        description: 'Semantic version to release (e.g., 1.0.0)'
         type: string
         required: true
       notes:
-        description: Release notes
+        description: 'Release notes (optional)'
         type: string
         required: false
 
 jobs:
   release:
-    # Run the release process on Windows runners to build native binaries.
-    runs-on: windows-latest
-    env:
-      # Secrets must be provided via repository/environment settings once signing assets are available.
-      WINDOWS_CERT_PFX_B64: ${{ secrets.WINDOWS_CERT_PFX }}
-      WINDOWS_CERT_PASS: ${{ secrets.WINDOWS_CERT_PASS }}
-      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
-      ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ github.event.inputs.version }}
+      release-status: ${{ steps.release-status.outputs.status }}
+
     steps:
       - name: Checkout repository
-        # Fetch full history so tags/releases can be created accurately.
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up .NET 8 SDK
-        # Ensure the required .NET SDK and workloads are available.
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Install MAUI workload
-        # Install MAUI tooling needed for Android build targets.
-        run: dotnet workload install maui --skip-manifest-update
-
-      - name: Restore dependencies
-        # Restore all solution dependencies before building.
-        run: dotnet restore ShuffleTask.sln
-
-      - name: Validate signing prerequisites
-        # Fail fast with guidance if signing assets are not yet configured.
-        shell: pwsh
+      - name: Validate version input
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
-            throw "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
-          }
-          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_B64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
-            throw "Android signing secrets missing. After generating your keystore (.jks/.keystore), base64-encode it into ANDROID_KEYSTORE and place the password in ANDROID_KEY_PASS."
-          }
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "✗ Version is required. Please provide a semantic version (e.g., 1.0.0)"
+            exit 1
+          fi
+          echo "Processing version: $VERSION"
 
-      - name: Build Windows self-contained executable
-        # Publish the Windows desktop application to the artifacts directory.
-        run: >-
-          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
-          -c Release
-          -r win-x64
-          --self-contained true
-          -f net8.0-windows10.0.19041.0
-          -o ./artifacts/win
-
-      - name: Build Android APK
-        # Publish the Android application package via MAUI.
-        run: >-
-          dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
-          -c Release
-          -f net8.0-android
-          /p:AndroidPackageFormat=apk
-          -o ./artifacts/android
-
-      - name: Normalize artifact names
-        # Ensure predictable artifact names for signing and release packaging.
-        shell: pwsh
+      - name: Check if release already exists
+        id: check-release
         run: |
-          $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
-          Rename-Item -Path $winOutput.FullName -NewName 'ShuffleTask.exe' -Force
-          $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
-          Rename-Item -Path $apkOutput.FullName -NewName 'ShuffleTask.apk' -Force
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Checking for existing release for version: $VERSION"
 
-      - name: Prepare Windows signing certificate
-        # Decode the base64-encoded PFX certificate from environment secrets.
-        shell: pwsh
-        run: |
-          $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.pfx'
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_B64))
-          "WINDOWS_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if gh release view "$VERSION" &>/dev/null; then
+            echo "✓ Release already exists for version $VERSION"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "No existing release found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prepare Android keystore
-        # Decode the base64-encoded Android keystore from environment secrets.
+      - name: Check if signed artifacts exist
+        if: steps.check-release.outputs.exists == 'false'
+        id: check-signed
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
         run: |
-          $keystorePath = Join-Path $env:RUNNER_TEMP 'android-signing-key.jks'
-          [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_B64))
-          "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $repo = "${{ github.repository }}"
+          $version = "${{ github.event.inputs.version }}"
+          $expected = @(
+            "signed-$version-windows",
+            "signed-$version-android",
+            "signed-$version-metadata"
+          )
 
-      - name: Ensure signtool is available
-        shell: pwsh
-        run: |
-          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
-          if (-not $signtool) {
-            Write-Host "signtool.exe not found. Attempting to add Windows SDK signtool to PATH..."
-            $sdkDirs = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory -ErrorAction SilentlyContinue
-            $signtoolPath = $null
-            foreach ($sdkDir in $sdkDirs) {
-              $possible = Join-Path $sdkDir.FullName 'x64\signtool.exe'
-              if (Test-Path $possible) {
-                $signtoolPath = Split-Path $possible -Parent
-                break
-              }
-            }
-            if ($signtoolPath) {
-              echo $signtoolPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              Write-Host "Added $signtoolPath to PATH."
-            } else {
-              throw "signtool.exe could not be found or installed automatically."
-            }
-          } else {
-            Write-Host "signtool.exe found: $($signtool.Source)"
+          $response = gh api "repos/$repo/actions/artifacts?per_page=100" | ConvertFrom-Json
+          $artifacts = @()
+          if ($null -ne $response.artifacts) { $artifacts = $response.artifacts }
+
+          $windowsArtifact = $artifacts | Where-Object { $_.name -eq $expected[0] -and $_.expired -eq $false } | Select-Object -First 1
+          $androidArtifact = $artifacts | Where-Object { $_.name -eq $expected[1] -and $_.expired -eq $false } | Select-Object -First 1
+          $metadataArtifact = $artifacts | Where-Object { $_.name -eq $expected[2] -and $_.expired -eq $false } | Select-Object -First 1
+
+          if (-not $windowsArtifact -or -not $androidArtifact -or -not $metadataArtifact) {
+            Write-Host "✗ Signed artifacts not found for version $version"
+            Write-Host "Ensure the Sign Artifacts workflow has been completed for this version."
+            throw "Signed artifacts missing."
           }
 
-      - name: Sign Windows executable
-        # Apply Authenticode signature to the Windows binary.
-        run: >-
-          signtool sign
-          /f "$env:WINDOWS_CERT_PATH"
-          /p "$env:WINDOWS_CERT_PASS"
-          /tr http://timestamp.digicert.com
-          /td sha256
-          /fd sha256
-          artifacts\win\ShuffleTask.exe
+          echo "windows_url=$($windowsArtifact.archive_download_url)" >> $env:GITHUB_OUTPUT
+          echo "android_url=$($androidArtifact.archive_download_url)" >> $env:GITHUB_OUTPUT
+          echo "metadata_url=$($metadataArtifact.archive_download_url)" >> $env:GITHUB_OUTPUT
 
-      - name: Align and sign Android APK
-        # Align the APK and sign it with apksigner to produce v2/v3 signatures.
+          Write-Host "✓ Signed artifacts found for version $version"
+
+      - name: Download signed artifacts
+        if: steps.check-release.outputs.exists == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+
+          $downloadRoot = Join-Path (Get-Location) 'release-downloads'
+          if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
+
+          $winZip = Join-Path $downloadRoot 'signed-windows.zip'
+          $androidZip = Join-Path $downloadRoot 'signed-android.zip'
+          $metadataZip = Join-Path $downloadRoot 'signed-metadata.zip'
+
+          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.windows_url }}" --output $winZip
+          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.android_url }}" --output $androidZip
+          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.metadata_url }}" --output $metadataZip
+
+          $winExtract = Join-Path $downloadRoot 'windows'
+          $androidExtract = Join-Path $downloadRoot 'android'
+          $metadataExtract = Join-Path $downloadRoot 'metadata'
+          New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
+          New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
+          New-Item -ItemType Directory -Force -Path $metadataExtract | Out-Null
+
+          Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
+          Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
+          Expand-Archive -Path $metadataZip -DestinationPath $metadataExtract -Force
+
+          $releaseRoot = Join-Path (Get-Location) 'release-artifacts'
+          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
+
+          $windowsTarget = Join-Path $releaseRoot 'windows'
+          $androidTarget = Join-Path $releaseRoot 'android'
+          New-Item -ItemType Directory -Force -Path $windowsTarget | Out-Null
+          New-Item -ItemType Directory -Force -Path $androidTarget | Out-Null
+
+          $windowsSource = Join-Path (Join-Path $winExtract 'artifacts') 'win'
+          $androidSource = Join-Path (Join-Path $androidExtract 'artifacts') 'android'
+          $metadataSource = Join-Path (Join-Path $metadataExtract 'artifacts') 'VERSION.txt'
+
+          if (-not (Test-Path $windowsSource)) { throw "Signed Windows files not found at $windowsSource" }
+          if (-not (Test-Path $androidSource)) { throw "Signed Android files not found at $androidSource" }
+          if (-not (Test-Path $metadataSource)) { throw "VERSION.txt not found at $metadataSource" }
+
+          Copy-Item -Path (Join-Path $windowsSource '*') -Destination $windowsTarget -Recurse -Force
+          Copy-Item -Path (Join-Path $androidSource '*') -Destination $androidTarget -Recurse -Force
+          Copy-Item -Path $metadataSource -Destination (Join-Path $releaseRoot 'VERSION.txt') -Force
+
+          Remove-Item $winZip, $androidZip, $metadataZip -Force
+          Remove-Item $downloadRoot -Recurse -Force
+
+          Get-ChildItem -Path ./release-artifacts -Recurse
+
+      - name: Prepare packaged assets
+        if: steps.check-release.outputs.exists == 'false'
         shell: pwsh
         run: |
-          $apkPath = (Resolve-Path 'artifacts/android/ShuffleTask.apk').ProviderPath
-          $apkDirectory = Split-Path $apkPath -Parent
-          $androidSdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $null }
-          if (-not $androidSdkRoot) { throw 'ANDROID_SDK_ROOT/ANDROID_HOME environment variable is not set.' }
+          $version = "${{ github.event.inputs.version }}"
+          $releaseRoot = Join-Path (Get-Location) 'release-artifacts'
+          $windowsDir = Join-Path $releaseRoot 'windows'
+          $androidDir = Join-Path $releaseRoot 'android'
+          $versionFile = Join-Path $releaseRoot 'VERSION.txt'
 
-          $buildToolsDir = Get-ChildItem -Path (Join-Path $androidSdkRoot 'build-tools') -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $buildToolsDir) { throw 'Android SDK build-tools directory could not be located.' }
+          if (-not (Test-Path $windowsDir)) { throw "Windows payload directory missing at $windowsDir" }
+          if (-not (Test-Path $androidDir)) { throw "Android payload directory missing at $androidDir" }
+          if (-not (Test-Path $versionFile)) { throw "VERSION.txt missing at $versionFile" }
 
-          $zipalignPath = Join-Path $buildToolsDir.FullName 'zipalign.exe'
-          if (-not (Test-Path $zipalignPath)) { throw "zipalign tool not found at $zipalignPath" }
+          $winExe = Get-ChildItem $windowsDir -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
+          if (-not $winExe) { $winExe = Get-ChildItem $windowsDir -Filter *.exe -Recurse | Select-Object -First 1 }
+          if (-not $winExe) { throw "No Windows executable found under $windowsDir" }
 
-          $alignedApkPath = Join-Path $apkDirectory 'ShuffleTask-aligned.apk'
-          & $zipalignPath -f -p 4 $apkPath $alignedApkPath
-          Move-Item $alignedApkPath $apkPath -Force
+          $winZip = Join-Path $releaseRoot "ShuffleTask-$version-windows.zip"
+          if (Test-Path $winZip) { Remove-Item $winZip -Force }
+          Compress-Archive -Path (Join-Path $windowsDir '*') -DestinationPath $winZip -Force
 
-          $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
-          if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
+          $apkFile = Get-ChildItem $androidDir -Filter *.apk -Recurse | Select-Object -First 1
+          if (-not $apkFile) { throw "No Android APK found under $androidDir" }
 
-          $alias = if ($env:ANDROID_KEY_ALIAS) { $env:ANDROID_KEY_ALIAS } else { 'android' }
-          $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
-          Set-Content -Path $storePassFile -Value $env:ANDROID_KEY_PASS -NoNewline
+          $apkTarget = Join-Path $releaseRoot "ShuffleTask-$version.apk"
+          Copy-Item $apkFile.FullName $apkTarget -Force
 
-          & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
+          Write-Host "Prepared packaged assets:"
+          Write-Host "  Windows ZIP: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $winZip))"
+          Write-Host "  Android APK: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $apkTarget))"
+          Write-Host "  VERSION.txt: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $versionFile))"
 
-          & $apksignerPath verify --print-certs $apkPath
-          Remove-Item $storePassFile -Force
+      - name: Create release notes
+        if: steps.check-release.outputs.exists == 'false'
+        id: release-notes
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          USER_NOTES="${{ github.event.inputs.notes }}"
+
+          cat > release-notes.md << EOF
+          # ShuffleTask v$VERSION
+
+          $USER_NOTES
+
+          ## Installation
+
+          ### Windows
+          Download \`ShuffleTask-$VERSION-windows.zip\`, extract the contents, and run \`ShuffleTask-$VERSION.exe\` from the unpacked folder.
+
+          ### Android
+          Download \`ShuffleTask-$VERSION.apk\` and install it on your Android device. You may need to enable "Install from unknown sources" in your device settings.
+
+          ## What's Changed
+
+          See the [full changelog](https://github.com/yaron-E92/ShuffleTask/compare/v$VERSION...main) for details.
+
+          ---
+
+          *Built on $(date -u '+%Y-%m-%d %H:%M:%S UTC')*
+          EOF
+
+          echo "Release notes created"
 
       - name: Create GitHub Release
-        # Publish the signed artifacts as a GitHub Release.
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: ${{ github.event.inputs.version }}
-          body: ${{ github.event.inputs.notes }}
-          files: |
-            artifacts/win/*
-            artifacts/android/ShuffleTask.apk
+        if: steps.check-release.outputs.exists == 'false'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Creating GitHub release for version: $VERSION"
+
+          gh release create "$VERSION" \
+            --title "ShuffleTask v$VERSION" \
+            --notes-file release-notes.md \
+            ./release-artifacts/ShuffleTask-$VERSION-windows.zip \
+            ./release-artifacts/ShuffleTask-$VERSION.apk \
+            ./release-artifacts/VERSION.txt
+
+          echo "✓ Release created successfully"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mark release status
+        id: release-status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" != "success" ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check-release.outputs.exists }}" = "true" ]; then
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip message
+        if: steps.check-release.outputs.exists == 'true'
+        run: |
+          echo "================================================"
+          echo "Release already exists for version ${{ github.event.inputs.version }}"
+          echo "Skipping release creation."
+          echo "To create a new release, use a different version number."
+          echo "================================================"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: release
+    if: always()
+    steps:
+      - name: Release summary
+        run: |
+          echo "## Release Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ needs.release.outputs.release-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.release.outputs.release-status }}" == "success" ]; then
+            echo "✓ Release created successfully." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The release is now public and available for download." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.release.outputs.release-status }}" == "skipped" ]; then
+            echo "✓ Release already exists for this version." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✗ Release failed or status unknown." >> $GITHUB_STEP_SUMMARY
+          fi
