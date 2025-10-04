@@ -348,14 +348,22 @@ jobs:
     - name: Fetch all tags
       run: git fetch --tags --force
     - name: Tag on main
+      id: tag_release
       run: |
           git config --global user.name "Github actions: gitversion"
           git config --global user.email "gitversion@github-actions.com"
           # Check if tag already exists
           if git rev-parse "${{ needs.gitVersion.outputs.semVer}}" >/dev/null 2>&1; then
             echo "Tag ${{ needs.gitVersion.outputs.semVer}} already exists, skipping tag creation"
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             echo "Creating tag ${{ needs.gitVersion.outputs.semVer}}"
             git tag -a "${{ needs.gitVersion.outputs.semVer}}" -m "Version ${{ needs.gitVersion.outputs.semVer}}"
             git push --tags
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
+    - name: Export semantic version as VersionPrefix
+      if: steps.tag_release.outputs.created == 'true'
+      run: |
+        echo "Stamping VersionPrefix with ${{ needs.gitVersion.outputs.semVer }} for downstream automation"
+        echo "VersionPrefix=${{ needs.gitVersion.outputs.semVer }}" >> $GITHUB_ENV
