@@ -66,7 +66,7 @@ public class SchedulerService : ISchedulerService
 
         if (cutInLineCandidates.Count > 0)
         {
-            List<ScoredTask> scoredCutInLine = ComputeScores(settings, now, deterministic: true, cutInLineCandidates);
+            List<ScoredTask> scoredCutInLine = ComputeScores(settings, now, deterministic: true, candidates: cutInLineCandidates);
             var prioritizedTask = UtilityMethods.DeterministicMaxScoredTask(scoredCutInLine);
             logger?.LogTaskSelection(prioritizedTask.Id, prioritizedTask.Title, "Task selected via cut-in-line priority", candidates.Count, TimeSpan.Zero);
             return prioritizedTask;

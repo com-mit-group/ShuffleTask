@@ -186,7 +186,7 @@ public partial class DashboardViewModel : ObservableObject
                 return;
             }
 
-            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage).ConfigureAwait(false);
+            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
 
             BindTask(next);
 
