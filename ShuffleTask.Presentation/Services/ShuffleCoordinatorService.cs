@@ -5,6 +5,7 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
@@ -466,12 +467,7 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task HandleCutInLineModeAsync(TaskItem task)
     {
-        if (task.CutInLineMode == CutInLineMode.Once)
-        {
-            // Clear "Once" mode after the task has been selected
-            task.CutInLineMode = CutInLineMode.None;
-            await _storage.UpdateTaskAsync(task).ConfigureAwait(false);
-        }
+        await CutInLineUtilities.ClearCutInLineOnceAsync(task, _storage).ConfigureAwait(false);
         // UntilCompletion mode is handled when the task is marked done
     }
 
