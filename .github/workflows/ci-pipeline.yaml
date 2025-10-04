@@ -216,6 +216,29 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    - name: Ensure workload cache directories
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        $dotnetRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\\dotnet'
+        foreach ($dir in @('packs', 'sdk-manifests', 'workloadinstall', 'metadata')) {
+          $fullPath = Join-Path $dotnetRoot $dir
+          if (-not (Test-Path $fullPath)) {
+            New-Item -ItemType Directory -Path $fullPath | Out-Null
+          }
+        }
+
+    - name: Cache .NET workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\packs
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\sdk-manifests
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workloadinstall
+          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\metadata
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}
+
     - name: Ensure GitHub NuGet Source
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
