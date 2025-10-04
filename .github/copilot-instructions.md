@@ -9,7 +9,7 @@ ShuffleTask is a task prioritization and scheduling system built with .NET MAUI 
 - **.NET 8.0** with C# 12
 - **MAUI** for cross-platform UI (Android, iOS, Windows, macOS)
 - **SQLite** for local data persistence
-- **xUnit** for testing
+- **NUnit** for testing
 - **CommunityToolkit.Mvvm** for MVVM pattern
 
 ## Architecture
@@ -51,7 +51,7 @@ ShuffleTask follows a **clean layered architecture** with clear separation of co
 - Follow C# naming conventions (PascalCase for public members, _camelCase for private fields)
 - Use nullable reference types (`?`) appropriately
 - Prefer expression-bodied members for simple methods
-- Use `var` when the type is obvious from the right side
+- Prefer explicit type declarations over `var` for clarity (limit `var` usage to cases where the type is immediately obvious)
 - Keep methods focused and single-purpose
 
 ### Namespace Organization
@@ -153,25 +153,32 @@ dotnet test --verbosity normal
 
 ### Test Guidelines
 
-- Write tests in xUnit with `[Fact]` and `[Theory]` attributes
-- Use test doubles from `ShuffleTask.Tests/TestDoubles/` for mocking
+- Write tests in NUnit with `[Test]` attribute and `[TestFixture]` for test classes
+- Use custom test doubles from `ShuffleTask.Tests/TestDoubles/` for mocking (e.g., StorageServiceStub)
 - Test both happy paths and edge cases
 - Name tests descriptively: `MethodName_Scenario_ExpectedBehavior`
 - Keep tests focused on one concern
+- Use explicit type declarations in tests for clarity
 
 Example:
 ```csharp
-[Fact]
-public void PickNextTask_WithNoActiveTasks_ReturnsNull()
+[TestFixture]
+public class SchedulerServiceTests
 {
-    // Arrange
-    var tasks = new List<TaskItem>();
-    
-    // Act
-    var result = scheduler.PickNextTask(tasks, settings, now);
-    
-    // Assert
-    Assert.Null(result);
+    [Test]
+    public void PickNextTask_WithNoActiveTasks_ReturnsNull()
+    {
+        // Arrange
+        List<TaskItem> tasks = new List<TaskItem>();
+        AppSettings settings = new AppSettings();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        
+        // Act
+        TaskItem? result = scheduler.PickNextTask(tasks, settings, now);
+        
+        // Assert
+        Assert.That(result, Is.Null);
+    }
 }
 ```
 
