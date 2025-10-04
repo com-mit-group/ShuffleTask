@@ -5,11 +5,73 @@
     <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(Version)' != ''">$(Version)</_SemanticVersionCandidate>
     <_SemanticVersionCandidate Condition="'$(_SemanticVersionCandidate)' == '' and '$(ApplicationDisplayVersion)' != ''">$(ApplicationDisplayVersion)</_SemanticVersionCandidate>
     <_SemanticVersion Condition="'$(_SemanticVersionCandidate)' != '' and $([System.Text.RegularExpressions.Regex]::IsMatch('$(_SemanticVersionCandidate)', '^\d+\.\d+\.\d+$')) == 'True'">$(_SemanticVersionCandidate)</_SemanticVersion>
-    <_VersionMajor Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Major)</_VersionMajor>
-    <_VersionMinor Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Minor)</_VersionMinor>
-    <_VersionPatch Condition="'$(_SemanticVersion)' != ''">$([System.Version]::Parse('$(_SemanticVersion)').Build)</_VersionPatch>
-    <!-- Android version code packs major/minor/patch into base-1000 slots (major * 1_000_000 + minor * 1_000 + patch) so every semantic version stays unique within Int32. -->
-    <AndroidVersionCode Condition="'$(_SemanticVersion)' != ''">$([System.Convert]::ToInt32($([System.Decimal]::Add($([System.Decimal]::Add($([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_VersionMajor)')), $([System.Decimal]::Parse('1000000'))), $([System.Decimal]::Multiply($([System.Decimal]::Parse('$(_VersionMinor)')), $([System.Decimal]::Parse('1000'))))), $([System.Decimal]::Parse('$(_VersionPatch)'))))))</AndroidVersionCode>
+  </PropertyGroup>
+
+  <UsingTask TaskName="CalculateAndroidVersionCode"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SemanticVersion ParameterType="System.String" Required="true" />
+      <VersionCode ParameterType="System.Int32" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Class" Language="cs"><![CDATA[
+
+public sealed class CalculateAndroidVersionCode : Microsoft.Build.Utilities.Task
+{
+    private const int MajorMultiplier = 1_000_000;
+    private const int MinorMultiplier = 1_000;
+    private const int MajorLimit = 2147;
+    private const int MinorLimit = 483;
+    private const int PatchLimit = 647;
+
+    [Microsoft.Build.Framework.Required]
+    public string SemanticVersion { get; set; } = string.Empty;
+
+    [Microsoft.Build.Framework.Output]
+    public int VersionCode { get; private set; }
+
+    public override bool Execute()
+    {
+        var parts = SemanticVersion.Split('.');
+        if (parts.Length != 3)
+        {
+            Log.LogError($"Semantic version '{SemanticVersion}' must contain major, minor, and patch segments.");
+            return false;
+        }
+
+        if (!int.TryParse(parts[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major) ||
+            !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var minor) ||
+            !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var patch))
+        {
+            Log.LogError($"Semantic version '{SemanticVersion}' contains non-numeric segments.");
+            return false;
+        }
+
+        if (major > MajorLimit || minor > MinorLimit || patch > PatchLimit)
+        {
+            Log.LogError($"Semantic version '{SemanticVersion}' exceeds Android version code limits (major <= {MajorLimit}, minor <= {MinorLimit}, patch <= {PatchLimit}).");
+            return false;
+        }
+
+        VersionCode = (major * MajorMultiplier) + (minor * MinorMultiplier) + patch;
+        return true;
+    }
+}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="_SetAndroidVersionCode"
+          Condition="'$(_SemanticVersion)' != ''"
+          BeforeTargets="PrepareForBuild">
+    <!-- Android version code packs major/minor/patch into base-1000 slots (major * 1_000_000 + minor * 1_000 + patch) so every semantic version stays unique within Int32. Max supported values: major 0-2147, minor 0-483, patch 0-647. -->
+    <CalculateAndroidVersionCode SemanticVersion="$(_SemanticVersion)">
+      <Output TaskParameter="VersionCode" PropertyName="AndroidVersionCode" />
+    </CalculateAndroidVersionCode>
+  </Target>
+
+  <PropertyGroup>
     <!-- Fallback to the legacy version code when parsing fails or nothing is supplied. -->
     <AndroidVersionCode Condition="'$(AndroidVersionCode)' == ''">1</AndroidVersionCode>
     <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">$(AndroidVersionCode)</ApplicationVersion>
