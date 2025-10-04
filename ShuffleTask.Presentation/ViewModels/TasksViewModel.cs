@@ -79,6 +79,17 @@ public partial class TasksViewModel : ObservableObject
         await LoadAsync();
     }
 
+    public async Task MarkDoneAsync(TaskItem task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        await _storage.MarkTaskDoneAsync(task.Id);
+        await LoadAsync();
+    }
+
 }
 
 public class TaskListItem
