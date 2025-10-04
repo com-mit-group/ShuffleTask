@@ -154,13 +154,15 @@ dotnet test --verbosity normal
 ### Test Guidelines
 
 - Write tests in NUnit with `[Test]` attribute and `[TestFixture]` for test classes
-- Use custom test doubles from `ShuffleTask.Tests/TestDoubles/` for mocking (e.g., StorageServiceStub)
+- Use **NSubstitute** for mocking dependencies
+- Prefer **NFluent** for assertions (migration from NUnit assertions is preferred)
+- Use custom test doubles from `ShuffleTask.Tests/TestDoubles/` when appropriate (e.g., StorageServiceStub)
 - Test both happy paths and edge cases
 - Name tests descriptively: `MethodName_Scenario_ExpectedBehavior`
 - Keep tests focused on one concern
 - Use explicit type declarations in tests for clarity
 
-Example:
+Example with NFluent assertions:
 ```csharp
 [TestFixture]
 public class SchedulerServiceTests
@@ -177,7 +179,7 @@ public class SchedulerServiceTests
         TaskItem? result = scheduler.PickNextTask(tasks, settings, now);
         
         // Assert
-        Assert.That(result, Is.Null);
+        Check.That(result).IsNull();
     }
 }
 ```
