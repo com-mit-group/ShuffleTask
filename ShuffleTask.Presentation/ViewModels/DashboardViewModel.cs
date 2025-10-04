@@ -185,7 +185,7 @@ public partial class DashboardViewModel : ObservableObject
                 return;
             }
 
-            await ClearCutInLineOnceIfNeededAsync(next);
+            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
 
             BindTask(next);
 
@@ -653,17 +653,6 @@ public partial class DashboardViewModel : ObservableObject
     private static TaskItem? FindOriginal(IEnumerable<TaskItem> tasks, string id)
     {
         return tasks.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal));
-    }
-
-    private async Task ClearCutInLineOnceIfNeededAsync(TaskItem task)
-    {
-        if (task.CutInLineMode != CutInLineMode.Once)
-        {
-            return;
-        }
-
-        task.CutInLineMode = CutInLineMode.None;
-        await _storage.UpdateTaskAsync(task);
     }
 
     private static void EmitTimerResetTelemetry(string reason, TaskItem? task)

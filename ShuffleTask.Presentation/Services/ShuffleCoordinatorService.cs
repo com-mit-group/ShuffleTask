@@ -466,12 +466,7 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task HandleCutInLineModeAsync(TaskItem task)
     {
-        if (task.CutInLineMode == CutInLineMode.Once)
-        {
-            // Clear "Once" mode after the task has been selected
-            task.CutInLineMode = CutInLineMode.None;
-            await _storage.UpdateTaskAsync(task).ConfigureAwait(false);
-        }
+        await CutInLineUtilities.ClearCutInLineOnceAsync(task, _storage).ConfigureAwait(false);
         // UntilCompletion mode is handled when the task is marked done
     }
 
