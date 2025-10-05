@@ -39,6 +39,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
           Set-Content -Path ./artifacts/VERSION.txt -Value $version
           echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "VersionPrefix=$version" >> $env:GITHUB_ENV
+
+          $parts = $version.Split('.')
+          if ($parts.Length -ne 3) {
+            throw "Semantic version '$version' must contain major, minor, and patch segments."
+          }
+
+          $numberStyles = [System.Globalization.NumberStyles]::None
+          $culture = [System.Globalization.CultureInfo]::InvariantCulture
+
+          $major = 0
+          $minor = 0
+          $patch = 0
+
+          if (-not [int]::TryParse($parts[0], $numberStyles, $culture, [ref]$major) -or
+              -not [int]::TryParse($parts[1], $numberStyles, $culture, [ref]$minor) -or
+              -not [int]::TryParse($parts[2], $numberStyles, $culture, [ref]$patch)) {
+            throw "Semantic version '$version' contains non-numeric segments."
+          }
+
+          $majorLimit = 2147
+          $minorLimit = 483
+          $patchLimit = 647
+
+          if ($major -gt $majorLimit -or $minor -gt $minorLimit -or $patch -gt $patchLimit) {
+            throw "Semantic version '$version' exceeds Android version code limits (major <= $majorLimit, minor <= $minorLimit, patch <= $patchLimit)."
+          }
+
+          $androidVersionCode = ($major * 1000000) + ($minor * 1000) + $patch
+          echo "AndroidVersionCode=$androidVersionCode" >> $env:GITHUB_ENV
+          echo "android_version_code=$androidVersionCode" >> $env:GITHUB_OUTPUT
 
       - name: Check for existing build artifacts
         id: check-artifacts
@@ -150,7 +181,6 @@ jobs:
           --self-contained true
           -f net8.0-windows10.0.19041.0
           -o ./artifacts/win
-          /p:Version=${{ steps.set-version.outputs.version }}
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
       - name: Build Android APK
@@ -160,8 +190,7 @@ jobs:
           -c Release
           -f net8.0-android
           /p:AndroidPackageFormat=apk
-          /p:Version=${{ steps.set-version.outputs.version }}
-          /p:ApplicationVersion=${{ steps.set-version.outputs.version }}
+          /p:ApplicationVersion=${{ steps.set-version.outputs.android_version_code }}
           -o ./artifacts/android
 
       - name: Normalize artifact names
