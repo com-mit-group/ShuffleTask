@@ -39,6 +39,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
           Set-Content -Path ./artifacts/VERSION.txt -Value $version
           echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "VersionPrefix=$version" >> $env:GITHUB_ENV
 
       - name: Check for existing build artifacts
         id: check-artifacts
@@ -150,7 +151,6 @@ jobs:
           --self-contained true
           -f net8.0-windows10.0.19041.0
           -o ./artifacts/win
-          /p:Version=${{ steps.set-version.outputs.version }}
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
       - name: Build Android APK
@@ -160,8 +160,6 @@ jobs:
           -c Release
           -f net8.0-android
           /p:AndroidPackageFormat=apk
-          /p:Version=${{ steps.set-version.outputs.version }}
-          /p:ApplicationVersion=${{ steps.set-version.outputs.version }}
           -o ./artifacts/android
 
       - name: Normalize artifact names
