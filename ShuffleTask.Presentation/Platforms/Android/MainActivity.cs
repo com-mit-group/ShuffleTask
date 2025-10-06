@@ -20,14 +20,8 @@ public class MainActivity : MauiAppCompatActivity
         }
     }
 
-    protected override void OnPause()
-    {
-        var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
-        if (coordinator != null)
-        {
-            _ = coordinator.PauseAsync();
-        }
-
-        base.OnPause();
-    }
+    // Note: We no longer pause the coordinator when the activity pauses.
+    // The ShuffleCoordinatorService schedules notifications via AlarmManager,
+    // which delivers notifications even when the app is backgrounded.
+    // This ensures auto-shuffle notifications fire reliably in the background.
 }

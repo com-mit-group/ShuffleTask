@@ -116,12 +116,24 @@ NotificationService
 │
 ├── Platform-specific implementation (iOS/Android/Windows)
 │   ├── Native notifications
-│   ├── Background notifications  
+│   ├── Background notifications (scheduled via OS APIs)
 │   └── Sound/vibration
 │
 └── Fallback: XAML DisplayAlert
     └── Main thread alerts
 ```
+
+**Background Notification Delivery:**
+
+ShuffleTask ensures notifications fire reliably even when the app is backgrounded:
+
+- **Android**: Uses `AlarmManager.SetExactAndAllowWhileIdle` for precise background delivery. Requires `SCHEDULE_EXACT_ALARM` permission (Android 12+) and `POST_NOTIFICATIONS` permission (Android 13+).
+- **iOS/macOS**: Uses `UNUserNotificationCenter` which queues notifications for background delivery. Requires `remote-notification` background mode in Info.plist.
+- **Windows**: Uses `ScheduledToastNotification` which supports background delivery by default.
+- **Linux**: Falls back to in-app alerts (no native background notification API).
+
+The `ShuffleCoordinatorService` continues running in the background to schedule notifications via platform-specific APIs. These APIs handle background delivery automatically, respecting OS power-saving restrictions and user notification settings.
+
 
 ### 4. Sync & State Management
 
