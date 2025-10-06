@@ -10,6 +10,8 @@ using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ShuffleTask.Presentation.Services;
 
@@ -19,6 +21,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
     private readonly TimeProvider _clock;
+    private readonly IPersistentBackgroundService _background;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -28,11 +31,12 @@ public class ShuffleCoordinatorService : IDisposable
     private bool _isPaused;
     private bool _disposed;
 
-    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, TimeProvider clock)
+    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, IPersistentBackgroundService background, TimeProvider clock)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
+        _background = background;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
@@ -133,6 +137,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await _storage.InitializeAsync().ConfigureAwait(false);
         await _notifications.InitializeAsync().ConfigureAwait(false);
+        await _background.InitializeAsync().ConfigureAwait(false);
     }
 
     private async Task ScheduleNextShuffleAsync()
@@ -275,6 +280,15 @@ public class ShuffleCoordinatorService : IDisposable
         CancelTimerInternal();
         PersistPendingShuffle(taskId, scheduledAt);
 
+        try
+        {
+            _background.Schedule(scheduledAt, taskId);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShuffleCoordinatorService persistent schedule error: {ex}");
+        }
+
         var cts = new CancellationTokenSource();
         _timerCts = cts;
 
@@ -317,6 +331,8 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task OnTimerReevaluateAsync(CancellationTokenSource cts)
     {
+        CancelPersistentSchedule();
+
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -340,6 +356,8 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task ExecuteShuffleAsync(string taskId, CancellationTokenSource cts)
     {
+        CancelPersistentSchedule();
+
         bool executed = false;
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -355,6 +373,64 @@ public class ShuffleCoordinatorService : IDisposable
         if (executed && !_isPaused)
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+    }
+
+    public async Task HandlePersistentTriggerAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        if (Volatile.Read(ref _timerCts) != null)
+        {
+            CancelPersistentSchedule();
+            return;
+        }
+
+        bool paused;
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            paused = _isPaused;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (paused)
+        {
+            CancelPersistentSchedule();
+            return;
+        }
+
+        var (scheduledAt, taskId) = LoadPendingShuffle();
+        if (scheduledAt.HasValue)
+        {
+            DateTimeOffset now = GetCurrentInstant();
+            if (scheduledAt.Value - now > TimeSpan.FromMinutes(1))
+            {
+                try
+                {
+                    _background.Schedule(scheduledAt.Value, string.IsNullOrEmpty(taskId) ? null : taskId);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ShuffleCoordinatorService persistent reschedule error: {ex}");
+                }
+
+                return;
+            }
+        }
+
+        if (string.IsNullOrEmpty(taskId))
+        {
+            CancelPersistentSchedule();
+            await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            using var cts = new CancellationTokenSource();
+            await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
         }
     }
 
@@ -704,6 +780,18 @@ public class ShuffleCoordinatorService : IDisposable
         Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
     }
 
+    private void CancelPersistentSchedule()
+    {
+        try
+        {
+            _background.Cancel();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShuffleCoordinatorService persistent cancel error: {ex}");
+        }
+    }
+
     private void CancelTimerInternal()
     {
         var existing = Interlocked.Exchange(ref _timerCts, null);
@@ -722,6 +810,8 @@ public class ShuffleCoordinatorService : IDisposable
                 existing.Dispose();
             }
         }
+
+        CancelPersistentSchedule();
     }
 
     private DateTimeOffset GetCurrentInstant()

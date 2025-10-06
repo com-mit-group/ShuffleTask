@@ -38,6 +38,11 @@
     <key>UIBackgroundModes</key>
     <array>
         <string>remote-notification</string>
+        <string>processing</string>
+    </array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.companyname.shuffletask.autoshuffle</string>
     </array>
 </dict>
 </plist>
