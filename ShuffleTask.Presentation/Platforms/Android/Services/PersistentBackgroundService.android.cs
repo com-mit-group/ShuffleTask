@@ -90,7 +90,9 @@ public partial class PersistentBackgroundService
                 return;
             }
 
-            Task.Run(async () =>
+            var pendingResult = GoAsync();
+
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -103,6 +105,10 @@ public partial class PersistentBackgroundService
                 catch (Exception ex)
                 {
                     Log.Warn("ShuffleTask", $"Alarm receiver error: {ex}");
+                }
+                finally
+                {
+                    pendingResult?.Finish();
                 }
             });
         }
