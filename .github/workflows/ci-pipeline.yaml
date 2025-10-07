@@ -14,34 +14,181 @@ jobs:
     name: Determine Version
     runs-on: ubuntu-latest
     outputs:
-      branchName: ${{ steps.gitversion.outputs.branchName }}
-      semVer: ${{ steps.gitversion.outputs.majorMinorPatch }}
-      sha: ${{ steps.gitversion.outputs.sha }}
-      nugetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}
-      assemblySemFileVer: ${{ steps.gitversion.outputs.assemblySemFileVer }}
-      informationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}
+      branchName: ${{ steps.version.outputs.branchName }}
+      semVer: ${{ steps.version.outputs.semVer }}
+      sha: ${{ steps.version.outputs.sha }}
+      nugetVersion: ${{ steps.version.outputs.nugetVersion }}
+      assemblySemFileVer: ${{ steps.version.outputs.assemblySemFileVer }}
+      informationalVersion: ${{ steps.version.outputs.informationalVersion }}
 
     steps:
     - name: Checkout
+      # Retrieve full repository history so tags and commit metadata are available for versioning.
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        persist-credentials: false
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v1.1.1
-      with:
-        versionSpec: '5.x'
-        preferLatestVersion: true
+    - name: Ensure tags and main history are available
+      # Make sure the workflow has access to the latest tags from the main branch.
+      run: |
+        git fetch --force --tags origin main
 
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@v1.1.1
-      with:
-        additionalArguments: '/updateprojectfiles'
-        useConfigFile: true
-        configFilePath: '.github/GitVersion.yaml'
+    - name: Determine semantic version
+      # Compute the next semantic version and expose it via job outputs and environment variables.
+      id: version
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+        PR_TITLE: ${{ github.event.pull_request.title || '' }}
+        PR_BODY: ${{ github.event.pull_request.body || '' }}
+        HEAD_COMMIT_MSG: ${{ github.event.head_commit.message || '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
 
+        latest_tag=""
+        for ref in origin/main main HEAD; do
+          if tag=$(git describe --tags --abbrev=0 "$ref" 2>/dev/null); then
+            latest_tag="$tag"
+            break
+          fi
+        done
+
+        if [ -z "$latest_tag" ]; then
+          if tag=$(git describe --tags --abbrev=0 2>/dev/null); then
+            latest_tag="$tag"
+          fi
+        fi
+
+        clean_tag="$latest_tag"
+        clean_tag="${clean_tag%%-*}"
+        clean_tag="${clean_tag%%+*}"
+
+        parse_numbers() {
+          local version="$1"
+          if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            return
+          fi
+
+          mapfile -t numbers < <(grep -oE '[0-9]+' <<<"$version" || true)
+          case "${#numbers[@]}" in
+            0)
+              major=0 minor=1 patch=0 ;;
+            1)
+              major="${numbers[0]}" minor=0 patch=0 ;;
+            2)
+              major="${numbers[0]}" minor="${numbers[1]}" patch=0 ;;
+            *)
+              major="${numbers[0]}" minor="${numbers[1]}" patch="${numbers[2]}" ;;
+          esac
+        }
+
+        initial_release=false
+        if [ -n "$clean_tag" ]; then
+          parse_numbers "$clean_tag"
+        else
+          initial_release=true
+          major=0
+          minor=1
+          patch=0
+        fi
+
+        base_version="$major.$minor.$patch"
+
+        message=""
+        if [ "${EVENT_NAME}" = "pull_request" ]; then
+          number="${PR_NUMBER:-}"
+          title="${PR_TITLE:-}"
+          body="${PR_BODY:-}"
+          if [ -n "$number" ]; then
+            message="Merge pull request #$number"
+          fi
+          if [ -n "$title" ]; then
+            if [ -n "$message" ]; then message+=$'\n'; fi
+            message+="$title"
+          fi
+          if [ -n "$body" ]; then
+            if [ -n "$message" ]; then message+=$'\n'; fi
+            message+="$body"
+          fi
+        else
+          message="${HEAD_COMMIT_MSG:-}"
+          if [ -z "$message" ]; then
+            message="$(git log -1 --pretty=%B)"
+          fi
+        fi
+
+        bump=$(tr '[:upper:]' '[:lower:]' <<<"$message" | grep -oE '\+semver:(none|patch|minor|major)' | tail -n1 | cut -d: -f2 || true)
+        bump=${bump:-patch}
+
+        case "$bump" in
+          major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+          minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+          patch)
+            if [ "$initial_release" = true ]; then
+              :
+            else
+              patch=$((patch + 1))
+            fi
+            ;;
+          none)
+            ;;
+        esac
+
+        new_version="$major.$minor.$patch"
+        nuget_version="$new_version"
+        assembly_sem_file="$major.$minor.$patch.0"
+        sha="${GITHUB_SHA:-}"
+        if [ -n "$sha" ]; then
+          informational="$new_version+${sha:0:7}"
+        else
+          informational="$new_version"
+        fi
+
+        ref="${GITHUB_REF:-}"
+        branch_name="$ref"
+        if [[ "$ref" == refs/heads/* ]]; then
+          branch_name="${ref#refs/heads/}"
+        elif [[ "$ref" == refs/pull/* ]]; then
+          branch_name="${ref#refs/}"
+        elif [ -z "$branch_name" ]; then
+          branch_name="${GITHUB_REF_NAME:-}"
+        fi
+
+        echo "Latest tag: ${latest_tag:-none}"
+        echo "Base version: $base_version"
+        echo "Bump type: $bump"
+        echo "New version: $new_version"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo "### Versioning"
+            echo "- Latest tag: ${latest_tag:-none}"
+            echo "- Bump: $bump"
+            echo "- New version: $new_version"
+          } >>"$GITHUB_STEP_SUMMARY"
+        fi
+
+        {
+          echo "branchName=$branch_name"
+          echo "semVer=$new_version"
+          echo "sha=$sha"
+          echo "nugetVersion=$nuget_version"
+          echo "assemblySemFileVer=$assembly_sem_file"
+          echo "informationalVersion=$informational"
+        } >>"$GITHUB_OUTPUT"
+
+        echo "VersionPrefix=$new_version" >>"$GITHUB_ENV"
   buildAndTestWithoutGUI:
     name: Build and Test (No GUI)
     needs: [gitVersion]
