@@ -81,6 +81,8 @@ public partial class App : Microsoft.Maui.Controls.Application
         settings.StableRandomnessPerDay = true;
         await _storage.SetSettingsAsync(settings);
 
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
         Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
         Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);

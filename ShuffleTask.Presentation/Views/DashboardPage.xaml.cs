@@ -46,7 +46,7 @@ public partial class DashboardPage : ContentPage
                 out string taskId,
                 out TimeSpan remaining,
                 out bool expired,
-                out int persistedSeconds))
+                out int durationSeconds))
         {
             DashboardViewModel.TimerRequest? timerState = null;
 
@@ -74,7 +74,7 @@ public partial class DashboardPage : ContentPage
             else
             {
                 timerState = DashboardViewModel.TimerRequest.LongInterval(
-                    TimeSpan.FromSeconds(Math.Max(1, persistedSeconds)));
+                    TimeSpan.FromSeconds(Math.Max(1, durationSeconds)));
             }
 
             bool restored = await _vm.RestoreTaskAsync(taskId, remaining, timerState);
@@ -145,8 +145,12 @@ public partial class DashboardPage : ContentPage
         }
 
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, taskId);
-        Preferences.Default.Set(PreferenceKeys.RemainingSeconds, (int)Math.Ceiling(_remaining.TotalSeconds));
-        Preferences.Default.Set(PreferenceKeys.RemainingPersistedAt, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Set(
+            PreferenceKeys.TimerDurationSeconds,
+            Math.Max(1, (int)Math.Ceiling(_currentRequest.Duration.TotalSeconds)));
+        Preferences.Default.Set(
+            PreferenceKeys.TimerExpiresAt,
+            DateTimeOffset.UtcNow.Add(_remaining).ToString("O", CultureInfo.InvariantCulture));
         Preferences.Default.Set(PrefTimerMode, (int)_currentRequest.Mode);
 
         if (_currentRequest.Mode == TimerMode.Pomodoro && _currentRequest.Phase.HasValue)
@@ -170,6 +174,8 @@ public partial class DashboardPage : ContentPage
     private static void ClearPersistedState()
     {
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
         Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
         Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
         Preferences.Default.Remove(PrefTimerMode);

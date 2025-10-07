@@ -698,8 +698,12 @@ public class ShuffleCoordinatorService : IDisposable
     {
         int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
-        Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
-        Preferences.Default.Set(PreferenceKeys.RemainingPersistedAt, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Set(PreferenceKeys.TimerDurationSeconds, seconds);
+        Preferences.Default.Set(
+            PreferenceKeys.TimerExpiresAt,
+            DateTimeOffset.UtcNow.AddSeconds(seconds).ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
+        Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
     }
 
     /// <summary>
