@@ -1,8 +1,4 @@
 #if WINDOWS
-using System;
-using Microsoft.Maui;
-using Microsoft.UI.Xaml;
-
 namespace ShuffleTask;
 
 public static partial class MauiProgram
@@ -14,7 +10,7 @@ public static partial class MauiProgram
             return;
         }
 
-        if (Application.Current is MauiWinUIApplication winApp)
+        if (Microsoft.UI.Xaml.Application.Current is MauiWinUIApplication winApp)
         {
             services = winApp.Services;
         }
