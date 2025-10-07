@@ -10,14 +10,29 @@ using ShuffleTask.Views;
 
 namespace ShuffleTask;
 
-public static class MauiProgram
+public static partial class MauiProgram
 {
     private static IServiceProvider? _services;
 
     public static IServiceProvider Services =>
         _services ?? throw new InvalidOperationException("Maui services have not been initialized yet.");
 
-    public static IServiceProvider? TryGetServiceProvider() => _services;
+    public static IServiceProvider? TryGetServiceProvider()
+    {
+        if (_services != null)
+        {
+            return _services;
+        }
+
+        IServiceProvider? services = null;
+        ResolvePlatformServiceProvider(ref services);
+        if (services != null)
+        {
+            _services = services;
+        }
+
+        return _services;
+    }
 
     public static MauiApp CreateMauiApp()
     {
@@ -67,4 +82,5 @@ public static class MauiProgram
 
         return app;
     }
+    static partial void ResolvePlatformServiceProvider(ref IServiceProvider? services);
 }
