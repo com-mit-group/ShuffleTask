@@ -1,6 +1,7 @@
 #if IOS || MACCATALYST
 using System;
 using Microsoft.Maui;
+using Microsoft.Maui.ApplicationModel;
 using UIKit;
 
 namespace ShuffleTask;
@@ -14,15 +15,28 @@ public static partial class MauiProgram
             return;
         }
 
-        if (MauiUIApplicationDelegate.Current is MauiUIApplicationDelegate appDelegate)
+        static IServiceProvider? ResolveOnMainThread()
         {
-            services = appDelegate.Services;
-            return;
+            if (MauiUIApplicationDelegate.Current is MauiUIApplicationDelegate appDelegate)
+            {
+                return appDelegate.Services;
+            }
+
+            if (UIApplication.SharedApplication?.Delegate is MauiUIApplicationDelegate delegateInstance)
+            {
+                return delegateInstance.Services;
+            }
+
+            return null;
         }
 
-        if (UIApplication.SharedApplication?.Delegate is MauiUIApplicationDelegate delegateInstance)
+        if (MainThread.IsMainThread)
         {
-            services = delegateInstance.Services;
+            services = ResolveOnMainThread();
+        }
+        else
+        {
+            services = MainThread.InvokeOnMainThreadAsync(ResolveOnMainThread).GetAwaiter().GetResult();
         }
     }
 }
