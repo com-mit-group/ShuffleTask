@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Maui.Controls;
 
 namespace ShuffleTask.Controls;
 

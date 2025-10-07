@@ -1,6 +1,3 @@
-using System;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Controls;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;

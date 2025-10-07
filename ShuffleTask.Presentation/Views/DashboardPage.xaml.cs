@@ -1,11 +1,6 @@
-using System;
 using System.Globalization;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Dispatching;
-using Microsoft.Maui.Storage;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 using ShuffleTask.Application.Models;
-using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 

@@ -1,7 +1,4 @@
-﻿using System;
-using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-using ShuffleTask.Application.Abstractions;
+﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;
@@ -74,7 +71,8 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<EditTaskPage>();
 
 #if DEBUG
-        builder.Logging.AddDebug();
+        var loggingBuilder = builder.Logging;
+        loggingBuilder.Services.AddLogging();
 #endif
 
         var app = builder.Build();

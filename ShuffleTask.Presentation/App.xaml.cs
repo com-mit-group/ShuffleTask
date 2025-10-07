@@ -1,6 +1,4 @@
-using System;
 using ShuffleTask.Application.Abstractions;
-using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Views;
