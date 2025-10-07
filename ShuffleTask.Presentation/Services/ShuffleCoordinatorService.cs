@@ -699,6 +699,7 @@ public class ShuffleCoordinatorService : IDisposable
         int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
         Preferences.Default.Set(PreferenceKeys.RemainingSeconds, seconds);
+        Preferences.Default.Set(PreferenceKeys.RemainingPersistedAt, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -708,11 +709,12 @@ public class ShuffleCoordinatorService : IDisposable
     /// <returns>True if an active task exists; otherwise, false.</returns>
     private static bool HasActiveTask()
     {
-        string currentTaskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
-        int remainingSeconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
-        
-        // Consider a task active if both the task ID exists and there's remaining time
-        return !string.IsNullOrEmpty(currentTaskId) && remainingSeconds > 0;
+        return PersistedTimerState.TryGetActiveTimer(
+            out _,
+            out _,
+            out bool expired,
+            out _)
+            && !expired;
     }
 
     private static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle()

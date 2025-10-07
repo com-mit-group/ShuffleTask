@@ -82,6 +82,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         await _storage.SetSettingsAsync(settings);
 
         Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
+        Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
         Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
         Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
