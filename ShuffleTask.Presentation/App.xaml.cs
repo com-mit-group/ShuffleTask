@@ -83,8 +83,6 @@ public partial class App : Microsoft.Maui.Controls.Application
 
         Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
         Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
-        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
-        Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
         Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
         Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);

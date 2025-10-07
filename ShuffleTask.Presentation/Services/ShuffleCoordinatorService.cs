@@ -702,8 +702,6 @@ public class ShuffleCoordinatorService : IDisposable
         Preferences.Default.Set(
             PreferenceKeys.TimerExpiresAt,
             DateTimeOffset.UtcNow.AddSeconds(seconds).ToString("O", CultureInfo.InvariantCulture));
-        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
-        Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
     }
 
     /// <summary>

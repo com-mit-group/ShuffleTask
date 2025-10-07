@@ -40,16 +40,7 @@ internal static class PersistedTimerState
 
         if (durationSeconds <= 0)
         {
-            int legacySeconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
-            if (legacySeconds > 0)
-            {
-                durationSeconds = legacySeconds;
-                Preferences.Default.Set(PreferenceKeys.TimerDurationSeconds, durationSeconds);
-            }
-            else
-            {
-                durationSeconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
-            }
+            durationSeconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
         }
 
         return true;
@@ -64,23 +55,6 @@ internal static class PersistedTimerState
                 DateTimeStyles.RoundtripKind,
                 out expiresAt))
         {
-            return true;
-        }
-
-        int legacySeconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
-        string persistedIso = Preferences.Default.Get(PreferenceKeys.RemainingPersistedAt, string.Empty);
-        if (legacySeconds > 0
-            && !string.IsNullOrWhiteSpace(persistedIso)
-            && DateTimeOffset.TryParse(
-                persistedIso,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
-                out var persistedAt))
-        {
-            expiresAt = persistedAt.AddSeconds(legacySeconds);
-            Preferences.Default.Set(PreferenceKeys.TimerExpiresAt, expiresAt.ToString("O", CultureInfo.InvariantCulture));
-            Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
-            Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
             return true;
         }
 

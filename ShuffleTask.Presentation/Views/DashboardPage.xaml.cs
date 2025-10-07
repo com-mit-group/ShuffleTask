@@ -176,8 +176,6 @@ public partial class DashboardPage : ContentPage
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
         Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
         Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
-        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
-        Preferences.Default.Remove(PreferenceKeys.RemainingPersistedAt);
         Preferences.Default.Remove(PrefTimerMode);
         Preferences.Default.Remove(PrefPomodoroPhase);
         Preferences.Default.Remove(PrefPomodoroCycle);
