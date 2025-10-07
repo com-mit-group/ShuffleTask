@@ -1,7 +1,4 @@
-﻿using System;
-using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-using ShuffleTask.Application.Abstractions;
+﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;

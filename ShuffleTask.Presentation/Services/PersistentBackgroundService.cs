@@ -1,6 +1,3 @@
-using System;
-using System.Threading.Tasks;
-
 namespace ShuffleTask.Presentation.Services;
 
 public partial class PersistentBackgroundService : IPersistentBackgroundService

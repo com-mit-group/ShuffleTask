@@ -1,8 +1,5 @@
-using System;
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Storage;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Utilities;
@@ -10,8 +7,6 @@ using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace ShuffleTask.Presentation.Services;
 

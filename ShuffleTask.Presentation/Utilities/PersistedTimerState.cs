@@ -1,7 +1,4 @@
-using System;
 using System.Globalization;
-using Microsoft.Maui.Storage;
-using ShuffleTask;
 
 namespace ShuffleTask.Presentation.Utilities;
 

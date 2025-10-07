@@ -1,4 +1,3 @@
-using System;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 
