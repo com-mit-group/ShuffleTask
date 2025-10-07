@@ -121,7 +121,12 @@ jobs:
           fi
         fi
 
-        bump=$(tr '[:upper:]' '[:lower:]' <<<"$message" | grep -oE '\+semver:(none|patch|minor|major)' | tail -n1 | cut -d: -f2 || true)
+        bump=$(tr '[:upper:]' '[:lower:]' <<<"$message" \
+          | grep -oE '\+semver:[[:space:]]*(none|patch|minor|major)' \
+          | tail -n1 \
+          | cut -d: -f2 \
+          | sed 's/^[[:space:]]*//' \
+          || true)
         bump=${bump:-patch}
 
         case "$bump" in
