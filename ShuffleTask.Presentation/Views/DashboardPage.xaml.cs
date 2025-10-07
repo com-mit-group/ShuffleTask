@@ -1,10 +1,12 @@
 using System;
+using System.Globalization;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Dispatching;
 using Microsoft.Maui.Storage;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;
@@ -38,13 +40,14 @@ public partial class DashboardPage : ContentPage
     {
         await _vm.InitializeAsync();
 
-        string taskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
-        int seconds = Preferences.Default.Get(PreferenceKeys.RemainingSeconds, -1);
         var mode = (TimerMode)Preferences.Default.Get(PrefTimerMode, (int)TimerMode.LongInterval);
 
-        if (seconds > 0)
+        if (PersistedTimerState.TryGetActiveTimer(
+                out string taskId,
+                out TimeSpan remaining,
+                out bool expired,
+                out int durationSeconds))
         {
-            TimeSpan remaining = TimeSpan.FromSeconds(seconds);
             DashboardViewModel.TimerRequest? timerState = null;
 
             if (mode == TimerMode.Pomodoro)
@@ -71,14 +74,22 @@ public partial class DashboardPage : ContentPage
             else
             {
                 timerState = DashboardViewModel.TimerRequest.LongInterval(
-                    TimeSpan.FromSeconds(Math.Max(1, seconds)));
+                    TimeSpan.FromSeconds(Math.Max(1, durationSeconds)));
             }
 
             bool restored = await _vm.RestoreTaskAsync(taskId, remaining, timerState);
             if (restored)
             {
-                _remaining = remaining;
                 _currentRequest = timerState;
+                if (expired)
+                {
+                    _remaining = TimeSpan.Zero;
+                    ClearPersistedState();
+                    await _vm.HandleCountdownCompletedAsync();
+                    return;
+                }
+
+                _remaining = remaining;
                 var timer = EnsureTimer();
                 timer.Stop();
                 timer.Start();
@@ -134,7 +145,12 @@ public partial class DashboardPage : ContentPage
         }
 
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, taskId);
-        Preferences.Default.Set(PreferenceKeys.RemainingSeconds, (int)Math.Ceiling(_remaining.TotalSeconds));
+        Preferences.Default.Set(
+            PreferenceKeys.TimerDurationSeconds,
+            Math.Max(1, (int)Math.Ceiling(_currentRequest.Duration.TotalSeconds)));
+        Preferences.Default.Set(
+            PreferenceKeys.TimerExpiresAt,
+            DateTimeOffset.UtcNow.Add(_remaining).ToString("O", CultureInfo.InvariantCulture));
         Preferences.Default.Set(PrefTimerMode, (int)_currentRequest.Mode);
 
         if (_currentRequest.Mode == TimerMode.Pomodoro && _currentRequest.Phase.HasValue)
@@ -158,7 +174,8 @@ public partial class DashboardPage : ContentPage
     private static void ClearPersistedState()
     {
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
-        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
         Preferences.Default.Remove(PrefTimerMode);
         Preferences.Default.Remove(PrefPomodoroPhase);
         Preferences.Default.Remove(PrefPomodoroCycle);
