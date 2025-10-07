@@ -11,7 +11,8 @@ internal static class PersistedTimerState
         out string taskId,
         out TimeSpan remaining,
         out bool expired,
-        out int durationSeconds)
+        out int durationSeconds,
+        out DateTimeOffset expiresAt)
     {
         taskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
         int seconds = Preferences.Default.Get(PreferenceKeys.TimerDurationSeconds, -1);
@@ -19,6 +20,7 @@ internal static class PersistedTimerState
         durationSeconds = seconds;
         remaining = TimeSpan.Zero;
         expired = false;
+        expiresAt = default;
 
         if (string.IsNullOrEmpty(taskId))
         {
@@ -26,7 +28,7 @@ internal static class PersistedTimerState
         }
 
         string expiresIso = Preferences.Default.Get(PreferenceKeys.TimerExpiresAt, string.Empty);
-        if (!TryGetExpiration(expiresIso, out DateTimeOffset expiresAt))
+        if (!TryGetExpiration(expiresIso, out expiresAt))
         {
             return false;
         }
@@ -60,5 +62,12 @@ internal static class PersistedTimerState
 
         expiresAt = default;
         return false;
+    }
+
+    public static void Clear()
+    {
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
     }
 }

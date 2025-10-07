@@ -104,6 +104,16 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
+    public void SuspendInProcessTimer()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        CancelInProcessTimer();
+    }
+
     public async Task RefreshAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
@@ -429,9 +439,33 @@ public class ShuffleCoordinatorService : IDisposable
         }
         else
         {
+            await NotifyExpiredTimerAsync().ConfigureAwait(false);
             using var cts = new CancellationTokenSource();
             await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
         }
+    }
+
+    private async Task NotifyExpiredTimerAsync()
+    {
+        if (!PersistedTimerState.TryGetActiveTimer(
+                out _,
+                out _,
+                out bool expired,
+                out _,
+                out DateTimeOffset expiresAt))
+        {
+            return;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+        if (!expired && expiresAt - now > TimeSpan.FromSeconds(5))
+        {
+            return;
+        }
+
+        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", settings).ConfigureAwait(false);
+        PersistedTimerState.Clear();
     }
 
     private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
@@ -715,6 +749,7 @@ public class ShuffleCoordinatorService : IDisposable
             out _,
             out _,
             out bool expired,
+            out _,
             out _)
             && !expired;
     }
@@ -798,6 +833,12 @@ public class ShuffleCoordinatorService : IDisposable
 
     private void CancelTimerInternal()
     {
+        CancelInProcessTimer();
+        CancelPersistentSchedule();
+    }
+
+    private void CancelInProcessTimer()
+    {
         var existing = Interlocked.Exchange(ref _timerCts, null);
         if (existing != null)
         {
@@ -814,8 +855,6 @@ public class ShuffleCoordinatorService : IDisposable
                 existing.Dispose();
             }
         }
-
-        CancelPersistentSchedule();
     }
 
     private DateTimeOffset GetCurrentInstant()

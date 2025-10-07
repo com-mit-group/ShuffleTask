@@ -34,15 +34,8 @@ public partial class App : MauiWinUIApplication
         }
     }
 
-    private static async void OnSuspendingAsync(object? sender, SuspendingEventArgs e)
+    private static void OnSuspendingAsync(object? sender, SuspendingEventArgs e)
     {
-        ShuffleCoordinatorService? coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
-        if (coordinator == null)
-        {
-            return;
-        }
-
-        SuspendingDeferral deferral = e.SuspendingOperation.GetDeferral();
-        await coordinator.PauseAsync().ContinueWith(_ => deferral.Complete());
+        e.SuspendingOperation.GetDeferral().Complete();
     }
 }

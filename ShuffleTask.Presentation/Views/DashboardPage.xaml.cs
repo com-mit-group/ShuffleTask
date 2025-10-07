@@ -46,7 +46,8 @@ public partial class DashboardPage : ContentPage
                 out string taskId,
                 out TimeSpan remaining,
                 out bool expired,
-                out int durationSeconds))
+                out int durationSeconds,
+                out _))
         {
             DashboardViewModel.TimerRequest? timerState = null;
 
@@ -173,9 +174,7 @@ public partial class DashboardPage : ContentPage
 
     private static void ClearPersistedState()
     {
-        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
-        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
-        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
+        PersistedTimerState.Clear();
         Preferences.Default.Remove(PrefTimerMode);
         Preferences.Default.Remove(PrefPomodoroPhase);
         Preferences.Default.Remove(PrefPomodoroCycle);
