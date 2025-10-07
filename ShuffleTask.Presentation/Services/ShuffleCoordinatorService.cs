@@ -104,6 +104,16 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
+    public void SuspendInProcessTimer()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        CancelInProcessTimer();
+    }
+
     public async Task RefreshAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
@@ -823,6 +833,12 @@ public class ShuffleCoordinatorService : IDisposable
 
     private void CancelTimerInternal()
     {
+        CancelInProcessTimer();
+        CancelPersistentSchedule();
+    }
+
+    private void CancelInProcessTimer()
+    {
         var existing = Interlocked.Exchange(ref _timerCts, null);
         if (existing != null)
         {
@@ -839,8 +855,6 @@ public class ShuffleCoordinatorService : IDisposable
                 existing.Dispose();
             }
         }
-
-        CancelPersistentSchedule();
     }
 
     private DateTimeOffset GetCurrentInstant()

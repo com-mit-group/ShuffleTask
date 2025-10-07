@@ -39,6 +39,7 @@ public partial class App : Microsoft.Maui.Controls.Application
     protected override void OnSleep()
     {
         base.OnSleep();
+        _coordinator.SuspendInProcessTimer();
     }
 
     private async Task EnsureSeedDataAsync()
