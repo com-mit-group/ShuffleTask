@@ -36,9 +36,8 @@ public partial class App : Microsoft.Maui.Controls.Application
         await _coordinator.ResumeAsync();
     }
 
-    protected override async void OnSleep()
+    protected override void OnSleep()
     {
-        await _coordinator.PauseAsync();
         base.OnSleep();
     }
 
