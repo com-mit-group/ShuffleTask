@@ -12,7 +12,7 @@ namespace ShuffleTask.Presentation.Services;
 
 public partial class PersistentBackgroundService
 {
-    private const string AlarmAction = "com.companyname.shuffletask.SHUFFLE_ALARM";
+    private const string AlarmAction = "com.commitgroup.shuffletask.SHUFFLE_ALARM";
     private const int AlarmRequestCode = 0x7011;
 
     partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform platform)
@@ -79,7 +79,7 @@ public partial class PersistentBackgroundService
         }
     }
 
-    [BroadcastReceiver(Enabled = true, Exported = true, Name = "com.companyname.shuffletask.ShuffleCoordinatorAlarmReceiver")]
+    [BroadcastReceiver(Enabled = true, Exported = true, Name = "com.commitgroup.shuffletask.ShuffleCoordinatorAlarmReceiver")]
     [IntentFilter(new[] { AlarmAction })]
     private sealed class ShuffleCoordinatorAlarmReceiver : BroadcastReceiver
     {

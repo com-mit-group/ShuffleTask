@@ -36,7 +36,7 @@
     </array>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array>
-        <string>com.companyname.shuffletask.autoshuffle</string>
+        <string>com.commitgroup.shuffletask.autoshuffle</string>
     </array>
 </dict>
 </plist>

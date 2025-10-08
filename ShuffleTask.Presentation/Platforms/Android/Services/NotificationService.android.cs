@@ -12,7 +12,7 @@ namespace ShuffleTask.Presentation.Services;
 
 public partial class NotificationService
 {
-    private const string AndroidNotificationAction = "com.companyname.shuffletask.SHOW_NOTIFICATION";
+    private const string AndroidNotificationAction = "com.commitgroup.shuffletask.SHOW_NOTIFICATION";
     private const string AndroidNotificationExtraTitle = "ShuffleTask.Notification.Title";
     private const string AndroidNotificationExtraMessage = "ShuffleTask.Notification.Message";
     private const string AndroidNotificationExtraSound = "ShuffleTask.Notification.Sound";
@@ -218,7 +218,7 @@ public partial class NotificationService
         }
     }
 
-    [BroadcastReceiver(Enabled = true, Exported = true, Name = "com.companyname.shuffletask.ReminderBroadcastReceiver")]
+    [BroadcastReceiver(Enabled = true, Exported = true, Name = "com.commitgroup.shuffletask.ReminderBroadcastReceiver")]
     [IntentFilter(new[] { AndroidNotificationAction })]
     private sealed class ReminderBroadcastReceiver : BroadcastReceiver
     {
