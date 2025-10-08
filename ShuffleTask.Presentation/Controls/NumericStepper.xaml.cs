@@ -240,16 +240,19 @@ public partial class NumericStepper : ContentView
     private static bool ContainsFormatPlaceholder(string format)
     {
         var span = format.AsSpan();
-        for (var index = 0; index < span.Length; index++)
+        var index = 0;
+
+        while (index < span.Length)
         {
             if (span[index] != '{')
             {
+                index++;
                 continue;
             }
 
             if (IsEscapedBrace(span, index))
             {
-                index++;
+                index += 2;
                 continue;
             }
 
@@ -265,6 +268,8 @@ public partial class NumericStepper : ContentView
                     break;
                 }
             }
+
+            index++;
         }
 
         return false;
@@ -274,18 +279,21 @@ public partial class NumericStepper : ContentView
     {
         var span = format.AsSpan();
 
-        for (var index = 0; index < span.Length; index++)
+        var index = 0;
+
+        while (index < span.Length)
         {
             var current = span[index];
 
             if (current != '{' && current != '}')
             {
+                index++;
                 continue;
             }
 
             if (IsEscapedBrace(span, index))
             {
-                index++;
+                index += 2;
                 continue;
             }
 
