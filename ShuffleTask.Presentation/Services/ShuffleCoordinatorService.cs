@@ -16,7 +16,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
     private readonly TimeProvider _clock;
-    private readonly IPersistentBackgroundService _background;
+    private readonly IPersistentBackgroundService _backgroundService;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -26,13 +26,19 @@ public class ShuffleCoordinatorService : IDisposable
     private bool _isPaused;
     private bool _disposed;
 
-    public ShuffleCoordinatorService(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, IPersistentBackgroundService background, TimeProvider clock)
+    public ShuffleCoordinatorService(
+        IStorageService storage,
+        ISchedulerService scheduler,
+        INotificationService notifications,
+        TimeProvider clock,
+        IPersistentBackgroundService backgroundService)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
-        _background = background;
+        _backgroundService = backgroundService;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
     }
 
     public void Dispose()
@@ -303,33 +309,21 @@ public class ShuffleCoordinatorService : IDisposable
             delay = TimeSpan.Zero;
         }
 
-        Task.Run(async () =>
+        _ = _backgroundService.ScheduleAsync(delay, cts.Token, async () =>
         {
-            try
+            if (cts.Token.IsCancellationRequested)
             {
-                await Task.Delay(delay, cts.Token).ConfigureAwait(false);
-                if (cts.Token.IsCancellationRequested)
-                {
-                    Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
-                    return;
-                }
+                Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
+                return;
+            }
 
-                if (string.IsNullOrEmpty(taskId))
-                {
-                    await OnTimerReevaluateAsync(cts).ConfigureAwait(false);
-                }
-                else
-                {
-                    await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
-                }
-            }
-            catch (TaskCanceledException)
+            if (string.IsNullOrEmpty(taskId))
             {
-                Debug.WriteLine("ShuffleCoordinatorService timer task canceled");
+                await OnTimerReevaluateAsync(cts).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine($"ShuffleCoordinatorService timer error: {ex}");
+                await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
             }
         });
     }
@@ -850,6 +844,8 @@ public class ShuffleCoordinatorService : IDisposable
                 existing.Dispose();
             }
         }
+
+        _backgroundService.Cancel();
     }
 
     private DateTimeOffset GetCurrentInstant()

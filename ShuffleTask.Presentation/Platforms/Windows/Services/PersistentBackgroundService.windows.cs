@@ -3,95 +3,191 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
+using Windows.ApplicationModel.ExtendedExecution;
+using Windows.System.Threading;
 
 namespace ShuffleTask.Presentation.Services;
 
-public partial class PersistentBackgroundService
+internal partial class PersistentBackgroundService
 {
-    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform platform)
+    private readonly SemaphoreSlim _sessionGate = new(1, 1);
+    private readonly object _timerLock = new();
+
+    private ExtendedExecutionSession? _extendedSession;
+    private ThreadPoolTimer? _timer;
+    private CancellationTokenRegistration _timerCancellationRegistration;
+    private TaskCompletionSource<bool>? _timerCompletion;
+    private bool _usingExtendedExecution;
+
+    protected override async Task OnScheduleAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
-        platform = new WindowsPersistentBackgroundPlatform();
+        await base.OnScheduleAsync(delay, cancellationToken).ConfigureAwait(false);
+
+        if (delay <= TimeSpan.Zero)
+        {
+            _usingExtendedExecution = false;
+            return;
+        }
+
+        _usingExtendedExecution = await TryEnsureExtendedExecutionAsync().ConfigureAwait(false);
+        if (!_usingExtendedExecution)
+        {
+            Debug.WriteLine("PersistentBackgroundService: extended execution denied; falling back to in-process delay.");
+        }
     }
 
-    private sealed class WindowsPersistentBackgroundPlatform : IPersistentBackgroundPlatform
+    protected override async Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
-        private readonly object _sync = new();
-        private CancellationTokenSource? _cts;
-
-        public Task InitializeAsync() => Task.CompletedTask;
-
-        public void Schedule(DateTimeOffset when, TimeSpan delay, string? taskId)
+        if (!_usingExtendedExecution || delay <= TimeSpan.Zero)
         {
-            lock (_sync)
-            {
-                _ = when;
-                _ = taskId;
-                CancelLocked();
-
-                var cts = new CancellationTokenSource();
-                _cts = cts;
-                _ = RunAsync(delay, cts.Token);
-            }
+            await base.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
+            return;
         }
 
-        public void Cancel()
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        DateTimeOffset dueTimeUtc = DateTimeOffset.UtcNow + delay;
+
+        lock (_timerLock)
         {
-            lock (_sync)
-            {
-                CancelLocked();
-            }
+            _timerCompletion = tcs;
+            _timer = ThreadPoolTimer.CreateTimer(OnTimerElapsed, delay);
+            _timerCancellationRegistration = cancellationToken.Register(() => OnTimerCancelled(cancellationToken));
         }
 
-        private void CancelLocked()
+        try
         {
-            if (_cts != null)
+            await tcs.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && !ex.CancellationToken.CanBeCanceled)
+        {
+            Debug.WriteLine("PersistentBackgroundService falling back to in-process delay after extended execution revocation.");
+
+            TimeSpan remaining = dueTimeUtc - DateTimeOffset.UtcNow;
+            if (remaining < TimeSpan.Zero)
             {
-                try
-                {
-                    _cts.Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Timer was already disposed; ignore.
-                }
-                finally
-                {
-                    _cts.Dispose();
-                    _cts = null;
-                }
+                remaining = TimeSpan.Zero;
             }
+
+            await base.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+    }
+
+    protected override async Task OnCompletedAsync(bool cancelled)
+    {
+        if (_usingExtendedExecution)
+        {
+            ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
+            await ReleaseExtendedExecutionAsync().ConfigureAwait(false);
+            _usingExtendedExecution = false;
         }
 
-        private static async Task RunAsync(TimeSpan delay, CancellationToken token)
+        await base.OnCompletedAsync(cancelled).ConfigureAwait(false);
+    }
+
+    protected override void OnCancelled()
+    {
+        if (_usingExtendedExecution)
         {
-            try
-            {
-                if (delay > TimeSpan.Zero)
-                {
-                    await Task.Delay(delay, token).ConfigureAwait(false);
-                }
+            ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
+            _ = ReleaseExtendedExecutionAsync();
+            _usingExtendedExecution = false;
+        }
 
-                if (token.IsCancellationRequested)
-                {
-                    return;
-                }
+        base.OnCancelled();
+    }
 
-                var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
-                if (coordinator != null)
-                {
-                    await coordinator.HandlePersistentTriggerAsync().ConfigureAwait(false);
-                }
-            }
-            catch (TaskCanceledException)
+    private async Task<bool> TryEnsureExtendedExecutionAsync()
+    {
+        await _sessionGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_extendedSession != null)
             {
-                // Timer canceled before execution; nothing to do.
+                return true;
             }
-            catch (Exception ex)
+
+            var session = new ExtendedExecutionSession
             {
-                Debug.WriteLine($"ShuffleTask Windows background timer error: {ex}");
+                Reason = ExtendedExecutionReason.Unspecified,
+                Description = "Keep ShuffleTask timers running while the app is suspended."
+            };
+
+            session.Revoked += OnExtendedExecutionRevoked;
+
+            ExtendedExecutionResult result = await session.RequestExtensionAsync();
+            if (result == ExtendedExecutionResult.Allowed)
+            {
+                _extendedSession = session;
+                return true;
+            }
+
+            session.Revoked -= OnExtendedExecutionRevoked;
+            session.Dispose();
+            return false;
+        }
+        finally
+        {
+            _sessionGate.Release();
+        }
+    }
+
+    private async Task ReleaseExtendedExecutionAsync()
+    {
+        await _sessionGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_extendedSession != null)
+            {
+                _extendedSession.Revoked -= OnExtendedExecutionRevoked;
+                _extendedSession.Dispose();
+                _extendedSession = null;
             }
         }
+        finally
+        {
+            _sessionGate.Release();
+        }
+    }
+
+    private void OnTimerElapsed(ThreadPoolTimer timer)
+    {
+        ResolveTimerCompletion(static tcs => tcs.TrySetResult(true));
+    }
+
+    private void OnTimerCancelled(CancellationToken token)
+    {
+        ResolveTimerCompletion(tcs => tcs.TrySetCanceled(token));
+    }
+
+    private void ResolveTimerCompletion(Action<TaskCompletionSource<bool>> completionAction)
+    {
+        TaskCompletionSource<bool>? completion;
+
+        lock (_timerLock)
+        {
+            completion = _timerCompletion;
+            _timerCompletion = null;
+
+            _timer?.Cancel();
+            _timer = null;
+
+            _timerCancellationRegistration.Dispose();
+            _timerCancellationRegistration = default;
+        }
+
+        if (completion != null)
+        {
+            completionAction(completion);
+        }
+    }
+
+    private void OnExtendedExecutionRevoked(object? sender, ExtendedExecutionRevokedEventArgs args)
+    {
+        Debug.WriteLine($"PersistentBackgroundService extended execution revoked: {args.Reason}");
+        ResolveTimerCompletion(tcs => tcs.TrySetCanceled());
+        _ = ReleaseExtendedExecutionAsync();
+        _usingExtendedExecution = false;
     }
 }
 #endif

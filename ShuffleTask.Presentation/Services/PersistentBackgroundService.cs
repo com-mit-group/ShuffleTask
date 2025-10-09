@@ -1,62 +1,80 @@
+using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace ShuffleTask.Presentation.Services;
 
-public partial class PersistentBackgroundService : IPersistentBackgroundService
+public interface IPersistentBackgroundService
 {
-    private readonly TimeProvider _clock;
-    private readonly IPersistentBackgroundPlatform _platform;
+    Task ScheduleAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback);
 
-    public PersistentBackgroundService(TimeProvider clock)
+    void Cancel();
+}
+
+internal partial class PersistentBackgroundService : IPersistentBackgroundService, IDisposable
+{
+    public Task ScheduleAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback)
     {
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
-        _platform = CreatePlatform(clock);
-    }
-
-    public Task InitializeAsync()
-        => _platform.InitializeAsync();
-
-    public void Schedule(DateTimeOffset when, string? taskId)
-    {
-        TimeSpan delay = when - _clock.GetUtcNow();
-        if (delay < TimeSpan.Zero)
+        if (callback == null)
         {
-            delay = TimeSpan.Zero;
+            throw new ArgumentNullException(nameof(callback));
         }
 
-        _platform.Cancel();
-        _platform.Schedule(when, delay, taskId);
+        return RunTimerAsync(delay, cancellationToken, callback);
+    }
+
+    private async Task RunTimerAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback)
+    {
+        try
+        {
+            await OnScheduleAsync(delay, cancellationToken).ConfigureAwait(false);
+            await WaitAsync(delay, cancellationToken).ConfigureAwait(false);
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await callback().ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Swallow expected cancellation
+        }
+        catch (Exception ex)
+        {
+            OnUnhandledException(ex);
+        }
+        finally
+        {
+            await OnCompletedAsync(cancellationToken.IsCancellationRequested).ConfigureAwait(false);
+        }
     }
 
     public void Cancel()
-        => _platform.Cancel();
-
-    private IPersistentBackgroundPlatform CreatePlatform(TimeProvider clock)
     {
-        IPersistentBackgroundPlatform platform = new NoOpPersistentBackgroundPlatform();
-        InitializePlatform(clock, ref platform);
-        return platform;
+        OnCancelled();
     }
 
-    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform platform);
+    protected virtual Task OnScheduleAsync(TimeSpan delay, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 
-    private interface IPersistentBackgroundPlatform
+    protected virtual Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+        => Task.Delay(delay, cancellationToken);
+
+    protected virtual Task OnCompletedAsync(bool cancelled)
+        => Task.CompletedTask;
+
+    protected virtual void OnCancelled()
     {
-        Task InitializeAsync();
-
-        void Schedule(DateTimeOffset when, TimeSpan delay, string? taskId);
-
-        void Cancel();
     }
 
-    private sealed class NoOpPersistentBackgroundPlatform : IPersistentBackgroundPlatform
+    protected virtual void OnUnhandledException(Exception exception)
     {
-        public Task InitializeAsync() => Task.CompletedTask;
+        Debug.WriteLine($"PersistentBackgroundService error: {exception}");
+    }
 
-        public void Schedule(DateTimeOffset when, TimeSpan delay, string? taskId)
-        {
-        }
-
-        public void Cancel()
-        {
-        }
+    public void Dispose()
+    {
+        Cancel();
     }
 }
