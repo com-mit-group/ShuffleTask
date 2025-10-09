@@ -37,6 +37,8 @@ public static partial class MauiProgram
         builder
             .UseMauiApp<App>();
 
+        ConfigurePlatform(builder);
+
         builder.ConfigureFonts(fonts =>
         {
             fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -80,5 +82,6 @@ public static partial class MauiProgram
 
         return app;
     }
+    static partial void ConfigurePlatform(MauiAppBuilder builder);
     static partial void ResolvePlatformServiceProvider(ref IServiceProvider? services);
 }
