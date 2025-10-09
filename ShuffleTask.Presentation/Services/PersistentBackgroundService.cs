@@ -81,15 +81,15 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
         }
 
         _platform.Cancel();
-        OnCancelled();
+        OnCancelledCore();
     }
 
     private async Task RunTimerAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback)
     {
         try
         {
-            await OnScheduleAsync(delay, cancellationToken).ConfigureAwait(false);
-            await WaitAsync(delay, cancellationToken).ConfigureAwait(false);
+            await OnScheduleAsyncCore(delay, cancellationToken).ConfigureAwait(false);
+            await WaitAsyncCore(delay, cancellationToken).ConfigureAwait(false);
 
             if (!cancellationToken.IsCancellationRequested)
             {
@@ -106,21 +106,40 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
         }
         finally
         {
-            await OnCompletedAsync(cancellationToken.IsCancellationRequested).ConfigureAwait(false);
+            await OnCompletedAsyncCore(cancellationToken.IsCancellationRequested).ConfigureAwait(false);
         }
     }
 
-    protected virtual Task OnScheduleAsync(TimeSpan delay, CancellationToken cancellationToken)
-        => Task.CompletedTask;
-
-    protected virtual Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
-        => Task.Delay(delay, cancellationToken);
-
-    protected virtual Task OnCompletedAsync(bool cancelled)
-        => Task.CompletedTask;
-
-    protected virtual void OnCancelled()
+    private Task OnScheduleAsyncCore(TimeSpan delay, CancellationToken cancellationToken)
     {
+        Task? customTask = null;
+        OnScheduleAsyncPartial(delay, cancellationToken, ref customTask);
+        return customTask ?? Task.CompletedTask;
+    }
+
+    private Task WaitAsyncCore(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        Task? customTask = null;
+        WaitAsyncPartial(delay, cancellationToken, ref customTask);
+        return customTask ?? Task.Delay(delay, cancellationToken);
+    }
+
+    private Task OnCompletedAsyncCore(bool cancelled)
+    {
+        Task? customTask = null;
+        OnCompletedAsyncPartial(cancelled, ref customTask);
+        return customTask ?? Task.CompletedTask;
+    }
+
+    private void OnCancelledCore()
+    {
+        bool handled = false;
+        OnCancelledPartial(ref handled);
+
+        if (!handled)
+        {
+            // The default implementation performs no additional work when cancellation occurs.
+        }
     }
 
     protected virtual void OnUnhandledException(Exception exception)
@@ -189,4 +208,12 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
     }
 
     partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform? platform);
+
+    partial void OnScheduleAsyncPartial(TimeSpan delay, CancellationToken cancellationToken, ref Task? customTask);
+
+    partial void WaitAsyncPartial(TimeSpan delay, CancellationToken cancellationToken, ref Task? customTask);
+
+    partial void OnCompletedAsyncPartial(bool cancelled, ref Task? customTask);
+
+    partial void OnCancelledPartial(ref bool handled);
 }

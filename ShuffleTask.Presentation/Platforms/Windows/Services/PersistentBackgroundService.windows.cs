@@ -19,10 +19,44 @@ internal partial class PersistentBackgroundService
     private TaskCompletionSource<bool>? _timerCompletion;
     private bool _usingExtendedExecution;
 
-    protected override async Task OnScheduleAsync(TimeSpan delay, CancellationToken cancellationToken)
+    partial void OnScheduleAsyncPartial(TimeSpan delay, CancellationToken cancellationToken, ref Task? customTask)
     {
-        await base.OnScheduleAsync(delay, cancellationToken).ConfigureAwait(false);
+        customTask = HandleOnScheduleAsync(delay);
+    }
 
+    partial void WaitAsyncPartial(TimeSpan delay, CancellationToken cancellationToken, ref Task? customTask)
+    {
+        if (!_usingExtendedExecution || delay <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        customTask = WaitWithExtendedExecutionAsync(delay, cancellationToken);
+    }
+
+    partial void OnCompletedAsyncPartial(bool cancelled, ref Task? customTask)
+    {
+        if (_usingExtendedExecution)
+        {
+            customTask = OnCompletedWithExtendedExecutionAsync();
+        }
+    }
+
+    partial void OnCancelledPartial(ref bool handled)
+    {
+        if (!_usingExtendedExecution)
+        {
+            return;
+        }
+
+        ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
+        _ = ReleaseExtendedExecutionAsync();
+        _usingExtendedExecution = false;
+        handled = true;
+    }
+
+    private async Task HandleOnScheduleAsync(TimeSpan delay)
+    {
         if (delay <= TimeSpan.Zero)
         {
             _usingExtendedExecution = false;
@@ -36,14 +70,8 @@ internal partial class PersistentBackgroundService
         }
     }
 
-    protected override async Task WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+    private async Task WaitWithExtendedExecutionAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
-        if (!_usingExtendedExecution || delay <= TimeSpan.Zero)
-        {
-            await base.WaitAsync(delay, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         DateTimeOffset dueTimeUtc = DateTimeOffset.UtcNow + delay;
 
@@ -68,33 +96,15 @@ internal partial class PersistentBackgroundService
                 remaining = TimeSpan.Zero;
             }
 
-            await base.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
-            return;
+            await Task.Delay(remaining, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    protected override async Task OnCompletedAsync(bool cancelled)
+    private async Task OnCompletedWithExtendedExecutionAsync()
     {
-        if (_usingExtendedExecution)
-        {
-            ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
-            await ReleaseExtendedExecutionAsync().ConfigureAwait(false);
-            _usingExtendedExecution = false;
-        }
-
-        await base.OnCompletedAsync(cancelled).ConfigureAwait(false);
-    }
-
-    protected override void OnCancelled()
-    {
-        if (_usingExtendedExecution)
-        {
-            ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
-            _ = ReleaseExtendedExecutionAsync();
-            _usingExtendedExecution = false;
-        }
-
-        base.OnCancelled();
+        ResolveTimerCompletion(static tcs => tcs.TrySetCanceled());
+        await ReleaseExtendedExecutionAsync().ConfigureAwait(false);
+        _usingExtendedExecution = false;
     }
 
     private async Task<bool> TryEnsureExtendedExecutionAsync()
