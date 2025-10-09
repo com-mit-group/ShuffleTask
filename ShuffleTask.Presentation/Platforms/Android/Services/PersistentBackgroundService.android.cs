@@ -10,12 +10,12 @@ using ShuffleTask.Presentation.Services;
 
 namespace ShuffleTask.Presentation.Services;
 
-public partial class PersistentBackgroundService
+internal partial class PersistentBackgroundService
 {
     private const string AlarmAction = "com.commitgroup.shuffletask.SHUFFLE_ALARM";
     private const int AlarmRequestCode = 0x7011;
 
-    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform platform)
+    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform? platform)
     {
         platform = new AndroidPersistentBackgroundPlatform();
     }

@@ -8,11 +8,11 @@ using ShuffleTask.Presentation.Services;
 
 namespace ShuffleTask.Presentation.Services;
 
-public partial class PersistentBackgroundService
+internal partial class PersistentBackgroundService
 {
     private const string TaskIdentifier = "com.commitgroup.shuffletask.autoshuffle";
 
-    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform platform)
+    partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform? platform)
     {
         platform = new ApplePersistentBackgroundPlatform();
     }

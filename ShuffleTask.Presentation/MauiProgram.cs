@@ -55,7 +55,6 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
-        builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
         // ViewModels

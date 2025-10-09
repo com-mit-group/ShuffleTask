@@ -33,10 +33,9 @@ public class ShuffleCoordinatorService : IDisposable
         TimeProvider clock,
         IPersistentBackgroundService backgroundService)
     {
-        _storage = storage;
-        _scheduler = scheduler;
-        _notifications = notifications;
-        _backgroundService = backgroundService;
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
     }
@@ -148,7 +147,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await _storage.InitializeAsync().ConfigureAwait(false);
         await _notifications.InitializeAsync().ConfigureAwait(false);
-        await _background.InitializeAsync().ConfigureAwait(false);
+        await _backgroundService.InitializeAsync().ConfigureAwait(false);
     }
 
     private async Task ScheduleNextShuffleAsync()
@@ -293,7 +292,7 @@ public class ShuffleCoordinatorService : IDisposable
 
         try
         {
-            _background.Schedule(scheduledAt, taskId);
+            _backgroundService.Schedule(scheduledAt, taskId);
         }
         catch (Exception ex)
         {
@@ -410,7 +409,7 @@ public class ShuffleCoordinatorService : IDisposable
             {
                 try
                 {
-                    _background.Schedule(scheduledAt.Value, string.IsNullOrEmpty(taskId) ? null : taskId);
+                    _backgroundService.Schedule(scheduledAt.Value, string.IsNullOrEmpty(taskId) ? null : taskId);
                 }
                 catch (Exception ex)
                 {
@@ -812,7 +811,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         try
         {
-            _background.Cancel();
+            _backgroundService.Cancel();
         }
         catch (Exception ex)
         {
