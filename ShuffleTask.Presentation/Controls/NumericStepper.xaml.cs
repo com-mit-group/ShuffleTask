@@ -1,13 +1,13 @@
-using System;
 using System.Buffers;
 using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Maui.Controls;
 
 namespace ShuffleTask.Controls;
 
 public partial class NumericStepper : ContentView
 {
+    private const decimal MinimumPositiveIncrement = 1e-28m;
+
     public static readonly BindableProperty MinimumProperty = BindableProperty.Create(
         nameof(Minimum),
         typeof(double?),
@@ -126,36 +126,30 @@ public partial class NumericStepper : ContentView
 
     private static void OnRangePropertyChanged(BindableObject bindable, object oldValue, object newValue)
     {
-        if (bindable is NumericStepper stepper)
+        InvokeIfNumericStepper(bindable, static stepper =>
         {
             stepper.Value = stepper.CoerceValue(stepper.Value);
             stepper.RefreshState();
-        }
+        });
     }
 
     private static void OnIncrementChanged(BindableObject bindable, object oldValue, object newValue)
     {
-        if (bindable is NumericStepper stepper)
+        InvokeIfNumericStepper(bindable, static stepper =>
         {
             stepper.Value = stepper.CoerceValue(stepper.Value);
             stepper.RefreshState();
-        }
+        });
     }
 
     private static void OnValuePropertyChanged(BindableObject bindable, object oldValue, object newValue)
     {
-        if (bindable is NumericStepper stepper)
-        {
-            stepper.RefreshState();
-        }
+        InvokeIfNumericStepper(bindable, static stepper => stepper.RefreshState());
     }
 
     private static void OnValueStringFormatChanged(BindableObject bindable, object oldValue, object newValue)
     {
-        if (bindable is NumericStepper stepper)
-        {
-            stepper.UpdateDisplayValue();
-        }
+        InvokeIfNumericStepper(bindable, static stepper => stepper.UpdateDisplayValue());
     }
 
     private void RefreshState()
@@ -171,19 +165,7 @@ public partial class NumericStepper : ContentView
     private void UpdateDisplayValue()
     {
         var format = string.IsNullOrWhiteSpace(ValueStringFormat) ? "{0:0}" : ValueStringFormat;
-
-        if (ContainsFormatPlaceholder(format))
-        {
-            DisplayValue = FormatWithPlaceholder(format);
-        }
-        else if (!ContainsUnescapedBraces(format) && TryFormatValue(format, out var formattedValue))
-        {
-            DisplayValue = formattedValue;
-        }
-        else
-        {
-            DisplayValue = Value.ToString(CultureInfo.CurrentCulture);
-        }
+        DisplayValue = ResolveDisplayValue(format);
     }
 
     private void OnDecrease()
@@ -199,12 +181,8 @@ public partial class NumericStepper : ContentView
     private double CoerceValue(double value)
     {
         var (minimum, maximum) = GetOrderedRange();
-        var increment = GetIncrement();
-        var incrementDecimal = ToDecimal(increment);
-        if (incrementDecimal <= 0m)
-        {
-            incrementDecimal = 0.0000000000000000000000000001m;
-        }
+        var incrementDecimal = ToDecimal(GetIncrement());
+        incrementDecimal = incrementDecimal <= 0m ? MinimumPositiveIncrement : incrementDecimal;
         var valueDecimal = ToDecimal(value);
 
         decimal coerced;
@@ -223,53 +201,75 @@ public partial class NumericStepper : ContentView
 
         var coercedValue = (double)coerced;
 
-        if (minimum.HasValue && coercedValue < minimum.Value)
+        if (minimum.HasValue)
         {
-            coercedValue = minimum.Value;
+            coercedValue = Math.Max(coercedValue, minimum.Value);
         }
 
-        if (maximum.HasValue && coercedValue > maximum.Value)
+        if (maximum.HasValue)
         {
-            coercedValue = maximum.Value;
+            coercedValue = Math.Min(coercedValue, maximum.Value);
         }
 
         return coercedValue;
     }
 
+    private static void InvokeIfNumericStepper(BindableObject bindable, Action<NumericStepper> action)
+    {
+        if (bindable is NumericStepper stepper)
+        {
+            action(stepper);
+        }
+    }
+
+    private string ResolveDisplayValue(string format)
+    {
+        if (ContainsFormatPlaceholder(format))
+        {
+            return FormatWithPlaceholder(format);
+        }
+
+        if (!ContainsUnescapedBraces(format) && TryFormatValue(format, out var formattedValue))
+        {
+            return formattedValue;
+        }
+
+        return Value.ToString(CultureInfo.CurrentCulture);
+    }
+
     private static bool ContainsFormatPlaceholder(string format)
     {
-        var skipNext = false;
+        var span = format.AsSpan();
+        var index = 0;
 
-        for (var index = 0; index < format.Length; index++)
+        while (index < span.Length)
         {
-            if (skipNext)
+            if (span[index] != '{')
             {
-                skipNext = false;
+                index++;
                 continue;
             }
 
-            if (format[index] != '{')
+            if (IsEscapedBrace(span, index))
             {
+                index += 2;
                 continue;
             }
 
-            if (index + 1 < format.Length && format[index + 1] == '{')
+            for (var scanIndex = index + 1; scanIndex < span.Length; scanIndex++)
             {
-                skipNext = true;
-                continue;
+                if (span[scanIndex] == '0')
+                {
+                    return true;
+                }
+
+                if (!char.IsWhiteSpace(span[scanIndex]))
+                {
+                    break;
+                }
             }
 
-            var scanIndex = index + 1;
-
-            while (scanIndex < format.Length && char.IsWhiteSpace(format[scanIndex]))
-            {
-                scanIndex++;
-            }
-
-            if (scanIndex < format.Length && format[scanIndex] == '0')
-            {
-                return true;
-            }
+            index++;
         }
 
         return false;
@@ -277,26 +277,23 @@ public partial class NumericStepper : ContentView
 
     private static bool ContainsUnescapedBraces(string format)
     {
-        var skipNext = false;
+        var span = format.AsSpan();
 
-        for (var index = 0; index < format.Length; index++)
+        var index = 0;
+
+        while (index < span.Length)
         {
-            if (skipNext)
-            {
-                skipNext = false;
-                continue;
-            }
-
-            var current = format[index];
+            var current = span[index];
 
             if (current != '{' && current != '}')
             {
+                index++;
                 continue;
             }
 
-            if (index + 1 < format.Length && format[index + 1] == current)
+            if (IsEscapedBrace(span, index))
             {
-                skipNext = true;
+                index += 2;
                 continue;
             }
 
@@ -305,6 +302,9 @@ public partial class NumericStepper : ContentView
 
         return false;
     }
+
+    private static bool IsEscapedBrace(ReadOnlySpan<char> span, int index)
+        => index + 1 < span.Length && span[index + 1] == span[index];
 
     private string FormatWithPlaceholder(string format)
     {

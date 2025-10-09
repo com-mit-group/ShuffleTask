@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Views;

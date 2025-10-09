@@ -1,7 +1,3 @@
-using System;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Maui.Controls;
-using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.ViewModels;
 

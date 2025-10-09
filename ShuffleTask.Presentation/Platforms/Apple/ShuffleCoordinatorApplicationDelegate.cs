@@ -13,12 +13,10 @@ internal abstract class ShuffleCoordinatorApplicationDelegate : MauiUIApplicatio
         ResumeCoordinator();
     }
 
-    public override void DidEnterBackground(UIApplication uiApplication)
-    {
-        PauseCoordinator();
-
-        base.DidEnterBackground(uiApplication);
-    }
+    // Note: We no longer pause the coordinator when the app enters background.
+    // The ShuffleCoordinatorService schedules notifications via UNUserNotificationCenter,
+    // which delivers notifications even when the app is backgrounded.
+    // This ensures auto-shuffle notifications fire reliably in the background.
 
     private static void ResumeCoordinator()
     {
@@ -26,15 +24,6 @@ internal abstract class ShuffleCoordinatorApplicationDelegate : MauiUIApplicatio
         if (coordinator != null)
         {
             _ = coordinator.ResumeAsync();
-        }
-    }
-
-    private static void PauseCoordinator()
-    {
-        var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
-        if (coordinator != null)
-        {
-            _ = coordinator.PauseAsync();
         }
     }
 }
