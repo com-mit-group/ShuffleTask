@@ -45,6 +45,7 @@ internal partial class PersistentBackgroundService
         }
 
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        DateTimeOffset dueTimeUtc = DateTimeOffset.UtcNow + delay;
 
         lock (_timerLock)
         {
@@ -53,7 +54,23 @@ internal partial class PersistentBackgroundService
             _timerCancellationRegistration = cancellationToken.Register(() => OnTimerCancelled(cancellationToken));
         }
 
-        await tcs.Task.ConfigureAwait(false);
+        try
+        {
+            await tcs.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && !ex.CancellationToken.CanBeCanceled)
+        {
+            Debug.WriteLine("PersistentBackgroundService falling back to in-process delay after extended execution revocation.");
+
+            TimeSpan remaining = dueTimeUtc - DateTimeOffset.UtcNow;
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            await base.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+            return;
+        }
     }
 
     protected override async Task OnCompletedAsync(bool cancelled)
