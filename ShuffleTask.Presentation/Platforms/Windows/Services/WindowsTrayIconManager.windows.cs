@@ -98,7 +98,7 @@ internal sealed class WindowsTrayIconManager : IDisposable
 
         _ = _window.DispatcherQueue.TryEnqueue(() =>
         {
-            _appWindow?.Show(true);
+            _appWindow?.Show();
             _window.Activate();
         });
     }
