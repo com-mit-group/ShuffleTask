@@ -2,6 +2,7 @@
 using System;
 using System.Threading.Tasks;
 using BackgroundTasks;
+using CoreFoundation;
 using Foundation;
 using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.Presentation.Services;
@@ -10,7 +11,7 @@ namespace ShuffleTask.Presentation.Services;
 
 internal partial class PersistentBackgroundService
 {
-    private const string TaskIdentifier = "com.commitgroup.shuffletask.autoshuffle";
+    internal const string AppleTaskIdentifier = "com.commitgroup.shuffletask.autoshuffle";
 
     partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform? platform)
     {
@@ -31,36 +32,39 @@ internal partial class PersistentBackgroundService
         {
             EnsureRegistered();
 
-            BGTaskScheduler.Shared.Cancel(TaskIdentifier);
+            ExecuteOnMainThread(() =>
+            {
+                BGTaskScheduler.Shared.Cancel(AppleTaskIdentifier);
 
-            var request = new BGProcessingTaskRequest(TaskIdentifier)
-            {
-                RequiresExternalPower = false,
-                RequiresNetworkConnectivity = false
-            };
+                var request = new BGProcessingTaskRequest(AppleTaskIdentifier)
+                {
+                    RequiresExternalPower = false,
+                    RequiresNetworkConnectivity = false
+                };
 
-            if (delay > TimeSpan.Zero)
-            {
-                request.EarliestBeginDate = NSDate.FromTimeIntervalSinceNow(delay.TotalSeconds);
-            }
-            else
-            {
-                request.EarliestBeginDate = NSDate.Now;
-            }
+                if (delay > TimeSpan.Zero)
+                {
+                    request.EarliestBeginDate = NSDate.FromTimeIntervalSinceNow(delay.TotalSeconds);
+                }
+                else
+                {
+                    request.EarliestBeginDate = NSDate.Now;
+                }
 
-            try
-            {
-                BGTaskScheduler.Shared.Submit(request);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ShuffleTask] Failed to submit background task: {ex}");
-            }
+                try
+                {
+                    BGTaskScheduler.Shared.Submit(request);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ShuffleTask] Failed to submit background task: {ex}");
+                }
+            });
         }
 
         public void Cancel()
         {
-            BGTaskScheduler.Shared.Cancel(TaskIdentifier);
+            ExecuteOnMainThread(() => BGTaskScheduler.Shared.Cancel(AppleTaskIdentifier));
         }
 
         private void EnsureRegistered()
@@ -70,15 +74,23 @@ internal partial class PersistentBackgroundService
                 return;
             }
 
-            try
+            ExecuteOnMainThread(() =>
             {
-                BGTaskScheduler.Shared.Register(TaskIdentifier, null, HandleTask);
-                _registered = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ShuffleTask] Failed to register background task: {ex}");
-            }
+                if (_registered)
+                {
+                    return;
+                }
+
+                try
+                {
+                    BGTaskScheduler.Shared.Register(AppleTaskIdentifier, null, HandleTask);
+                    _registered = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ShuffleTask] Failed to register background task: {ex}");
+                }
+            });
         }
 
         private static void HandleTask(BGTask task)
@@ -109,6 +121,23 @@ internal partial class PersistentBackgroundService
                     task.SetTaskCompleted(false);
                 }
             });
+        }
+
+        private static void ExecuteOnMainThread(Action action)
+        {
+            if (action is null)
+            {
+                return;
+            }
+
+            if (NSThread.IsMain)
+            {
+                action();
+            }
+            else
+            {
+                DispatchQueue.MainQueue.DispatchSync(action);
+            }
         }
     }
 }
