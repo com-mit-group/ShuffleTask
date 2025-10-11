@@ -1,6 +1,4 @@
-using System;
 using ShuffleTask.Application.Abstractions;
-using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Views;
@@ -36,10 +34,10 @@ public partial class App : Microsoft.Maui.Controls.Application
         await _coordinator.ResumeAsync();
     }
 
-    protected override async void OnSleep()
+    protected override void OnSleep()
     {
-        await _coordinator.PauseAsync();
         base.OnSleep();
+        _coordinator.SuspendInProcessTimer();
     }
 
     private async Task EnsureSeedDataAsync()
@@ -81,7 +79,8 @@ public partial class App : Microsoft.Maui.Controls.Application
         settings.StableRandomnessPerDay = true;
         await _storage.SetSettingsAsync(settings);
 
-        Preferences.Default.Remove(PreferenceKeys.RemainingSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
         Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
         Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);

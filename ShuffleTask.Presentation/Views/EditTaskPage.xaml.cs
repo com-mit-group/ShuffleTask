@@ -1,6 +1,4 @@
-using System;
 using System.ComponentModel;
-using Microsoft.Maui.Controls;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;

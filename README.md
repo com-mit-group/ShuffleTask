@@ -26,6 +26,10 @@ Active ⟷ Snoozed ⟷ Completed
 Timer → Platform Notification → Fallback Alert → Logging
 ```
 
+**Background Notifications:**
+Auto-shuffle notifications fire reliably even when the app is backgrounded, using OS-native scheduled notification APIs (AlarmManager on Android, UNUserNotificationCenter on iOS/macOS, ScheduledToastNotification on Windows).
+
+
 ## Prioritization formula
 
 ShuffleTask ranks tasks by combining weighted importance, urgency, and a size-aware multiplier:

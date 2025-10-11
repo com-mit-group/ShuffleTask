@@ -1,3 +1,6 @@
+using System;
+using BackgroundTasks;
+using Foundation;
 using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.Presentation.Services;
 using UIKit;
@@ -6,6 +9,28 @@ namespace ShuffleTask;
 
 internal abstract class ShuffleCoordinatorApplicationDelegate : MauiUIApplicationDelegate
 {
+    public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
+    {
+        var result = base.FinishedLaunching(application, launchOptions);
+
+        EnsurePersistentBackgroundInitialized();
+
+        return result;
+    }
+
+    public override void HandleEventsForBackgroundTasks(UIApplication application, NSSet<BGTask> backgroundTasks)
+    {
+        EnsurePersistentBackgroundInitialized();
+
+        foreach (var task in backgroundTasks)
+        {
+            if (!string.Equals(task.Identifier, PersistentBackgroundService.AppleTaskIdentifier, StringComparison.Ordinal))
+            {
+                task.SetTaskCompleted(false);
+            }
+        }
+    }
+
     public override void OnActivated(UIApplication uiApplication)
     {
         base.OnActivated(uiApplication);
@@ -13,12 +38,10 @@ internal abstract class ShuffleCoordinatorApplicationDelegate : MauiUIApplicatio
         ResumeCoordinator();
     }
 
-    public override void DidEnterBackground(UIApplication uiApplication)
-    {
-        PauseCoordinator();
-
-        base.DidEnterBackground(uiApplication);
-    }
+    // Note: We no longer pause the coordinator when the app enters background.
+    // The ShuffleCoordinatorService schedules notifications via UNUserNotificationCenter,
+    // which delivers notifications even when the app is backgrounded.
+    // This ensures auto-shuffle notifications fire reliably in the background.
 
     private static void ResumeCoordinator()
     {
@@ -29,12 +52,27 @@ internal abstract class ShuffleCoordinatorApplicationDelegate : MauiUIApplicatio
         }
     }
 
-    private static void PauseCoordinator()
+    private static void EnsurePersistentBackgroundInitialized()
     {
-        var coordinator = MauiProgram.TryGetServiceProvider()?.GetService<ShuffleCoordinatorService>();
-        if (coordinator != null)
+        var provider = MauiProgram.TryGetServiceProvider();
+        if (provider == null)
         {
-            _ = coordinator.PauseAsync();
+            return;
+        }
+
+        var backgroundService = provider.GetService<IPersistentBackgroundService>();
+        if (backgroundService == null)
+        {
+            return;
+        }
+
+        try
+        {
+            backgroundService.InitializeAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to initialize persistent background service: {ex}");
         }
     }
 }

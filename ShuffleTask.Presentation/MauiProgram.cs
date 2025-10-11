@@ -1,7 +1,4 @@
-﻿using System;
-using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-using ShuffleTask.Application.Abstractions;
+﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;
@@ -10,20 +7,37 @@ using ShuffleTask.Views;
 
 namespace ShuffleTask;
 
-public static class MauiProgram
+public static partial class MauiProgram
 {
     private static IServiceProvider? _services;
 
     public static IServiceProvider Services =>
         _services ?? throw new InvalidOperationException("Maui services have not been initialized yet.");
 
-    public static IServiceProvider? TryGetServiceProvider() => _services;
+    public static IServiceProvider? TryGetServiceProvider()
+    {
+        if (_services != null)
+        {
+            return _services;
+        }
+
+        IServiceProvider? services = null;
+        ResolvePlatformServiceProvider(ref services);
+        if (services != null)
+        {
+            _services = services;
+        }
+
+        return _services;
+    }
 
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>();
+
+        ConfigurePlatform(builder);
 
         builder.ConfigureFonts(fonts =>
         {
@@ -41,6 +55,7 @@ public static class MauiProgram
         });
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
@@ -58,7 +73,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<EditTaskPage>();
 
 #if DEBUG
-        builder.Logging.AddDebug();
+        var loggingBuilder = builder.Logging;
+        loggingBuilder.Services.AddLogging();
 #endif
 
         var app = builder.Build();
@@ -66,4 +82,6 @@ public static class MauiProgram
 
         return app;
     }
+    static partial void ConfigurePlatform(MauiAppBuilder builder);
+    static partial void ResolvePlatformServiceProvider(ref IServiceProvider? services);
 }

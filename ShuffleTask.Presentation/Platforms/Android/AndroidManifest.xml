@@ -5,4 +5,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13+ runtime permission for posting notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 12+ permission for exact alarm scheduling (background notifications) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Android 9+ foreground service permissions for the persistent background service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ data-sync foreground service permission matches the service type we declare -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 </manifest>
