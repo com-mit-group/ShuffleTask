@@ -843,8 +843,6 @@ public class ShuffleCoordinatorService : IDisposable
                 existing.Dispose();
             }
         }
-
-        _backgroundService.Cancel();
     }
 
     private DateTimeOffset GetCurrentInstant()
