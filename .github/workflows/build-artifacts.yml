@@ -115,7 +115,7 @@ jobs:
           path: |
             'C:\Program Files\dotnet\packs'
             'C:\Program Files\dotnet\sdk-manifests'
-            C:\ProgramData\dotnet\workloads*
+            C:\ProgramData\dotnet\workload*
             'C:\Program Files\dotnet\metadata'
           key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
           restore-keys: |
@@ -156,7 +156,7 @@ jobs:
           path: |
             'C:\Program Files\dotnet\packs'
             'C:\Program Files\dotnet\sdk-manifests'
-            C:\ProgramData\dotnet\workloads*
+            C:\ProgramData\dotnet\workload*
             'C:\Program Files\dotnet\metadata'
           key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
 
