@@ -386,10 +386,10 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\packs
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\sdk-manifests
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workload*
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\metadata
+          'C:\Program Files\dotnet\packs'
+          'C:\Program Files\dotnet\sdk-manifests'
+          C:\ProgramData\dotnet\workload*
+          'C:\Program Files\dotnet\metadata'
         key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
         restore-keys: |
           ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
@@ -446,10 +446,10 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: |
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\packs
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\sdk-manifests
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\workload*
-          ${{ env.LOCALAPPDATA }}\Microsoft\dotnet\metadata
+          'C:\Program Files\dotnet\packs'
+          'C:\Program Files\dotnet\sdk-manifests'
+          C:\ProgramData\dotnet\workload*
+          'C:\Program Files\dotnet\metadata'
         key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
 
     - name: Save Android SDK cache

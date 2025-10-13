@@ -113,9 +113,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            ~/.dotnet/packs
-            ~/.dotnet/sdk-manifests
-            ~/.dotnet/workload*
+            'C:\Program Files\dotnet\packs'
+            'C:\Program Files\dotnet\sdk-manifests'
+            C:\ProgramData\dotnet\workload*
+            'C:\Program Files\dotnet\metadata'
           key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
           restore-keys: |
             ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-
@@ -153,9 +154,10 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            ~/.dotnet/packs
-            ~/.dotnet/sdk-manifests
-            ~/.dotnet/workload*
+            'C:\Program Files\dotnet\packs'
+            'C:\Program Files\dotnet\sdk-manifests'
+            C:\ProgramData\dotnet\workload*
+            'C:\Program Files\dotnet\metadata'
           key: ${{ runner.os }}-dotnet-${{ steps.setup-dotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
 
       - name: Save Android SDK cache
