@@ -125,8 +125,17 @@ jobs:
           $winZip = Join-Path $downloadRoot 'windows-artifact.zip'
           $androidZip = Join-Path $downloadRoot 'android-artifact.zip'
 
-          gh api --method GET --header "Accept: application/octet-stream" $windowsArtifact.archive_download_url --output $winZip
-          gh api --method GET --header "Accept: application/octet-stream" $androidArtifact.archive_download_url --output $androidZip
+          # GitHub requires application/vnd.github+json for artifact downloads; any other
+          # Accept header (including application/octet-stream) returns 415.
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            "User-Agent" = "ShuffleTask-SignArtifacts"
+          }
+
+          Invoke-WebRequest -Uri $windowsArtifact.archive_download_url -Headers $headers -OutFile $winZip
+          Invoke-WebRequest -Uri $androidArtifact.archive_download_url -Headers $headers -OutFile $androidZip
 
           Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
           Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
