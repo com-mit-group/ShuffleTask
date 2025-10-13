@@ -113,17 +113,19 @@ jobs:
           if (-not $windowsArtifact) { throw "Windows artifact $windowsName not found." }
           if (-not $androidArtifact) { throw "Android artifact $androidName not found." }
 
-          $downloadRoot = Join-Path (Get-Location) 'artifact-downloads'
-          if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
+          $artifactsRoot = Join-Path (Get-Location) 'artifacts'
+          if (Test-Path $artifactsRoot) { Remove-Item $artifactsRoot -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
 
-          $winExtract = Join-Path $downloadRoot 'windows'
-          $androidExtract = Join-Path $downloadRoot 'android'
+          $winExtract = Join-Path $artifactsRoot 'win'
+          $androidExtract = Join-Path $artifactsRoot 'android'
           New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
           New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
 
-          $winZip = Join-Path $downloadRoot 'windows-artifact.zip'
-          $androidZip = Join-Path $downloadRoot 'android-artifact.zip'
+          $winZip = Join-Path $env:RUNNER_TEMP 'windows-artifact.zip'
+          $androidZip = Join-Path $env:RUNNER_TEMP 'android-artifact.zip'
+          if (Test-Path $winZip) { Remove-Item $winZip -Force }
+          if (Test-Path $androidZip) { Remove-Item $androidZip -Force }
 
           # GitHub requires application/vnd.github+json for artifact downloads; any other
           # Accept header (including application/octet-stream) returns 415.
@@ -140,21 +142,7 @@ jobs:
           Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
           Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
 
-          $winSource = Join-Path (Join-Path $winExtract 'artifacts') 'win'
-          $androidSource = Join-Path (Join-Path $androidExtract 'artifacts') 'android'
-
-          if (-not (Test-Path $winSource)) { throw "Windows artifact contents could not be located at $winSource" }
-          if (-not (Test-Path $androidSource)) { throw "Android artifact contents could not be located at $androidSource" }
-
-          $artifactsRoot = Join-Path (Get-Location) 'artifacts'
-          if (Test-Path $artifactsRoot) { Remove-Item $artifactsRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
-
-          Copy-Item -Path $winSource -Destination $artifactsRoot -Recurse -Force
-          Copy-Item -Path $androidSource -Destination $artifactsRoot -Recurse -Force
-
           Remove-Item $winZip, $androidZip -Force
-          Remove-Item $downloadRoot -Recurse -Force
 
           $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
           if (-not $winExe) {
