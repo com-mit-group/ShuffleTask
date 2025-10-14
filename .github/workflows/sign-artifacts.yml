@@ -351,7 +351,6 @@ jobs:
           $alignedApkPath = Join-Path $apkDirectory 'ShuffleTask-aligned.apk'
           & $zipalignPath -f -p 4 $apkPath $alignedApkPath
           if ($LASTEXITCODE -ne 0) { throw "zipalign failed with exit code $LASTEXITCODE" }
-          Move-Item $alignedApkPath $apkPath -Force
 
           $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
           if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
@@ -369,15 +368,15 @@ jobs:
           if ($env:ANDROID_KEYSTORE_TYPE) { $ksArgs += @('--ks-type', $env:ANDROID_KEYSTORE_TYPE) }
 
           Write-Host "Signing Android APK..."
-          & $apksignerPath sign @ksArgs $apkPath
+          & $apksignerPath sign @ksArgs $alignedApkPath
           if ($LASTEXITCODE -ne 0) { throw "apksigner failed with exit code $LASTEXITCODE" }
 
           Write-Host "Verifying signature..."
-          & $apksignerPath verify --print-certs $apkPath
+          & $apksignerPath verify --print-certs $alignedApkPath
           if ($LASTEXITCODE -ne 0) { throw "apksigner verify failed with exit code $LASTEXITCODE" }
 
           $signedName = "ShuffleTask-$version.apk"
-          Rename-Item -Path $apkPath -NewName $signedName -Force
+          Rename-Item -Path $alignedApkPath -NewName $signedName -Force
           $relativeApk = [System.IO.Path]::GetRelativePath((Get-Location).Path, (Join-Path $apkDirectory $signedName))
           Write-Host "✓ Signed and renamed to: $relativeApk"
 
