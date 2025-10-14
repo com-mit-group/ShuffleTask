@@ -21,7 +21,6 @@ jobs:
       ANDROID_PRIVATE_KEY: ${{ secrets.ANDROID_PRIVATE_KEY }}
       WINDOWS_CERT_PASS: ${{ secrets.WINDOWS_CERT_PASS }}
       ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
-      ANDROID_KEY_ALIAS: shuffletask
 
     steps:
       - name: Checkout repository
@@ -174,8 +173,8 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:CERT_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:CERT_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
             throw "Windows signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as CERT_PUBLIC_PEM and CERT_PRIVATE_KEY, with the password in WINDOWS_CERT_PASS."
           }
-          if ([string]::IsNullOrWhiteSpace($env:ANDROID_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:ANDROID_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
-            throw "Android signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as ANDROID_PUBLIC_PEM and ANDROID_PRIVATE_KEY and place the password in ANDROID_KEY_PASS."
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:ANDROID_PRIVATE_KEY)) {
+            throw "Android signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as ANDROID_PUBLIC_PEM and ANDROID_PRIVATE_KEY. If your private key is encrypted, provide the passphrase via ANDROID_KEY_PASS."
           }
           Write-Host "✓ Signing prerequisites validated"
 
@@ -217,15 +216,12 @@ jobs:
           rm -rf "$tmpdir"
           echo "✓ Windows certificate prepared"
 
-      - name: Prepare Android keystore
+      - name: Prepare Android signing assets
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
           set -euo pipefail
 
-          [[ -n "${ANDROID_KEY_PASS:-}" ]] || { echo "ANDROID_KEY_PASS is required" >&2; exit 1; }
-
-          alias="${ANDROID_KEY_ALIAS:-shuffletask}"
           tmpdir="$(mktemp -d "$RUNNER_TEMP/android-keystore.XXXXXX")"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -241,18 +237,25 @@ jobs:
           write_secret "$ANDROID_PRIVATE_KEY" "$tmpdir/key.pem"
           write_secret "$ANDROID_PUBLIC_PEM" "$tmpdir/cert.pem"
 
-          keystore_path="$RUNNER_TEMP/android-signing.p12"
-          openssl pkcs12 -export \
-            -inkey "$tmpdir/key.pem" \
-            -in "$tmpdir/cert.pem" \
-            -name "$alias" \
-            -out "$keystore_path" \
-            -passout "pass:$ANDROID_KEY_PASS"
+          key_path="$RUNNER_TEMP/android-signing-key.pk8"
+          cert_path="$RUNNER_TEMP/android-signing-cert.pem"
+
+          passin_args=()
+          if [[ -n "${ANDROID_KEY_PASS:-}" ]]; then
+            passin_args=(-passin "pass:$ANDROID_KEY_PASS")
+          fi
+
+          openssl pkcs8 -topk8 -inform PEM -outform DER \
+            -in "$tmpdir/key.pem" \
+            -out "$key_path" \
+            -nocrypt \
+            "${passin_args[@]}"
+
+          cp "$tmpdir/cert.pem" "$cert_path"
 
           {
-            printf 'ANDROID_KEYSTORE_PATH=%s\n' "$keystore_path"
-            printf 'ANDROID_KEYSTORE_TYPE=PKCS12\n'
-            printf 'ANDROID_KEY_ALIAS=%s\n' "$alias"
+            printf 'ANDROID_SIGNING_KEY_PATH=%s\n' "$key_path"
+            printf 'ANDROID_SIGNING_CERT_PATH=%s\n' "$cert_path"
           } >> "$GITHUB_ENV"
 
       - name: Ensure signtool is available
@@ -330,12 +333,24 @@ jobs:
           }
 
           $apkPath = Join-Path (Get-Location) $apkRelative
+          $apkDirectory = Split-Path $apkPath -Parent
+
+          Write-Host "APK relative path: $apkRelative"
+          Write-Host "APK absolute path: $apkPath"
+
           if (-not (Test-Path $apkPath)) {
-            throw "Missing input APK at $apkRelative"
+            Write-Host "✗ APK not found at expected location."
+            if (Test-Path $apkDirectory) {
+              Write-Host "Directory listing for $apkDirectory:"
+              Get-ChildItem -Path $apkDirectory -Recurse
+            } else {
+              Write-Host "APK directory not found: $apkDirectory"
+            }
+
+            throw "Missing input APK at $apkRelative (absolute path: $apkPath)"
           }
 
           $apkFile = Get-Item $apkPath
-          $apkDirectory = Split-Path $apkPath -Parent
 
           Write-Host "Processing Android APK: $($apkFile.Name)"
 
@@ -355,20 +370,21 @@ jobs:
           $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
           if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
 
-          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEY_ALIAS)) {
-            throw 'ANDROID_KEY_ALIAS is required to sign the APK.'
+          $signingKeyPath = $env:ANDROID_SIGNING_KEY_PATH
+          $signingCertPath = $env:ANDROID_SIGNING_CERT_PATH
+          if ([string]::IsNullOrWhiteSpace($signingKeyPath) -or -not (Test-Path $signingKeyPath)) {
+            throw "ANDROID_SIGNING_KEY_PATH is missing or invalid: $signingKeyPath"
           }
-
-          $storePass = $env:ANDROID_KEY_PASS
-          if ([string]::IsNullOrWhiteSpace($storePass)) {
-            throw 'ANDROID_KEY_PASS is empty. Ensure the keystore password is configured.'
+          if ([string]::IsNullOrWhiteSpace($signingCertPath) -or -not (Test-Path $signingCertPath)) {
+            throw "ANDROID_SIGNING_CERT_PATH is missing or invalid: $signingCertPath"
           }
-
-          $ksArgs = @('--ks', $env:ANDROID_KEYSTORE_PATH, '--ks-pass', "pass:$storePass", '--key-pass', "pass:$storePass", '--ks-key-alias', $env:ANDROID_KEY_ALIAS)
-          if ($env:ANDROID_KEYSTORE_TYPE) { $ksArgs += @('--ks-type', $env:ANDROID_KEYSTORE_TYPE) }
 
           Write-Host "Signing Android APK..."
-          & $apksignerPath sign @ksArgs $alignedApkPath
+          # Use the call operator (&) so we can execute the resolved apksigner path stored in $apksignerPath.
+          & $apksignerPath sign `
+            --key $signingKeyPath `
+            --cert $signingCertPath `
+            $alignedApkPath
           if ($LASTEXITCODE -ne 0) { throw "apksigner failed with exit code $LASTEXITCODE" }
 
           Write-Host "Verifying signature..."
