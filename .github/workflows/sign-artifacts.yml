@@ -173,8 +173,8 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
-          base64 --decode $env:WINDOWS_CERT_PFX_B64 > $env:RUNNER_TEMP/windows-signing-cert.pfx
-          echo "WINDOWS_CERT_PATH=$env:RUNNER_TEMP/windows-signing-cert.pfx" > $env:GITHUB_ENV
+          base64 --decode $WINDOWS_CERT_PFX_B64 > $RUNNER_TEMP/windows-signing-cert.pfx
+          echo "WINDOWS_CERT_PATH=$RUNNER_TEMP/windows-signing-cert.pfx" > $GITHUB_ENV
           echo "✓ Windows certificate prepared"
 
       - name: Prepare Android keystore
