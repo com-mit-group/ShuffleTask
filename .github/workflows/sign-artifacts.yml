@@ -15,7 +15,8 @@ jobs:
       version: ${{ github.event.inputs.version }}
       sign-status: ${{ steps.sign-status.outputs.status }}
     env:
-      WINDOWS_CERT_PFX_B64: ${{ secrets.WINDOWS_CERT_PFX }}
+      CERT_PUBLIC_PEM: ${{ secrets.CERT_PUBLIC_PEM }}
+      CERT_PRIVATE_KEY: ${{ secrets.CERT_PRIVATE_KEY }}
       WINDOWS_CERT_PASS: ${{ secrets.WINDOWS_CERT_PASS }}
       ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
       ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
@@ -169,12 +170,17 @@ jobs:
           }
           Write-Host "✓ Signing prerequisites validated"
 
-      - name: Prepare Windows signing certificate
+      - name: Prepare Windows signing certificate (Create PFX from PEM secrets)
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
-          echo "$WINDOWS_CERT_PFX_B64" | base64 --decode > $RUNNER_TEMP/windows-signing-cert.pfx
-          echo "WINDOWS_CERT_PATH=$RUNNER_TEMP/windows-signing-cert.pfx" > $GITHUB_ENV
+          echo "$CERT_PRIVATE_KEY" > key.pem
+          echo "$CERT_PUBLIC_PEM" > cert.pem
+          openssl pkcs12 -export \
+            -out $RUNNER_TEMP\windows-signing-cert.pfx \
+            -inkey key.pem \
+            -in cert.pem \
+            -password pass:$WINDOWS_CERT_PASS
           echo "✓ Windows certificate prepared"
 
       - name: Prepare Android keystore
