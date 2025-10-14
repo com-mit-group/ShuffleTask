@@ -301,8 +301,13 @@ jobs:
           if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
 
           $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
-          Set-Content -Path $storePassFile -Value $env:ANDROID_KEY_PASS -NoNewline
-          $storePass = Get-Content -Path $storePassFile -Raw
+          $storePass = $env:ANDROID_KEY_PASS
+          if ([string]::IsNullOrEmpty($storePass)) {
+            throw 'ANDROID_KEY_PASS is empty. Ensure the keystore password is configured.'
+          }
+
+          $passwordContent = "$storePass`n"
+          [System.IO.File]::WriteAllText($storePassFile, $passwordContent, [System.Text.Encoding]::UTF8)
 
           try {
             $alias = $env:ANDROID_KEY_ALIAS
