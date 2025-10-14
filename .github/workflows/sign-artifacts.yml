@@ -171,12 +171,11 @@ jobs:
 
       - name: Prepare Windows signing certificate
         if: steps.check-signed.outputs.exists == 'false'
-        shell: pwsh
+        shell: bash
         run: |
-          $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.pfx'
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_B64))
-          "WINDOWS_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "✓ Windows certificate prepared"
+          base64 --decode $WINDOWS_CERT_PFX_B64 > $RUNNER_TEMP/windows-signing-cert.pfx
+          echo "WINDOWS_CERT_PATH=$RUNNER_TEMP/windows-signing-cert.pfx" > $GITHUB_ENV
+          echo "✓ Windows certificate prepared"
 
       - name: Prepare Android keystore
         if: steps.check-signed.outputs.exists == 'false'
