@@ -171,52 +171,15 @@ jobs:
           }
           Write-Host "✓ Signing prerequisites validated"
 
-      - name: Prepare Windows signing certificate (Create PFX from PEM secrets)
-        if: steps.check-signed.outputs.exists == 'false'
-        shell: bash
-        run: |
-          key_path="key.pem"
-          cert_path="cert.pem"
-
-          write_secret_to_file() {
-            local value="$1"
-            local destination="$2"
-
-            if [[ "$value" == *"-----BEGIN"* ]]; then
-              printf '%s\n' "$value" > "$destination"
-            else
-              if ! printf '%s' "$value" | base64 --decode > "$destination" 2>/dev/null; then
-                printf '%s\n' "$value" > "$destination"
-              fi
-            fi
-          }
-
-          write_secret_to_file "$CERT_PRIVATE_KEY" "$key_path"
-          write_secret_to_file "$CERT_PUBLIC_PEM" "$cert_path"
-
-          cert_pfx="$RUNNER_TEMP/windows-signing-cert.pfx"
-
-          openssl pkcs12 -export \
-            -out "$cert_pfx" \
-            -inkey "$key_path" \
-            -in "$cert_path" \
-            -password pass:$WINDOWS_CERT_PASS
-
-          echo "WINDOWS_CERT_PATH=$cert_pfx" >> "$GITHUB_ENV"
-
-          rm -f "$key_path" "$cert_path"
-          echo "✓ Windows certificate prepared"
-
-      - name: Prepare Android keystore (Create keystore from PEM secrets)
+      - name: Prepare Windows signing certificate
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
           set -euo pipefail
-          alias="${ANDROID_KEY_ALIAS:-shuffletask}"
-          key_path="$RUNNER_TEMP/android-key.pem"
-          cert_path="$RUNNER_TEMP/android-cert.pem"
-      
-          write_secret_to_file() {
+          tmpdir="$RUNNER_TEMP/windows-cert"
+          mkdir -p "$tmpdir"
+
+          decode_secret() {
             local value="$1" destination="$2"
             if [[ "$value" == *"-----BEGIN"* ]]; then
               printf '%s\n' "$value" > "$destination"
@@ -226,30 +189,73 @@ jobs:
               fi
             fi
           }
-      
-          write_secret_to_file "$ANDROID_PRIVATE_KEY" "$key_path"
-          write_secret_to_file "$ANDROID_PUBLIC_PEM" "$cert_path"
-      
-          p12_path="$RUNNER_TEMP/android-signing.p12"
+
+          key_path="$tmpdir/key.pem"
+          cert_path="$tmpdir/cert.pem"
+
+          decode_secret "$CERT_PRIVATE_KEY" "$key_path"
+          decode_secret "$CERT_PUBLIC_PEM" "$cert_path"
+
+          cert_pfx="$RUNNER_TEMP/windows-signing-cert.pfx"
+
           openssl pkcs12 -export \
             -inkey "$key_path" \
             -in "$cert_path" \
-            -out "$p12_path" \
+            -out "$cert_pfx" \
+            -password "pass:$WINDOWS_CERT_PASS"
+
+          echo "WINDOWS_CERT_PATH=$cert_pfx" >> "$GITHUB_ENV"
+
+          rm -rf "$tmpdir"
+          echo "✓ Windows certificate prepared"
+
+      - name: Prepare Android keystore
+        if: steps.check-signed.outputs.exists == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ANDROID_KEY_PASS:-}" ]]; then
+            echo "ANDROID_KEY_PASS is required" >&2
+            exit 1
+          fi
+
+          alias="${ANDROID_KEY_ALIAS:-shuffletask}"
+          tmpdir="$RUNNER_TEMP/android-keystore"
+          mkdir -p "$tmpdir"
+
+          decode_secret() {
+            local value="$1" destination="$2"
+            if [[ "$value" == *"-----BEGIN"* ]]; then
+              printf '%s\n' "$value" > "$destination"
+            else
+              if ! printf '%s' "$value" | base64 --decode > "$destination" 2>/dev/null; then
+                printf '%s\n' "$value" > "$destination"
+              fi
+            fi
+          }
+
+          key_path="$tmpdir/key.pem"
+          cert_path="$tmpdir/cert.pem"
+
+          decode_secret "$ANDROID_PRIVATE_KEY" "$key_path"
+          decode_secret "$ANDROID_PUBLIC_PEM" "$cert_path"
+
+          keystore_path="$RUNNER_TEMP/android-signing.p12"
+          openssl pkcs12 -export \
+            -inkey "$key_path" \
+            -in "$cert_path" \
             -name "$alias" \
-            -passout pass:"$ANDROID_KEY_PASS"
-      
-          keystore_path="$RUNNER_TEMP/android-signing-key.jks"
-          keytool -importkeystore -noprompt \
-            -srckeystore "$p12_path" \
-            -srcstoretype PKCS12 \
-            -srcstorepass "$ANDROID_KEY_PASS" \
-            -destkeystore "$keystore_path" \
-            -deststoretype JKS \
-            -deststorepass "$ANDROID_KEY_PASS" \
-            -destkeypass "$ANDROID_KEY_PASS" \
-            -alias "$alias"
-      
-          echo "ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
+            -out "$keystore_path" \
+            -passout "pass:$ANDROID_KEY_PASS"
+
+          rm -rf "$tmpdir"
+
+          {
+            echo "ANDROID_KEYSTORE_PATH=$keystore_path"
+            echo "ANDROID_KEYSTORE_TYPE=PKCS12"
+            echo "ANDROID_KEY_ALIAS=$alias"
+          } >> "$GITHUB_ENV"
 
       - name: Ensure signtool is available
         if: steps.check-signed.outputs.exists == 'false'
@@ -336,53 +342,24 @@ jobs:
           $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
           if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
 
-          $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEY_ALIAS)) {
+            throw 'ANDROID_KEY_ALIAS is required to sign the APK.'
+          }
+
           $storePass = $env:ANDROID_KEY_PASS
           if ([string]::IsNullOrEmpty($storePass)) {
             throw 'ANDROID_KEY_PASS is empty. Ensure the keystore password is configured.'
           }
 
-          $passwordContent = "$storePass`n"
-          [System.IO.File]::WriteAllText($storePassFile, $passwordContent, [System.Text.Encoding]::UTF8)
+          $storePassFile = Join-Path $env:RUNNER_TEMP 'android-storepass.txt'
+          Set-Content -Path $storePassFile -Value "$storePass`n" -Encoding UTF8
 
           try {
-            $alias = $env:ANDROID_KEY_ALIAS
-            if ([string]::IsNullOrWhiteSpace($alias)) {
-              $keytool = Get-Command keytool.exe -ErrorAction SilentlyContinue
-              if (-not $keytool) {
-                throw "ANDROID_KEY_ALIAS is not set and keytool.exe could not be found to detect the alias automatically."
-              }
-
-              $keytoolOutput = & $keytool.Source -list -v -keystore $env:ANDROID_KEYSTORE_PATH -storepass $storePass 2>&1
-              if ($LASTEXITCODE -ne 0) {
-                $message = ($keytoolOutput | Out-String).Trim()
-                throw "Failed to inspect keystore for alias (keytool exit code $LASTEXITCODE). $message"
-              }
-
-              $currentAlias = $null
-              foreach ($line in $keytoolOutput) {
-                if ($line -match 'Alias name: (.+)') {
-                  $currentAlias = $Matches[1].Trim()
-                }
-
-                if ($line -match 'Entry type: (.+)' -and $currentAlias) {
-                  if ($Matches[1].Trim() -eq 'PrivateKeyEntry') {
-                    $alias = $currentAlias
-                    break
-                  }
-                  $currentAlias = $null
-                }
-              }
-
-              if ([string]::IsNullOrWhiteSpace($alias)) {
-                throw 'Could not determine signing alias automatically. Set ANDROID_KEY_ALIAS to the keystore entry containing the private key.'
-              }
-
-              Write-Host "Detected signing alias: $alias"
-            }
+            $ksArgs = @('--ks', $env:ANDROID_KEYSTORE_PATH, '--ks-pass', "file:$storePassFile", '--key-pass', "file:$storePassFile")
+            if ($env:ANDROID_KEYSTORE_TYPE) { $ksArgs += @('--ks-type', $env:ANDROID_KEYSTORE_TYPE) }
 
             Write-Host "Signing Android APK..."
-            & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
+            & $apksignerPath sign @ksArgs --ks-key-alias $env:ANDROID_KEY_ALIAS $apkPath
             if ($LASTEXITCODE -ne 0) { throw "apksigner failed with exit code $LASTEXITCODE" }
 
             Write-Host "Verifying signature..."
