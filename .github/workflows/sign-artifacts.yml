@@ -330,12 +330,24 @@ jobs:
           }
 
           $apkPath = Join-Path (Get-Location) $apkRelative
+          $apkDirectory = Split-Path $apkPath -Parent
+
+          Write-Host "APK relative path: $apkRelative"
+          Write-Host "APK absolute path: $apkPath"
+
           if (-not (Test-Path $apkPath)) {
-            throw "Missing input APK at $apkRelative"
+            Write-Host "✗ APK not found at expected location."
+            if (Test-Path $apkDirectory) {
+              Write-Host "Directory listing for $apkDirectory:"
+              Get-ChildItem -Path $apkDirectory -Recurse
+            } else {
+              Write-Host "APK directory not found: $apkDirectory"
+            }
+
+            throw "Missing input APK at $apkRelative (absolute path: $apkPath)"
           }
 
           $apkFile = Get-Item $apkPath
-          $apkDirectory = Split-Path $apkPath -Parent
 
           Write-Host "Processing Android APK: $($apkFile.Name)"
 
