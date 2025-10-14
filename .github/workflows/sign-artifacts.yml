@@ -338,7 +338,7 @@ jobs:
           if (-not (Test-Path $apkPath)) {
             Write-Host "✗ APK not found at expected location."
             if (Test-Path $apkDirectory) {
-              Write-Host "Directory listing for $apkDirectory:"
+              Write-Host "Directory listing for $apkDirectory"
               Get-ChildItem -Path $apkDirectory -Recurse
             } else {
               Write-Host "APK directory not found: $apkDirectory"
