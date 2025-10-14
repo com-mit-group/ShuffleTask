@@ -17,10 +17,11 @@ jobs:
     env:
       CERT_PUBLIC_PEM: ${{ secrets.CERT_PUBLIC_PEM }}
       CERT_PRIVATE_KEY: ${{ secrets.CERT_PRIVATE_KEY }}
+      ANDROID_PUBLIC_PEM: ${{ secrets.ANDROID_PUBLIC_PEM }}
+      ANDROID_PRIVATE_KEY: ${{ secrets.ANDROID_PRIVATE_KEY }}
       WINDOWS_CERT_PASS: ${{ secrets.WINDOWS_CERT_PASS }}
-      ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE }}
       ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_ALIAS: shuffletask
 
     steps:
       - name: Checkout repository
@@ -163,10 +164,10 @@ jobs:
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CERT_PUBLIC_PEM) -or[string]::IsNullOrWhiteSpace($env:CERT_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
-            throw "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
+            throw "Windows signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as CERT_PUBLIC_PEM and CERT_PRIVATE_KEY, with the password in WINDOWS_CERT_PASS."
           }
-          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_B64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
-            throw "Android signing secrets missing. After generating your keystore (.jks/.keystore), base64-encode it into ANDROID_KEYSTORE and place the password in ANDROID_KEY_PASS."
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:ANDROID_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
+            throw "Android signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as ANDROID_PUBLIC_PEM and ANDROID_PRIVATE_KEY and place the password in ANDROID_KEY_PASS."
           }
           Write-Host "✓ Signing prerequisites validated"
 
@@ -206,14 +207,49 @@ jobs:
           rm -f "$key_path" "$cert_path"
           echo "✓ Windows certificate prepared"
 
-      - name: Prepare Android keystore
+      - name: Prepare Android keystore (Create keystore from PEM secrets)
         if: steps.check-signed.outputs.exists == 'false'
-        shell: pwsh
+        shell: bash
         run: |
-          $keystorePath = Join-Path $env:RUNNER_TEMP 'android-signing-key.jks'
-          [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:ANDROID_KEYSTORE_B64))
-          "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "✓ Android keystore prepared"
+          set -euo pipefail
+          alias="${ANDROID_KEY_ALIAS:-shuffletask}"
+          key_path="$RUNNER_TEMP/android-key.pem"
+          cert_path="$RUNNER_TEMP/android-cert.pem"
+      
+          write_secret_to_file() {
+            local value="$1" destination="$2"
+            if [[ "$value" == *"-----BEGIN"* ]]; then
+              printf '%s\n' "$value" > "$destination"
+            else
+              if ! printf '%s' "$value" | base64 --decode > "$destination" 2>/dev/null; then
+                printf '%s\n' "$value" > "$destination"
+              fi
+            fi
+          }
+      
+          write_secret_to_file "$CERT_PRIVATE_KEY" "$key_path"
+          write_secret_to_file "$CERT_PUBLIC_PEM" "$cert_path"
+      
+          p12_path="$RUNNER_TEMP/android-signing.p12"
+          openssl pkcs12 -export \
+            -inkey "$key_path" \
+            -in "$cert_path" \
+            -out "$p12_path" \
+            -name "$alias" \
+            -passout pass:"$ANDROID_KEY_PASS"
+      
+          keystore_path="$RUNNER_TEMP/android-signing-key.jks"
+          keytool -importkeystore -noprompt \
+            -srckeystore "$p12_path" \
+            -srcstoretype PKCS12 \
+            -srcstorepass "$ANDROID_KEY_PASS" \
+            -destkeystore "$keystore_path" \
+            -deststoretype JKS \
+            -deststorepass "$ANDROID_KEY_PASS" \
+            -destkeypass "$ANDROID_KEY_PASS" \
+            -alias "$alias"
+      
+          echo "ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
 
       - name: Ensure signtool is available
         if: steps.check-signed.outputs.exists == 'false'
