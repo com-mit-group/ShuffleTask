@@ -162,7 +162,7 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
+          if ([string]::IsNullOrWhiteSpace($env:CERT_PUBLIC_PEM) -or[string]::IsNullOrWhiteSpace($env:CERT_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
             throw "Windows signing secrets missing. Once you obtain your Authenticode .pfx file, base64-encode it and store it as WINDOWS_CERT_PFX, with the password in WINDOWS_CERT_PASS."
           }
           if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_B64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
