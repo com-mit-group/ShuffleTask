@@ -241,11 +241,11 @@ jobs:
             -out "$keystore_path" \
             -passout "pass:$ANDROID_KEY_PASS"
 
-          cat <<'EOF' >> "$GITHUB_ENV"
-ANDROID_KEYSTORE_PATH=$keystore_path
-ANDROID_KEYSTORE_TYPE=PKCS12
-ANDROID_KEY_ALIAS=$alias
-EOF
+          {
+            printf 'ANDROID_KEYSTORE_PATH=%s\n' "$keystore_path"
+            printf 'ANDROID_KEYSTORE_TYPE=PKCS12\n'
+            printf 'ANDROID_KEY_ALIAS=%s\n' "$alias"
+          } >> "$GITHUB_ENV"
 
       - name: Ensure signtool is available
         if: steps.check-signed.outputs.exists == 'false'
