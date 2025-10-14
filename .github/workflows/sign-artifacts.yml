@@ -227,8 +227,8 @@ jobs:
             fi
           }
       
-          write_secret_to_file "$CERT_PRIVATE_KEY" "$key_path"
-          write_secret_to_file "$CERT_PUBLIC_PEM" "$cert_path"
+          write_secret_to_file "$ANDROID_PRIVATE_KEY" "$key_path"
+          write_secret_to_file "$ANDROID_PUBLIC_PEM" "$cert_path"
       
           p12_path="$RUNNER_TEMP/android-signing.p12"
           openssl pkcs12 -export \
