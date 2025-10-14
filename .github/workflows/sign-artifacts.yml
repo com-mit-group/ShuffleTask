@@ -300,17 +300,57 @@ jobs:
           $apksignerPath = Join-Path $buildToolsDir.FullName 'apksigner.bat'
           if (-not (Test-Path $apksignerPath)) { throw "apksigner tool not found at $apksignerPath" }
 
-          $alias = if ($env:ANDROID_KEY_ALIAS) { $env:ANDROID_KEY_ALIAS } else { 'android' }
           $storePassFile = Join-Path $env:RUNNER_TEMP 'storepass.txt'
           Set-Content -Path $storePassFile -Value $env:ANDROID_KEY_PASS -NoNewline
+          $storePass = Get-Content -Path $storePassFile -Raw
 
-          Write-Host "Signing Android APK..."
-          & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
-          if ($LASTEXITCODE -ne 0) { throw "apksigner failed with exit code $LASTEXITCODE" }
+          try {
+            $alias = $env:ANDROID_KEY_ALIAS
+            if ([string]::IsNullOrWhiteSpace($alias)) {
+              $keytool = Get-Command keytool.exe -ErrorAction SilentlyContinue
+              if (-not $keytool) {
+                throw "ANDROID_KEY_ALIAS is not set and keytool.exe could not be found to detect the alias automatically."
+              }
 
-          Write-Host "Verifying signature..."
-          & $apksignerPath verify --print-certs $apkPath
-          Remove-Item $storePassFile -Force
+              $keytoolOutput = & $keytool.Source -list -v -keystore $env:ANDROID_KEYSTORE_PATH -storepass $storePass 2>&1
+              if ($LASTEXITCODE -ne 0) {
+                $message = ($keytoolOutput | Out-String).Trim()
+                throw "Failed to inspect keystore for alias (keytool exit code $LASTEXITCODE). $message"
+              }
+
+              $currentAlias = $null
+              foreach ($line in $keytoolOutput) {
+                if ($line -match 'Alias name: (.+)') {
+                  $currentAlias = $Matches[1].Trim()
+                }
+
+                if ($line -match 'Entry type: (.+)' -and $currentAlias) {
+                  if ($Matches[1].Trim() -eq 'PrivateKeyEntry') {
+                    $alias = $currentAlias
+                    break
+                  }
+                  $currentAlias = $null
+                }
+              }
+
+              if ([string]::IsNullOrWhiteSpace($alias)) {
+                throw 'Could not determine signing alias automatically. Set ANDROID_KEY_ALIAS to the keystore entry containing the private key.'
+              }
+
+              Write-Host "Detected signing alias: $alias"
+            }
+
+            Write-Host "Signing Android APK..."
+            & $apksignerPath sign --ks "$env:ANDROID_KEYSTORE_PATH" --ks-pass "file:$storePassFile" --key-pass "file:$storePassFile" --ks-key-alias $alias $apkPath
+            if ($LASTEXITCODE -ne 0) { throw "apksigner failed with exit code $LASTEXITCODE" }
+
+            Write-Host "Verifying signature..."
+            & $apksignerPath verify --print-certs $apkPath
+            if ($LASTEXITCODE -ne 0) { throw "apksigner verify failed with exit code $LASTEXITCODE" }
+          }
+          finally {
+            if (Test-Path $storePassFile) { Remove-Item $storePassFile -Force }
+          }
 
           $signedName = "ShuffleTask-$version.apk"
           Rename-Item -Path $apkPath -NewName $signedName -Force
