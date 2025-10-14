@@ -174,13 +174,36 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
-          echo "$CERT_PRIVATE_KEY" > key.pem
-          echo "$CERT_PUBLIC_PEM" > cert.pem
+          key_path="key.pem"
+          cert_path="cert.pem"
+
+          write_secret_to_file() {
+            local value="$1"
+            local destination="$2"
+
+            if [[ "$value" == *"-----BEGIN"* ]]; then
+              printf '%s\n' "$value" > "$destination"
+            else
+              if ! printf '%s' "$value" | base64 --decode > "$destination" 2>/dev/null; then
+                printf '%s\n' "$value" > "$destination"
+              fi
+            fi
+          }
+
+          write_secret_to_file "$CERT_PRIVATE_KEY" "$key_path"
+          write_secret_to_file "$CERT_PUBLIC_PEM" "$cert_path"
+
+          cert_pfx="$RUNNER_TEMP/windows-signing-cert.pfx"
+
           openssl pkcs12 -export \
-            -out $RUNNER_TEMP\windows-signing-cert.pfx \
-            -inkey key.pem \
-            -in cert.pem \
+            -out "$cert_pfx" \
+            -inkey "$key_path" \
+            -in "$cert_path" \
             -password pass:$WINDOWS_CERT_PASS
+
+          echo "WINDOWS_CERT_PATH=$cert_pfx" >> "$GITHUB_ENV"
+
+          rm -f "$key_path" "$cert_path"
           echo "✓ Windows certificate prepared"
 
       - name: Prepare Android keystore
