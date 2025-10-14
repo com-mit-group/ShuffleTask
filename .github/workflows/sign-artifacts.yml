@@ -7,10 +7,6 @@ on:
         description: 'Semantic version to sign (e.g., 1.0.0)'
         type: string
         required: true
-      debug_session:
-        description: 'Enable an interactive debug session before signing'
-        type: boolean
-        default: false
 
 jobs:
   sign:
@@ -170,13 +166,6 @@ jobs:
           Write-Host "✓ Downloaded artifacts:"
           Write-Host "  Windows: $($winExe.Name)"
           Write-Host "  Android: $($androidApk.Name)"
-
-      - name: Debug signing session
-        if: steps.check-signed.outputs.exists == 'false' && github.event.inputs.debug_session == 'true'
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-          sudo: false
 
       - name: Validate signing prerequisites
         if: steps.check-signed.outputs.exists == 'false'
@@ -472,4 +461,3 @@ jobs:
             echo "✗ Signing failed or status unknown." >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Enable the \`debug_session\` input to hold the runner for interactive troubleshooting before signing steps begin." >> $GITHUB_STEP_SUMMARY
