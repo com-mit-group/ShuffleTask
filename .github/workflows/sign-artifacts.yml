@@ -155,6 +155,14 @@ jobs:
           if (-not $winExe) { throw "Windows .exe not found in downloaded artifacts" }
           if (-not $androidApk) { throw "Android .apk not found in downloaded artifacts" }
 
+          $winRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $winExe.FullName)
+          $androidRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $androidApk.FullName)
+
+          Add-Content -Path $env:GITHUB_ENV -Value @(
+            "WINDOWS_UNSIGNED_EXE=$winRelative",
+            "ANDROID_UNSIGNED_APK=$androidRelative"
+          )
+
           Write-Host "✓ Downloaded artifacts:"
           Write-Host "  Windows: $($winExe.Name)"
           Write-Host "  Android: $($androidApk.Name)"
@@ -278,10 +286,17 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
-          if (-not $exeFile) {
-            $exeFile = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
+          $exeRelative = $env:WINDOWS_UNSIGNED_EXE
+          if ([string]::IsNullOrWhiteSpace($exeRelative)) {
+            throw 'Missing Windows executable path. Ensure the artifacts download step completed successfully.'
           }
+
+          $exePath = Join-Path (Get-Location) $exeRelative
+          if (-not (Test-Path $exePath)) {
+            throw "Missing Windows executable at $exeRelative"
+          }
+
+          $exeFile = Get-Item $exePath
 
           Write-Host "Signing Windows executable: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $exeFile.FullName))"
 
@@ -309,8 +324,17 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $apkFile = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
-          $apkPath = $apkFile.FullName
+          $apkRelative = $env:ANDROID_UNSIGNED_APK
+          if ([string]::IsNullOrWhiteSpace($apkRelative)) {
+            throw 'Missing Android APK path. Ensure the artifacts download step completed successfully.'
+          }
+
+          $apkPath = Join-Path (Get-Location) $apkRelative
+          if (-not (Test-Path $apkPath)) {
+            throw "Missing input APK at $apkRelative"
+          }
+
+          $apkFile = Get-Item $apkPath
           $apkDirectory = Split-Path $apkPath -Parent
 
           Write-Host "Processing Android APK: $($apkFile.Name)"
