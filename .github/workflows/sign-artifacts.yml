@@ -173,7 +173,7 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: bash
         run: |
-          base64 --decode $WINDOWS_CERT_PFX_B64 > $RUNNER_TEMP/windows-signing-cert.pfx
+          base64 --decode "$WINDOWS_CERT_PFX_B64" > $RUNNER_TEMP/windows-signing-cert.pfx
           echo "WINDOWS_CERT_PATH=$RUNNER_TEMP/windows-signing-cert.pfx" > $GITHUB_ENV
           echo "✓ Windows certificate prepared"
 
