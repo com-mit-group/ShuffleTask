@@ -163,7 +163,7 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:CERT_PUBLIC_PEM) -or[string]::IsNullOrWhiteSpace($env:CERT_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
+          if ([string]::IsNullOrWhiteSpace($env:CERT_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:CERT_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASS)) {
             throw "Windows signing secrets missing. Once you obtain your key and crt pem files, base64-encode and store them as CERT_PUBLIC_PEM and CERT_PRIVATE_KEY, with the password in WINDOWS_CERT_PASS."
           }
           if ([string]::IsNullOrWhiteSpace($env:ANDROID_PUBLIC_PEM) -or [string]::IsNullOrWhiteSpace($env:ANDROID_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASS)) {
@@ -241,7 +241,7 @@ jobs:
             -out "$keystore_path" \
             -passout "pass:$ANDROID_KEY_PASS"
 
-          cat <<EOF >> "$GITHUB_ENV"
+          cat <<'EOF' >> "$GITHUB_ENV"
 ANDROID_KEYSTORE_PATH=$keystore_path
 ANDROID_KEYSTORE_TYPE=PKCS12
 ANDROID_KEY_ALIAS=$alias
