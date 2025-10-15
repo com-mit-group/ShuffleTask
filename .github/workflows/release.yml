@@ -101,9 +101,11 @@ jobs:
           $androidZip = Join-Path $downloadRoot 'signed-android.zip'
           $metadataZip = Join-Path $downloadRoot 'signed-metadata.zip'
 
-          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.windows_url }}" --output $winZip
-          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.android_url }}" --output $androidZip
-          gh api --method GET --header "Accept: application/octet-stream" "${{ steps.check-signed.outputs.metadata_url }}" --output $metadataZip
+          $headers = @{ 'Authorization' = "Bearer $env:GH_TOKEN"; 'Accept' = 'application/octet-stream' }
+
+          Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.windows_url }}" -Headers $headers -OutFile $winZip
+          Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.android_url }}" -Headers $headers -OutFile $androidZip
+          Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.metadata_url }}" -Headers $headers -OutFile $metadataZip
 
           $winExtract = Join-Path $downloadRoot 'windows'
           $androidExtract = Join-Path $downloadRoot 'android'
