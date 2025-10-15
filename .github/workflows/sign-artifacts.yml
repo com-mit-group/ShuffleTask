@@ -402,6 +402,11 @@ jobs:
           & $apksignerPath verify --print-certs $alignedApkPath
           if ($LASTEXITCODE -ne 0) { throw "apksigner verify failed with exit code $LASTEXITCODE" }
 
+          if (Test-Path $apkPath) {
+            Write-Host "Removing unsigned APK at $apkPath"
+            Remove-Item -Path $apkPath -Force
+          }
+
           $signedName = "ShuffleTask-$version.apk"
           Rename-Item -Path $alignedApkPath -NewName $signedName -Force
           $relativeApk = [System.IO.Path]::GetRelativePath((Get-Location).Path, (Join-Path $apkDirectory $signedName))
