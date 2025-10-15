@@ -130,17 +130,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path $windowsTarget | Out-Null
           New-Item -ItemType Directory -Force -Path $androidTarget | Out-Null
 
-          $windowsSource = Join-Path (Join-Path $winExtract 'artifacts') 'win'
-          $androidSource = Join-Path (Join-Path $androidExtract 'artifacts') 'android'
-          $metadataSource = Join-Path (Join-Path $metadataExtract 'artifacts') 'VERSION.txt'
+          $windowsExe = Get-ChildItem -Path $winExtract -Filter *.exe -Recurse |
+            Where-Object { $_.Name -like 'ShuffleTask*.exe' } |
+            Select-Object -First 1
+          if (-not $windowsExe) {
+            $windowsExe = Get-ChildItem -Path $winExtract -Filter *.exe -Recurse | Select-Object -First 1
+          }
+          if (-not $windowsExe) {
+            throw "Signed Windows executable not found under $winExtract"
+          }
 
-          if (-not (Test-Path $windowsSource)) { throw "Signed Windows files not found at $windowsSource" }
-          if (-not (Test-Path $androidSource)) { throw "Signed Android files not found at $androidSource" }
-          if (-not (Test-Path $metadataSource)) { throw "VERSION.txt not found at $metadataSource" }
+          $windowsSource = $windowsExe.Directory.FullName
+          $windowsRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $windowsSource)
+          Write-Host "Windows artifact root: $windowsRelative"
+
+          $androidApk = Get-ChildItem -Path $androidExtract -Filter *.apk -Recurse | Select-Object -First 1
+          if (-not $androidApk) {
+            throw "Signed Android APK not found under $androidExtract"
+          }
+
+          $androidSource = $androidApk.Directory.FullName
+          $androidRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $androidSource)
+          Write-Host "Android artifact root: $androidRelative"
+
+          $metadataFile = Get-ChildItem -Path $metadataExtract -Filter VERSION.txt -Recurse | Select-Object -First 1
+          if (-not $metadataFile) {
+            throw "VERSION.txt not found under $metadataExtract"
+          }
 
           Copy-Item -Path (Join-Path $windowsSource '*') -Destination $windowsTarget -Recurse -Force
           Copy-Item -Path (Join-Path $androidSource '*') -Destination $androidTarget -Recurse -Force
-          Copy-Item -Path $metadataSource -Destination (Join-Path $releaseRoot 'VERSION.txt') -Force
+          Copy-Item -Path $metadataFile.FullName -Destination (Join-Path $releaseRoot 'VERSION.txt') -Force
 
           Remove-Item $winZip, $androidZip, $metadataZip -Force
           Remove-Item $downloadRoot -Recurse -Force
