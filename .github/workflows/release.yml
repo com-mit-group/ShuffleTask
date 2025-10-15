@@ -101,7 +101,10 @@ jobs:
           $androidZip = Join-Path $downloadRoot 'signed-android.zip'
           $metadataZip = Join-Path $downloadRoot 'signed-metadata.zip'
 
-          $headers = @{ 'Authorization' = "Bearer $env:GH_TOKEN"; 'Accept' = 'application/octet-stream' }
+          $headers = @{
+            'Authorization' = "Bearer $env:GH_TOKEN"
+            'Accept' = 'application/vnd.github+json'
+          }
 
           Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.windows_url }}" -Headers $headers -OutFile $winZip
           Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.android_url }}" -Headers $headers -OutFile $androidZip
