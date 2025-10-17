@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using System.Globalization;
 using ShuffleTask.Application.Abstractions;
@@ -5,6 +6,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Utilities;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Domain.Events;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 
@@ -17,6 +19,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly INotificationService _notifications;
     private readonly TimeProvider _clock;
     private readonly IPersistentBackgroundService _backgroundService;
+    private readonly IRealtimeSyncService? _sync;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _initLock = new();
@@ -31,13 +34,15 @@ public class ShuffleCoordinatorService : IDisposable
         ISchedulerService scheduler,
         INotificationService notifications,
         TimeProvider clock,
-        IPersistentBackgroundService backgroundService)
+        IPersistentBackgroundService backgroundService,
+        IRealtimeSyncService? syncService = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
+        _sync = syncService;
     }
 
     public void Dispose()
@@ -452,8 +457,16 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-        await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", settings).ConfigureAwait(false);
+        const string expiredTitle = "Time's up";
+        const string expiredMessage = "Shuffling a new task...";
+        await _notifications.ShowToastAsync(expiredTitle, expiredMessage, settings).ConfigureAwait(false);
+        if (settings.EnableNotifications)
+        {
+            var notificationEvent = CreateNotificationEvent(expiredTitle, expiredMessage, null, false);
+            await BroadcastNotificationAsync(notificationEvent).ConfigureAwait(false);
+        }
         PersistedTimerState.Clear();
+        await BroadcastShuffleStateAsync(CreateClearedState("timer-expired", true)).ConfigureAwait(false);
     }
 
     private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
@@ -504,7 +517,8 @@ public class ShuffleCoordinatorService : IDisposable
 
         ClearPendingShuffle();
         var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
-        PersistActiveTask(task, effectiveSettings);
+        var stateEvent = PersistActiveTask(task, effectiveSettings, true, "auto");
+        await BroadcastShuffleStateAsync(stateEvent).ConfigureAwait(false);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
         await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
         IncrementDailyCount(now);
@@ -560,7 +574,14 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
+        string title = "Reminder";
+        string message = $"Time for: {task.Title}\nYou have {minutes} minutes.";
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+        if (settings.EnableNotifications)
+        {
+            var notificationEvent = CreateNotificationEvent(title, message, task.Id, true);
+            await BroadcastNotificationAsync(notificationEvent).ConfigureAwait(false);
+        }
     }
 
     private async Task HandleCutInLineModeAsync(TaskItem task)
@@ -716,14 +737,124 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
-    private static void PersistActiveTask(TaskItem task, EffectiveTimerSettings timerSettings)
+    private ShuffleStateChanged PersistActiveTask(TaskItem task, EffectiveTimerSettings timerSettings, bool isAutoShuffle, string trigger)
     {
         int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
+        DateTimeOffset now = GetCurrentInstant();
+        DateTimeOffset expiresAt = now.AddSeconds(seconds);
+
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
         Preferences.Default.Set(PreferenceKeys.TimerDurationSeconds, seconds);
-        Preferences.Default.Set(
-            PreferenceKeys.TimerExpiresAt,
-            DateTimeOffset.UtcNow.AddSeconds(seconds).ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Set(PreferenceKeys.TimerExpiresAt, expiresAt.ToString("O", CultureInfo.InvariantCulture));
+        Preferences.Default.Set(PreferenceKeys.TimerMode, (int)timerSettings.Mode);
+
+        if (timerSettings.Mode == TimerMode.Pomodoro)
+        {
+            Preferences.Default.Set(PreferenceKeys.PomodoroPhase, 0);
+            Preferences.Default.Set(PreferenceKeys.PomodoroCycle, 1);
+            Preferences.Default.Set(PreferenceKeys.PomodoroTotal, Math.Max(1, timerSettings.PomodoroCycles));
+            Preferences.Default.Set(PreferenceKeys.PomodoroFocus, Math.Max(1, timerSettings.FocusMinutes));
+            Preferences.Default.Set(PreferenceKeys.PomodoroBreak, Math.Max(1, timerSettings.BreakMinutes));
+        }
+        else
+        {
+            Preferences.Default.Remove(PreferenceKeys.PomodoroPhase);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroCycle);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroTotal);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroFocus);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
+        }
+
+        return new ShuffleStateChanged(
+            _sync?.DeviceId ?? "local",
+            task.Id,
+            isAutoShuffle,
+            trigger,
+            now.UtcDateTime,
+            seconds,
+            expiresAt.UtcDateTime,
+            (int)timerSettings.Mode,
+            timerSettings.Mode == TimerMode.Pomodoro ? 0 : null,
+            timerSettings.Mode == TimerMode.Pomodoro ? 1 : null,
+            timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.PomodoroCycles) : null,
+            timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.FocusMinutes) : null,
+            timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.BreakMinutes) : null);
+    }
+
+    private ShuffleStateChanged CreateClearedState(string trigger, bool isAutoShuffle)
+    {
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
+        Preferences.Default.Remove(PreferenceKeys.TimerMode);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroPhase);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroCycle);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroTotal);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroFocus);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
+
+        DateTimeOffset now = GetCurrentInstant();
+        return new ShuffleStateChanged(
+            _sync?.DeviceId ?? "local",
+            null,
+            isAutoShuffle,
+            trigger,
+            now.UtcDateTime,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    }
+
+    private async Task BroadcastShuffleStateAsync(ShuffleStateChanged state)
+    {
+        if (_sync == null || !_sync.ShouldBroadcastLocalChanges)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sync.PublishAsync(state).ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore sync failures to keep local flow responsive
+        }
+    }
+
+    private NotificationBroadcasted CreateNotificationEvent(string title, string message, string? taskId, bool isReminder)
+    {
+        return new NotificationBroadcasted(
+            Guid.NewGuid().ToString("N"),
+            title,
+            message,
+            _sync?.DeviceId ?? "local",
+            taskId,
+            _clock.GetUtcNow().UtcDateTime,
+            null,
+            isReminder);
+    }
+
+    private async Task BroadcastNotificationAsync(NotificationBroadcasted notification)
+    {
+        if (_sync == null || !_sync.ShouldBroadcastLocalChanges)
+        {
+            return;
+        }
+
+        try
+        {
+            await _sync.PublishAsync(notification).ConfigureAwait(false);
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     /// <summary>
