@@ -1,5 +1,7 @@
-﻿using ShuffleTask.Application.Abstractions;
+using System;
+using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Sync;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
@@ -47,14 +49,26 @@ public static partial class MauiProgram
 
         // DI registrations
         builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
+        builder.Services.AddSingleton<IShuffleLogger>(provider => new DefaultShuffleLogger(provider.GetRequiredService<TimeProvider>()));
         builder.Services.AddSingleton(provider =>
         {
             var clock = provider.GetRequiredService<TimeProvider>();
             var dbPath = Path.Combine(FileSystem.AppDataDirectory, "shuffletask.db3");
-            return new StorageService(clock, dbPath);
+            var logger = provider.GetService<IShuffleLogger>();
+            return new StorageService(clock, dbPath, logger);
         });
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
+        builder.Services.AddSingleton(sp => SyncOptions.LoadFromEnvironment());
+        builder.Services.AddSingleton<IRealtimeSyncService>(sp =>
+        {
+            var clock = sp.GetRequiredService<TimeProvider>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var options = sp.GetRequiredService<SyncOptions>();
+            var logger = sp.GetService<IShuffleLogger>();
+            var storageLazy = new Lazy<StorageService>(() => sp.GetRequiredService<StorageService>());
+            return new RealtimeSyncService(clock, () => storageLazy.Value, notifications, options, logger);
+        });
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
@@ -79,6 +93,9 @@ public static partial class MauiProgram
 
         var app = builder.Build();
         _services = app.Services;
+
+        var syncService = _services.GetService<IRealtimeSyncService>();
+        _ = syncService?.InitializeAsync();
 
         return app;
     }

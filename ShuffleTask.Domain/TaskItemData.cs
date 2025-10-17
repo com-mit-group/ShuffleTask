@@ -42,6 +42,8 @@ public abstract class TaskItemData
 
     public DateTime? NextEligibleAt { get; set; }
 
+    public DateTime UpdatedAt { get; set; }
+
     // Per-task timer override settings (nullable means use global defaults)
     public int? CustomTimerMode { get; set; }
 
@@ -79,6 +81,7 @@ public abstract class TaskItemData
         SnoozedUntil = source.SnoozedUntil;
         CompletedAt = source.CompletedAt;
         NextEligibleAt = source.NextEligibleAt;
+        UpdatedAt = source.UpdatedAt;
         CustomTimerMode = source.CustomTimerMode;
         CustomReminderMinutes = source.CustomReminderMinutes;
         CustomFocusMinutes = source.CustomFocusMinutes;
