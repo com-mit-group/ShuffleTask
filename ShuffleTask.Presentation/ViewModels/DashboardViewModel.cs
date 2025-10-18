@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Maui.ApplicationModel;
@@ -11,11 +13,12 @@ using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Utilities;
-using ShuffleTask.Application.Sync;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class DashboardViewModel : ObservableObject
+public partial class DashboardViewModel : ObservableObject,
+    IAsyncEventSubscriber<ShuffleStateChanged>
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
@@ -36,7 +39,14 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, IRealtimeSyncService? syncService = null)
+    public DashboardViewModel(
+        IStorageService storage,
+        ISchedulerService scheduler,
+        INotificationService notifications,
+        ShuffleCoordinatorService coordinator,
+        TimeProvider clock,
+        IEventAggregator aggregator,
+        IRealtimeSyncService? syncService = null)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -44,6 +54,7 @@ public partial class DashboardViewModel : ObservableObject
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _sync = syncService;
+        ArgumentNullException.ThrowIfNull(aggregator);
 
         Title = DefaultTitle;
         Description = DefaultDescription;
@@ -52,24 +63,16 @@ public partial class DashboardViewModel : ObservableObject
         CycleStatus = string.Empty;
         PhaseBadge = string.Empty;
 
-        if (_sync != null)
-        {
-            _sync.ShuffleStateChanged += OnShuffleStateChanged;
-        }
+        aggregator.SubscribeToEventType<ShuffleStateChanged>(this);
     }
 
-    private void OnShuffleStateChanged(object? sender, ShuffleStateChangedEventArgs e)
-    {
-        if (e == null)
-        {
-            return;
-        }
-
-        _ = MainThread.InvokeOnMainThreadAsync(async () =>
-        {
-            await HandleSyncStateAsync(e.State).ConfigureAwait(false);
-        });
-    }
+    public Task OnNextAsync(ShuffleStateChanged @event, CancellationToken cancellationToken = default)
+        => @event == null
+            ? Task.CompletedTask
+            : MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                await HandleSyncStateAsync(@event).ConfigureAwait(false);
+            });
 
     public event EventHandler<TimerRequest>? CountdownRequested;
     public event EventHandler? CountdownCleared;
@@ -745,6 +748,7 @@ public partial class DashboardViewModel : ObservableObject
             isAutoShuffle: false,
             trigger,
             now.UtcDateTime,
+            null,
             null,
             null,
             null,

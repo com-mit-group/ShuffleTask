@@ -1,7 +1,9 @@
 using NUnit.Framework;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Domain.Events;
 using ShuffleTask.Tests.TestDoubles;
 using ShuffleTask.ViewModels;
+using Yaref92.Events;
 
 namespace ShuffleTask.Presentation.Tests;
 
@@ -11,6 +13,7 @@ public class TasksViewModelTests
     private StorageServiceStub _storage = null!;
     private TasksViewModel _viewModel = null!;
     private TimeProvider _clock = null!;
+    private EventAggregator _aggregator = null!;
 
     [SetUp]
     public async Task SetUp()
@@ -18,7 +21,10 @@ public class TasksViewModelTests
         _clock = TimeProvider.System;
         _storage = new StorageServiceStub(_clock);
         await _storage.InitializeAsync();
-        _viewModel = new TasksViewModel(_storage, _clock);
+        _aggregator = new EventAggregator();
+        _aggregator.RegisterEventType<TaskUpserted>();
+        _aggregator.RegisterEventType<TaskDeleted>();
+        _viewModel = new TasksViewModel(_storage, _clock, _aggregator);
     }
 
     private TaskItem CreateTask(string id, TimeSpan createdOffset, bool paused = false)

@@ -17,7 +17,7 @@ public sealed class NotificationBroadcasted : DomainEventBase
         bool isReminder,
         DateTime? occuredAt = null,
         Guid? eventId = null)
-        : base(occuredAt, eventId)
+        : base(occuredAt ?? default, eventId ?? Guid.Empty)
     {
         if (string.IsNullOrWhiteSpace(notificationId))
         {

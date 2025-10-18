@@ -1,8 +1,5 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using ShuffleTask.Application.Sync;
 using Yaref92.Events;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Abstractions;
 
@@ -14,18 +11,12 @@ public interface IRealtimeSyncService
 
     bool ShouldBroadcastLocalChanges { get; }
 
+    IEventAggregator Aggregator { get; }
+
     Task InitializeAsync(CancellationToken cancellationToken = default);
 
     Task PublishAsync<TEvent>(TEvent domainEvent, CancellationToken cancellationToken = default)
         where TEvent : DomainEventBase;
 
     IDisposable SuppressBroadcast();
-
-    event EventHandler<TasksChangedEventArgs> TasksChanged;
-
-    event EventHandler<ShuffleStateChangedEventArgs> ShuffleStateChanged;
-
-    event EventHandler<NotificationBroadcastEventArgs> NotificationReceived;
-
-    event EventHandler<SyncStatusChangedEventArgs> StatusChanged;
 }

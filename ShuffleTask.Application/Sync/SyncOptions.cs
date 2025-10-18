@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace ShuffleTask.Application.Sync;
 
 public sealed class SyncOptions

@@ -38,6 +38,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private readonly EventAggregator _localAggregator;
     private readonly NetworkedEventAggregator _networkAggregator;
     private readonly IEventTransport _transport;
+    private readonly TCPEventTransport? _tcpTransport;
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private readonly SemaphoreSlim _pendingGate = new(1, 1);
     private readonly List<PendingSyncEvent> _pendingEvents = new();
@@ -49,7 +50,8 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private Task? _reconnectTask;
     private bool _initialized;
     private bool _isConnected;
-    private string _deviceId;
+    private readonly string _deviceId;
+    private bool _listeningStarted;
 
     public RealtimeSyncService(
         TimeProvider clock,
@@ -66,7 +68,8 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
         _localAggregator = new EventAggregator();
         var serializer = new JsonEventSerializer();
-        _transport = new TCPEventTransport(_options.ListenPort, serializer);
+        _tcpTransport = new TCPEventTransport(_options.ListenPort, serializer);
+        _transport = _tcpTransport;
         _networkAggregator = new NetworkedEventAggregator(_localAggregator, _transport, _options.DeduplicationWindow);
 
         _pendingPath = Path.Combine(FileSystem.AppDataDirectory, "sync-pending.json");
@@ -83,10 +86,9 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
     public bool ShouldBroadcastLocalChanges => _suppression.Value == 0;
 
-    public event EventHandler<TasksChangedEventArgs>? TasksChanged;
-    public event EventHandler<ShuffleStateChangedEventArgs>? ShuffleStateChanged;
-    public event EventHandler<NotificationBroadcastEventArgs>? NotificationReceived;
-    public event EventHandler<SyncStatusChangedEventArgs>? StatusChanged;
+    public IEventAggregator Aggregator => _networkAggregator;
+
+    private bool HasPeersConfigured => _tcpTransport != null && _options.Enabled && _options.Peers.Count > 0;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -100,7 +102,12 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
             await LoadPendingEventsAsync().ConfigureAwait(false);
 
-            if (_options.Enabled && _options.Peers.Count > 0)
+            if (_options.Enabled)
+            {
+                await EnsureListeningAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            if (HasPeersConfigured)
             {
                 await ConnectToPeersAsync(cancellationToken).ConfigureAwait(false);
                 StartReconnectLoop();
@@ -125,16 +132,32 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
 
+        bool syncTargetsAvailable = _options.Enabled;
+        bool connectedSnapshot = _isConnected;
+        bool enqueuedForReplay = false;
+
         try
         {
             await _networkAggregator.PublishEventAsync(domainEvent, cancellationToken).ConfigureAwait(false);
-            await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
-            SetConnected(true, null);
+
+            if (syncTargetsAvailable && !connectedSnapshot)
+            {
+                await QueueEventAsync(domainEvent).ConfigureAwait(false);
+                enqueuedForReplay = true;
+            }
+
+            if (_isConnected)
+            {
+                await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             _logger?.LogSyncEvent("PublishFailed", domainEvent.GetType().Name, ex);
-            await QueueEventAsync(domainEvent).ConfigureAwait(false);
+            if (syncTargetsAvailable && !enqueuedForReplay)
+            {
+                await QueueEventAsync(domainEvent).ConfigureAwait(false);
+            }
             try
             {
                 await _localAggregator.PublishEventAsync(domainEvent, cancellationToken).ConfigureAwait(false);
@@ -158,7 +181,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     {
         if (_reconnectCts != null)
         {
-            _reconnectCts.Cancel();
+            await _reconnectCts.CancelAsync();
             if (_reconnectTask != null)
             {
                 try
@@ -167,6 +190,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
                 }
                 catch (OperationCanceledException)
                 {
+                    // non critical
                 }
             }
 
@@ -194,10 +218,10 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
     private void SubscribeToEvents()
     {
-        _networkAggregator.SubscribeToEventType(new AsyncDelegateSubscriber<TaskUpserted>(HandleTaskUpsertedAsync));
-        _networkAggregator.SubscribeToEventType(new AsyncDelegateSubscriber<TaskDeleted>(HandleTaskDeletedAsync));
-        _networkAggregator.SubscribeToEventType(new AsyncDelegateSubscriber<ShuffleStateChanged>(HandleShuffleStateChangedAsync));
-        _networkAggregator.SubscribeToEventType(new AsyncDelegateSubscriber<NotificationBroadcasted>(HandleNotificationBroadcastedAsync));
+        _networkAggregator.SubscribeToEventType(new TaskUpsertedSubscriber(this));
+        _networkAggregator.SubscribeToEventType(new TaskDeletedSubscriber(this));
+        _networkAggregator.SubscribeToEventType(new ShuffleStateChangedSubscriber(this));
+        _networkAggregator.SubscribeToEventType(new NotificationBroadcastedSubscriber(this));
     }
 
     private void AttachToStorage()
@@ -213,24 +237,55 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
     }
 
+    private async Task EnsureListeningAsync(CancellationToken cancellationToken)
+    {
+        if (_listeningStarted || _tcpTransport == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _tcpTransport.StartListeningAsync(cancellationToken).ConfigureAwait(false);
+            _listeningStarted = true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogSyncEvent("ListenFailed", null, ex);
+            SetConnected(false, ex);
+        }
+    }
+
     private async Task ConnectToPeersAsync(CancellationToken cancellationToken)
     {
+        if (!HasPeersConfigured || _tcpTransport == null)
+        {
+            SetConnected(false, null);
+            return;
+        }
+
+        bool anyConnected = false;
+        Exception? lastError = null;
+
         foreach (var peer in _options.Peers)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await _transport.ConnectToPeerAsync(peer.Host, peer.Port).ConfigureAwait(false);
-                SetConnected(true, null);
+                await _tcpTransport.ConnectToPeerAsync(peer.Host, peer.Port, cancellationToken).ConfigureAwait(false);
+                anyConnected = true;
             }
             catch (Exception ex)
             {
+                lastError = ex;
                 _logger?.LogSyncEvent("ConnectFailed", $"{peer.Host}:{peer.Port}", ex);
                 SetConnected(false, ex);
             }
         }
 
-        if (_isConnected)
+        SetConnected(anyConnected, anyConnected ? null : lastError);
+
+        if (anyConnected)
         {
             await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -244,7 +299,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         {
             while (!token.IsCancellationRequested)
             {
-                if (!_isConnected && _options.Enabled)
+                if (!_isConnected && HasPeersConfigured)
                 {
                     try
                     {
@@ -278,19 +333,17 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         bool isLocal = string.Equals(evt.DeviceId, DeviceId, StringComparison.OrdinalIgnoreCase);
         if (isLocal)
         {
-            OnTasksChanged(new[] { evt.Task.Id }, false, evt.DeviceId);
             return;
         }
 
         using (SuppressBroadcast())
         {
             var storage = _storageFactory();
-            bool applied = await storage.ApplyRemoteTaskUpsertAsync(evt.Task, evt.UpdatedAt).ConfigureAwait(false);
-            if (applied)
-            {
-                OnTasksChanged(new[] { evt.Task.Id }, true, evt.DeviceId);
-            }
+            await storage.ApplyRemoteTaskUpsertAsync(evt.Task, evt.UpdatedAt).ConfigureAwait(false);
         }
+
+        SetConnected(true, null);
+        await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task HandleTaskDeletedAsync(TaskDeleted evt, CancellationToken cancellationToken)
@@ -303,32 +356,34 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         bool isLocal = string.Equals(evt.DeviceId, DeviceId, StringComparison.OrdinalIgnoreCase);
         if (isLocal)
         {
-            OnTasksChanged(new[] { evt.TaskId }, false, evt.DeviceId);
             return;
         }
 
         using (SuppressBroadcast())
         {
             var storage = _storageFactory();
-            bool applied = await storage.ApplyRemoteDeletionAsync(evt.TaskId, evt.DeletedAt).ConfigureAwait(false);
-            if (applied)
-            {
-                OnTasksChanged(new[] { evt.TaskId }, true, evt.DeviceId);
-            }
+            await storage.ApplyRemoteDeletionAsync(evt.TaskId, evt.DeletedAt).ConfigureAwait(false);
         }
+
+        SetConnected(true, null);
+        await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private Task HandleShuffleStateChangedAsync(ShuffleStateChanged evt, CancellationToken cancellationToken)
+    private async Task HandleShuffleStateChangedAsync(ShuffleStateChanged evt, CancellationToken cancellationToken)
     {
         if (evt == null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         bool isLocal = string.Equals(evt.DeviceId, DeviceId, StringComparison.OrdinalIgnoreCase);
         PersistShuffleState(evt);
-        ShuffleStateChanged?.Invoke(this, new ShuffleStateChangedEventArgs(evt, !isLocal));
-        return Task.CompletedTask;
+
+        if (!isLocal)
+        {
+            SetConnected(true, null);
+            await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task HandleNotificationBroadcastedAsync(NotificationBroadcasted evt, CancellationToken cancellationToken)
@@ -339,8 +394,6 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
 
         bool isLocal = string.Equals(evt.DeviceId, DeviceId, StringComparison.OrdinalIgnoreCase);
-        NotificationReceived?.Invoke(this, new NotificationBroadcastEventArgs(evt, !isLocal));
-
         if (isLocal)
         {
             return;
@@ -360,9 +413,12 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         {
             _logger?.LogSyncEvent("NotificationRelayFailed", evt.NotificationId, ex);
         }
+
+        SetConnected(true, null);
+        await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private void PersistShuffleState(ShuffleStateChanged evt)
+    private static void PersistShuffleState(ShuffleStateChanged evt)
     {
         if (evt.HasActiveTask)
         {
@@ -471,7 +527,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         await _pendingGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_pendingEvents.Count == 0)
+            if (!_options.Enabled || !_isConnected || _pendingEvents.Count == 0)
             {
                 return;
             }
@@ -513,12 +569,6 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
     }
 
-    private void OnTasksChanged(IEnumerable<string> taskIds, bool remote, string? origin)
-    {
-        var ids = taskIds?.ToArray() ?? Array.Empty<string>();
-        TasksChanged?.Invoke(this, new TasksChangedEventArgs(ids, remote, origin));
-    }
-
     private void ReleaseSuppression()
     {
         if (_suppression.Value > 0)
@@ -536,13 +586,22 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             _isConnected = connected;
         }
 
-        if (changed)
+        if (!changed)
         {
-            StatusChanged?.Invoke(this, new SyncStatusChangedEventArgs(connected, error));
+            return;
+        }
+
+        if (error != null)
+        {
+            _logger?.LogSyncEvent("SyncConnectionError", error.Message, error);
+        }
+        else
+        {
+            _logger?.LogSyncEvent("SyncConnection", connected ? "Connected" : "Disconnected");
         }
     }
 
-    private string EnsureDeviceId()
+    private static string EnsureDeviceId()
     {
         string existing = Preferences.Default.Get(PreferenceKeys.DeviceId, string.Empty);
         if (string.IsNullOrWhiteSpace(existing))
@@ -578,17 +637,43 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
     }
 
-    private sealed class AsyncDelegateSubscriber<TEvent> : IAsyncEventSubscriber<TEvent>
-        where TEvent : DomainEventBase
+    private sealed class TaskUpsertedSubscriber : IAsyncEventSubscriber<TaskUpserted>
     {
-        private readonly Func<TEvent, CancellationToken, Task> _handler;
+        private readonly RealtimeSyncService _service;
 
-        public AsyncDelegateSubscriber(Func<TEvent, CancellationToken, Task> handler)
-        {
-            _handler = handler ?? throw new ArgumentNullException(nameof(handler));
-        }
+        public TaskUpsertedSubscriber(RealtimeSyncService service) => _service = service;
 
-        public Task OnNextAsync(TEvent @event, CancellationToken cancellationToken = default)
-            => _handler(@event, cancellationToken);
+        public Task OnNextAsync(TaskUpserted @event, CancellationToken cancellationToken = default)
+            => _service.HandleTaskUpsertedAsync(@event, cancellationToken);
+    }
+
+    private sealed class TaskDeletedSubscriber : IAsyncEventSubscriber<TaskDeleted>
+    {
+        private readonly RealtimeSyncService _service;
+
+        public TaskDeletedSubscriber(RealtimeSyncService service) => _service = service;
+
+        public Task OnNextAsync(TaskDeleted @event, CancellationToken cancellationToken = default)
+            => _service.HandleTaskDeletedAsync(@event, cancellationToken);
+    }
+
+    private sealed class ShuffleStateChangedSubscriber : IAsyncEventSubscriber<ShuffleStateChanged>
+    {
+        private readonly RealtimeSyncService _service;
+
+        public ShuffleStateChangedSubscriber(RealtimeSyncService service) => _service = service;
+
+        public Task OnNextAsync(ShuffleStateChanged @event, CancellationToken cancellationToken = default)
+            => _service.HandleShuffleStateChangedAsync(@event, cancellationToken);
+    }
+
+    private sealed class NotificationBroadcastedSubscriber : IAsyncEventSubscriber<NotificationBroadcasted>
+    {
+        private readonly RealtimeSyncService _service;
+
+        public NotificationBroadcastedSubscriber(RealtimeSyncService service) => _service = service;
+
+        public Task OnNextAsync(NotificationBroadcasted @event, CancellationToken cancellationToken = default)
+            => _service.HandleNotificationBroadcastedAsync(@event, cancellationToken);
     }
 }

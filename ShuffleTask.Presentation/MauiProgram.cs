@@ -6,6 +6,7 @@ using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask;
 
@@ -69,6 +70,7 @@ public static partial class MauiProgram
             var storageLazy = new Lazy<StorageService>(() => sp.GetRequiredService<StorageService>());
             return new RealtimeSyncService(clock, () => storageLazy.Value, notifications, options, logger);
         });
+        builder.Services.AddSingleton<IEventAggregator>(sp => sp.GetRequiredService<IRealtimeSyncService>().Aggregator);
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();

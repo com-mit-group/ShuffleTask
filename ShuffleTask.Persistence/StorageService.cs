@@ -6,6 +6,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence.Models;
+using Yaref92.Events;
 
 namespace ShuffleTask.Persistence;
 
@@ -362,7 +363,7 @@ public class StorageService : IStorageService
         };
     }
 
-    internal async Task<bool> ApplyRemoteTaskUpsertAsync(TaskItem task, DateTime updatedAt)
+    public async Task<bool> ApplyRemoteTaskUpsertAsync(TaskItem task, DateTime updatedAt)
     {
         ArgumentNullException.ThrowIfNull(task);
         await InitializeAsync().ConfigureAwait(false);
@@ -373,41 +374,27 @@ public class StorageService : IStorageService
         await Db.RunInTransactionAsync(conn =>
         {
             var tombstone = conn.Find<DeletedTaskRecord>(task.Id);
-            if (tombstone != null)
+            if (TombstoneBlocksUpsert(tombstone, normalizedUpdated))
             {
-                DateTime deletedAt = EnsureUtc(tombstone.DeletedAt);
-                if (deletedAt >= normalizedUpdated)
-                {
-                    return;
-                }
+                return;
             }
 
-            var record = TaskItemRecord.FromDomain(task);
-            record.UpdatedAt = normalizedUpdated;
-            record.CreatedAt = EnsureUtc(record.CreatedAt == default ? normalizedUpdated : record.CreatedAt);
-
+            var record = PrepareRemoteUpsertRecord(task, normalizedUpdated);
             var existing = conn.Find<TaskItemRecord>(task.Id);
-            if (existing == null)
-            {
-                conn.Insert(record);
-                changed = true;
-            }
-            else
-            {
-                DateTime currentUpdated = EnsureUtc(existing.UpdatedAt);
-                if (currentUpdated >= normalizedUpdated)
-                {
-                    return;
-                }
 
-                conn.InsertOrReplace(record);
-                changed = true;
+            if (!IncomingRecordIsNewer(existing, normalizedUpdated))
+            {
+                return;
             }
 
-            if (changed && tombstone != null)
+            PersistRemoteTask(conn, existing, record);
+
+            if (tombstone != null)
             {
                 conn.Delete(tombstone);
             }
+
+            changed = true;
         });
 
         if (changed)
@@ -418,7 +405,48 @@ public class StorageService : IStorageService
         return changed;
     }
 
-    internal async Task<bool> ApplyRemoteDeletionAsync(string id, DateTime deletedAt)
+    private static bool TombstoneBlocksUpsert(DeletedTaskRecord? tombstone, DateTime normalizedUpdated)
+    {
+        if (tombstone == null)
+        {
+            return false;
+        }
+
+        DateTime deletedAt = EnsureUtc(tombstone.DeletedAt);
+        return deletedAt >= normalizedUpdated;
+    }
+
+    private static TaskItemRecord PrepareRemoteUpsertRecord(TaskItem task, DateTime normalizedUpdated)
+    {
+        var record = TaskItemRecord.FromDomain(task);
+        record.UpdatedAt = normalizedUpdated;
+        record.CreatedAt = EnsureUtc(record.CreatedAt == default ? normalizedUpdated : record.CreatedAt);
+        return record;
+    }
+
+    private static bool IncomingRecordIsNewer(TaskItemRecord? existing, DateTime normalizedUpdated)
+    {
+        if (existing == null)
+        {
+            return true;
+        }
+
+        DateTime currentUpdated = EnsureUtc(existing.UpdatedAt);
+        return currentUpdated < normalizedUpdated;
+    }
+
+    private static void PersistRemoteTask(SQLiteConnection conn, TaskItemRecord? existing, TaskItemRecord record)
+    {
+        if (existing == null)
+        {
+            conn.Insert(record);
+            return;
+        }
+
+        conn.InsertOrReplace(record);
+    }
+
+    public async Task<bool> ApplyRemoteDeletionAsync(string id, DateTime deletedAt)
     {
         await InitializeAsync().ConfigureAwait(false);
 

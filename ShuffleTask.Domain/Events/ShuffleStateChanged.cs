@@ -22,7 +22,7 @@ public sealed class ShuffleStateChanged : DomainEventBase
         int? breakMinutes,
         DateTime? occuredAt = null,
         Guid? eventId = null)
-        : base(occuredAt, eventId)
+        : base(occuredAt ?? default, eventId ?? default)
     {
         if (string.IsNullOrWhiteSpace(deviceId))
         {
