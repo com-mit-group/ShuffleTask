@@ -84,6 +84,42 @@ public sealed class RealtimeSyncServiceTests
     }
 
     [Test]
+    public async Task TaskUpsertedSubscriber_IgnoresLocalDeviceEvent()
+    {
+        var original = new TaskItem { Title = "Keep original", Description = "baseline" };
+        await _storage.AddTaskAsync(original);
+
+        var service = CreateService("device-a");
+
+        var mutated = TaskItem.Clone(original);
+        mutated.Title = "Mutated";
+        mutated.Description = "Should not apply";
+        var evt = new TaskUpserted(mutated, "device-a", _clock.GetUtcNow().UtcDateTime);
+
+        await InvokeSubscriberAsync(service, "TaskUpsertedSubscriber", evt);
+
+        var stored = await _storage.GetTaskAsync(original.Id);
+        Assert.That(stored, Is.Not.Null, "Local event should leave the stored task intact.");
+        Assert.That(stored!.Title, Is.EqualTo("Keep original"));
+        Assert.That(stored.Description, Is.EqualTo("baseline"));
+    }
+
+    [Test]
+    public async Task TaskDeletedSubscriber_IgnoresLocalDeviceEvent()
+    {
+        var existing = new TaskItem { Title = "Persist me" };
+        await _storage.AddTaskAsync(existing);
+
+        var service = CreateService("device-local");
+        var evt = new TaskDeleted(existing.Id, "device-local", _clock.GetUtcNow().UtcDateTime);
+
+        await InvokeSubscriberAsync(service, "TaskDeletedSubscriber", evt);
+
+        var stored = await _storage.GetTaskAsync(existing.Id);
+        Assert.That(stored, Is.Not.Null, "Local deletion event should be ignored.");
+    }
+
+    [Test]
     public async Task ShuffleStateChangedSubscriber_PersistsPreferences()
     {
         var service = CreateService("pref-device");
@@ -127,6 +163,25 @@ public sealed class RealtimeSyncServiceTests
         Assert.That(_notifications.Shown, Has.Count.EqualTo(1), "Notification should be relayed.");
         Assert.That(_notifications.Shown[0].Title, Is.EqualTo("Remote"));
         Assert.That(_notifications.Shown[0].Message, Is.EqualTo("A reminder"));
+    }
+
+    [Test]
+    public async Task NotificationBroadcastedSubscriber_IgnoresLocalDeviceEvent()
+    {
+        var service = CreateService("toast-device");
+        var evt = new NotificationBroadcasted(
+            notificationId: "notif-self",
+            title: "Local",
+            message: "Ignore",
+            deviceId: "toast-device",
+            taskId: null,
+            scheduledUtc: _clock.GetUtcNow().UtcDateTime,
+            delay: null,
+            isReminder: false);
+
+        await InvokeSubscriberAsync(service, "NotificationBroadcastedSubscriber", evt);
+
+        Assert.That(_notifications.Shown, Is.Empty, "Self-originated notifications should not be relayed.");
     }
 
     private RealtimeSyncService CreateService(string deviceId)

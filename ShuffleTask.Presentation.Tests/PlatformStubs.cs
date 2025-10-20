@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace Microsoft.Maui.Storage;
 
@@ -46,6 +48,25 @@ public static class Preferences
     public static IPreferences Default => DefaultInstance;
 
     public static void Reset() => DefaultInstance.Clear();
+}
+
+namespace Microsoft.Maui.ApplicationModel;
+
+public static class MainThread
+{
+    public static bool IsMainThread => true;
+
+    public static Task InvokeOnMainThreadAsync(Action action)
+    {
+        action();
+        return Task.CompletedTask;
+    }
+
+    public static Task InvokeOnMainThreadAsync(Func<Task> function)
+        => function();
+
+    public static Task<T> InvokeOnMainThreadAsync<T>(Func<Task<T>> function)
+        => function();
 }
 
 public static class FileSystem
