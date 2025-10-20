@@ -1,9 +1,11 @@
 using NUnit.Framework;
+using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Tests.TestDoubles;
 using ShuffleTask.ViewModels;
 using Yaref92.Events;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Presentation.Tests;
 
@@ -209,5 +211,97 @@ public class TasksViewModelTests
 
         Assert.AreEqual("Task clone", source.Title, "Original title should be unchanged.");
         Assert.IsTrue(source.Paused, "Original paused flag should remain true.");
+    }
+
+    [Test]
+    public async Task OnNextAsync_TaskUpsertedFromRemote_ReloadsTasks()
+    {
+        var remoteTask = CreateTask("remote", TimeSpan.Zero);
+        var evt = new TaskUpserted(remoteTask, "remote-device", _clock.GetUtcNow().UtcDateTime);
+
+        int before = _storage.GetTasksCallCount;
+        await _viewModel.OnNextAsync(evt);
+
+        Assert.That(_storage.GetTasksCallCount, Is.EqualTo(before + 1), "Remote upsert should trigger reload.");
+    }
+
+    [Test]
+    public async Task OnNextAsync_TaskDeletedFromRemote_ReloadsTasks()
+    {
+        var evt = new TaskDeleted("remote-delete", "remote-device", _clock.GetUtcNow().UtcDateTime);
+
+        int before = _storage.GetTasksCallCount;
+        await _viewModel.OnNextAsync(evt);
+
+        Assert.That(_storage.GetTasksCallCount, Is.EqualTo(before + 1), "Remote delete should trigger reload.");
+    }
+
+    [Test]
+    public async Task OnNextAsync_TaskUpsertedFromLocalDevice_IsIgnored()
+    {
+        var aggregator = new EventAggregator();
+        aggregator.RegisterEventType<TaskUpserted>();
+        aggregator.RegisterEventType<TaskDeleted>();
+        var sync = new SyncStub("device-local");
+        var viewModel = new TasksViewModel(_storage, _clock, aggregator, sync);
+
+        var localTask = CreateTask("local", TimeSpan.Zero);
+        var evt = new TaskUpserted(localTask, "device-local", _clock.GetUtcNow().UtcDateTime);
+
+        int before = _storage.GetTasksCallCount;
+        await viewModel.OnNextAsync(evt);
+
+        Assert.That(_storage.GetTasksCallCount, Is.EqualTo(before), "Local upsert should not reload when originating device matches.");
+    }
+
+    [Test]
+    public async Task OnNextAsync_TaskDeletedFromLocalDevice_IsIgnored()
+    {
+        var aggregator = new EventAggregator();
+        aggregator.RegisterEventType<TaskUpserted>();
+        aggregator.RegisterEventType<TaskDeleted>();
+        var sync = new SyncStub("device-local");
+        var viewModel = new TasksViewModel(_storage, _clock, aggregator, sync);
+
+        var evt = new TaskDeleted("task-local", "device-local", _clock.GetUtcNow().UtcDateTime);
+
+        int before = _storage.GetTasksCallCount;
+        await viewModel.OnNextAsync(evt);
+
+        Assert.That(_storage.GetTasksCallCount, Is.EqualTo(before), "Local delete should not trigger reload when originating device matches.");
+    }
+}
+
+internal sealed class SyncStub : IRealtimeSyncService
+{
+    private readonly EventAggregator _aggregator = new();
+
+    public SyncStub(string deviceId, bool shouldBroadcast = true)
+    {
+        DeviceId = deviceId;
+        ShouldBroadcastLocalChanges = shouldBroadcast;
+    }
+
+    public string DeviceId { get; }
+
+    public bool IsConnected => true;
+
+    public bool ShouldBroadcastLocalChanges { get; }
+
+    public IEventAggregator Aggregator => _aggregator;
+
+    public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task PublishAsync<TEvent>(TEvent domainEvent, CancellationToken cancellationToken = default)
+        where TEvent : DomainEventBase
+        => Task.CompletedTask;
+
+    public IDisposable SuppressBroadcast() => new NoopScope();
+
+    private sealed class NoopScope : IDisposable
+    {
+        public void Dispose()
+        {
+        }
     }
 }
