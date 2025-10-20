@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../ShuffleTask.Presentation/PreferenceKeys.cs" Link="PreferenceKeys.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Services/RealtimeSyncService.cs" Link="Services/RealtimeSyncService.cs" />
     <Compile Include="../ShuffleTask.Presentation/ViewModels/TasksViewModel.cs" Link="ViewModels/TasksViewModel.cs" />
   </ItemGroup>
 

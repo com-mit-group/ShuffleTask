@@ -1,0 +1,181 @@
+using System;
+using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+using NUnit.Framework;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Sync;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Domain.Events;
+using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.Tests.TestSupport;
+using ShuffleTask.Tests.TestDoubles;
+
+namespace ShuffleTask.Presentation.Tests;
+
+[TestFixture]
+public sealed class RealtimeSyncServiceTests
+{
+    private string _dbPath = null!;
+    private StorageService _storage = null!;
+    private FakeTimeProvider _clock = null!;
+    private TestNotificationService _notifications = null!;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        Microsoft.Maui.Storage.Preferences.Reset();
+        _clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        _dbPath = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"sync-{Guid.NewGuid():N}.db3");
+        _storage = new StorageService(_clock, _dbPath);
+        await _storage.InitializeAsync();
+        _notifications = new TestNotificationService();
+        Microsoft.Maui.Storage.FileSystem.SetAppDataDirectory(TestContext.CurrentContext.WorkDirectory);
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        await DisposeStorageAsync();
+        if (File.Exists(_dbPath))
+        {
+            File.Delete(_dbPath);
+        }
+    }
+
+    [Test]
+    public async Task TaskUpsertedSubscriber_AppliesRemoteTask()
+    {
+        var service = CreateService("device-a");
+        var task = new TaskItem
+        {
+            Id = Guid.NewGuid().ToString("n"),
+            Title = "Remote task",
+            Description = "Apply from peer",
+            Importance = 4,
+            UpdatedAt = _clock.GetUtcNow().UtcDateTime
+        };
+
+        var evt = new TaskUpserted(TaskItem.Clone(task), "device-b", _clock.GetUtcNow().UtcDateTime);
+
+        await InvokeSubscriberAsync(service, "TaskUpsertedSubscriber", evt);
+
+        var stored = await _storage.GetTaskAsync(task.Id);
+        Assert.That(stored, Is.Not.Null, "Remote upsert should persist the task.");
+        Assert.That(stored!.Title, Is.EqualTo("Remote task"));
+        Assert.That(stored.Description, Is.EqualTo("Apply from peer"));
+    }
+
+    [Test]
+    public async Task TaskDeletedSubscriber_RemovesRemoteTask()
+    {
+        var service = CreateService("primary-device");
+        var existing = new TaskItem { Title = "Delete me" };
+        await _storage.AddTaskAsync(existing);
+
+        var evt = new TaskDeleted(existing.Id, "secondary-device", _clock.GetUtcNow().UtcDateTime);
+
+        await InvokeSubscriberAsync(service, "TaskDeletedSubscriber", evt);
+
+        var stored = await _storage.GetTaskAsync(existing.Id);
+        Assert.That(stored, Is.Null, "Remote delete should remove the task from storage.");
+    }
+
+    [Test]
+    public async Task ShuffleStateChangedSubscriber_PersistsPreferences()
+    {
+        var service = CreateService("pref-device");
+        var evt = new ShuffleStateChanged(
+            deviceId: "remote-device",
+            hasActiveTask: true,
+            taskId: "task-123",
+            timerDurationSeconds: 600,
+            timerExpiresUtc: _clock.GetUtcNow().UtcDateTime.AddMinutes(10),
+            timerMode: (int)TimerMode.Pomodoro,
+            pomodoroPhase: 1,
+            pomodoroCycleIndex: 2,
+            pomodoroCycleCount: 4,
+            focusMinutes: 20,
+            breakMinutes: 5);
+
+        await InvokeSubscriberAsync(service, "ShuffleStateChangedSubscriber", evt);
+
+        Assert.That(Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty), Is.EqualTo("task-123"));
+        Assert.That(Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.TimerMode, -1), Is.EqualTo((int)TimerMode.Pomodoro));
+        Assert.That(Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.PomodoroCycle, -1), Is.EqualTo(2));
+        Assert.That(Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.PomodoroTotal, -1), Is.EqualTo(4));
+    }
+
+    [Test]
+    public async Task NotificationBroadcastedSubscriber_RelaysToNotificationService()
+    {
+        var service = CreateService("toast-device");
+        var evt = new NotificationBroadcasted(
+            notificationId: "notif-1",
+            title: "Remote",
+            message: "A reminder",
+            deviceId: "peer-device",
+            taskId: null,
+            scheduledUtc: _clock.GetUtcNow().UtcDateTime,
+            delay: null,
+            isReminder: false);
+
+        await InvokeSubscriberAsync(service, "NotificationBroadcastedSubscriber", evt);
+
+        Assert.That(_notifications.Shown, Has.Count.EqualTo(1), "Notification should be relayed.");
+        Assert.That(_notifications.Shown[0].Title, Is.EqualTo("Remote"));
+        Assert.That(_notifications.Shown[0].Message, Is.EqualTo("A reminder"));
+    }
+
+    private RealtimeSyncService CreateService(string deviceId)
+    {
+        Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, deviceId);
+        return new RealtimeSyncService(_clock, () => _storage, _notifications, new SyncOptions { Enabled = false });
+    }
+
+    private static async Task InvokeSubscriberAsync<TEvent>(RealtimeSyncService service, string subscriberName, TEvent evt)
+        where TEvent : DomainEventBase
+    {
+        Type? subscriberType = service.GetType().GetNestedType(subscriberName, BindingFlags.NonPublic);
+        Assert.That(subscriberType, Is.Not.Null, $"Subscriber {subscriberName} should exist.");
+        object subscriber = Activator.CreateInstance(subscriberType!, service)!;
+        MethodInfo? method = subscriberType!.GetMethod("OnNextAsync", BindingFlags.Instance | BindingFlags.Public);
+        Assert.That(method, Is.Not.Null, "Subscriber should expose OnNextAsync.");
+        Task task = (Task)method!.Invoke(subscriber, new object?[] { evt, CancellationToken.None })!;
+        await task.ConfigureAwait(false);
+    }
+
+    private async Task DisposeStorageAsync()
+    {
+        if (_storage is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync();
+        }
+    }
+}
+
+namespace ShuffleTask.Presentation.Tests.TestSupport;
+
+internal sealed class TestNotificationService : INotificationService
+{
+    public List<(string Title, string Message)> Shown { get; } = new();
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
+        => Task.CompletedTask;
+
+    public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings)
+        => Task.CompletedTask;
+
+    public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings, TimeSpan delay)
+        => Task.CompletedTask;
+
+    public Task ShowToastAsync(string title, string message, AppSettings settings)
+    {
+        Shown.Add((title, message));
+        return Task.CompletedTask;
+    }
+}
