@@ -9,6 +9,7 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence;
+using ShuffleTask.Tests.TestDoubles;
 using Yaref92.Events;
 
 namespace ShuffleTask.Tests;
