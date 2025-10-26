@@ -219,16 +219,21 @@ public partial class DashboardViewModel : ObservableObject,
             }
         }
 
+        var timerToStart = _currentTimer ?? request;
         if (remaining.HasValue)
         {
             TimerText = FormatTimerText(remaining.Value);
+            if (timerToStart != null)
+            {
+                timerToStart = timerToStart with { Duration = remaining.Value };
+                _currentTimer = timerToStart;
+            }
         }
         else if (_currentTimer != null)
         {
             TimerText = FormatTimerText(_currentTimer.Duration);
         }
 
-        var timerToStart = _currentTimer ?? request;
         if (timerToStart != null)
         {
             CountdownRequested?.Invoke(this, timerToStart);
