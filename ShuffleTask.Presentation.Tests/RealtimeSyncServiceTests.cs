@@ -123,18 +123,10 @@ public sealed class RealtimeSyncServiceTests
     public async Task ShuffleStateChangedSubscriber_PersistsPreferences()
     {
         var service = CreateService("pref-device");
+        var now = _clock.GetUtcNow();
         var evt = new ShuffleStateChanged(
-            deviceId: "remote-device",
-            hasActiveTask: true,
-            taskId: "task-123",
-            timerDurationSeconds: 600,
-            timerExpiresUtc: _clock.GetUtcNow().UtcDateTime.AddMinutes(10),
-            timerMode: (int)TimerMode.Pomodoro,
-            pomodoroPhase: 1,
-            pomodoroCycleIndex: 2,
-            pomodoroCycleCount: 4,
-            focusMinutes: 20,
-            breakMinutes: 5);
+            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", "task-123", false, trigger: "remote", now.UtcDateTime),
+            new ShuffleStateChanged.ShuffleTimerSnapshot(600, now.AddMinutes(10).UtcDateTime, (int)TimerMode.Pomodoro, 1, 2, 4, 20, 5));
 
         await InvokeSubscriberAsync(service, "ShuffleStateChangedSubscriber", evt);
 
@@ -149,13 +141,9 @@ public sealed class RealtimeSyncServiceTests
     {
         var service = CreateService("toast-device");
         var evt = new NotificationBroadcasted(
-            notificationId: "notif-1",
-            title: "Remote",
-            message: "A reminder",
-            deviceId: "peer-device",
-            taskId: null,
-            scheduledUtc: _clock.GetUtcNow().UtcDateTime,
-            delay: null,
+            new NotificationBroadcasted.NotificationIdentity("notif-1", "peer-device"),
+            new NotificationBroadcasted.NotificationContent("Remote", "A reminder"),
+            new NotificationBroadcasted.NotificationSchedule(null, _clock.GetUtcNow().UtcDateTime, null),
             isReminder: false);
 
         await InvokeSubscriberAsync(service, "NotificationBroadcastedSubscriber", evt);
@@ -170,13 +158,9 @@ public sealed class RealtimeSyncServiceTests
     {
         var service = CreateService("toast-device");
         var evt = new NotificationBroadcasted(
-            notificationId: "notif-self",
-            title: "Local",
-            message: "Ignore",
-            deviceId: "toast-device",
-            taskId: null,
-            scheduledUtc: _clock.GetUtcNow().UtcDateTime,
-            delay: null,
+            new NotificationBroadcasted.NotificationIdentity("notif-self", "toast-device"),
+            new NotificationBroadcasted.NotificationContent("Local", "Ignore"),
+            new NotificationBroadcasted.NotificationSchedule(null, _clock.GetUtcNow().UtcDateTime, null),
             isReminder: false);
 
         await InvokeSubscriberAsync(service, "NotificationBroadcastedSubscriber", evt);

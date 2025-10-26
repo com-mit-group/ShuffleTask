@@ -25,13 +25,9 @@ public sealed class NotificationBroadcastedEventSubscriberTests
         }));
 
         var domainEvent = new NotificationBroadcasted(
-            notificationId: "notif-42",
-            title: "Remote",
-            message: "sync",
-            deviceId: "peer",
-            taskId: null,
-            scheduledUtc: DateTime.UtcNow,
-            delay: null,
+            new NotificationBroadcasted.NotificationIdentity("notif-42", "peer"),
+            new NotificationBroadcasted.NotificationContent("Remote", "sync"),
+            new NotificationBroadcasted.NotificationSchedule(null, DateTime.UtcNow, null),
             isReminder: false);
 
         await subscriber.OnNextAsync(domainEvent);

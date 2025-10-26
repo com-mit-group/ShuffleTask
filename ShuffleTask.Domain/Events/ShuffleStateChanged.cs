@@ -5,8 +5,32 @@ namespace ShuffleTask.Domain.Events;
 
 public sealed class ShuffleStateChanged : DomainEventBase
 {
-    [JsonConstructor]
     public ShuffleStateChanged(
+        ShuffleDeviceContext context,
+        ShuffleTimerSnapshot timer,
+        DateTime? occuredAt = null,
+        Guid? eventId = null)
+        : this(
+            context.DeviceId,
+            context.TaskId,
+            context.IsAutoShuffle,
+            context.Trigger,
+            context.EventTimestampUtc,
+            timer.TimerDurationSeconds,
+            timer.TimerExpiresUtc,
+            timer.TimerMode,
+            timer.PomodoroPhase,
+            timer.PomodoroCycleIndex,
+            timer.PomodoroCycleCount,
+            timer.FocusMinutes,
+            timer.BreakMinutes,
+            occuredAt,
+            eventId)
+    {
+    }
+
+    [JsonConstructor]
+    private ShuffleStateChanged(
         string deviceId,
         string? taskId,
         bool isAutoShuffle,
@@ -20,9 +44,9 @@ public sealed class ShuffleStateChanged : DomainEventBase
         int? pomodoroCycleCount,
         int? focusMinutes,
         int? breakMinutes,
-        DateTime? occuredAt = null,
-        Guid? eventId = null)
-        : base(occuredAt ?? default, eventId ?? default)
+        DateTime? occuredAt,
+        Guid? eventId)
+        : base(occuredAt ?? default, eventId ?? Guid.Empty)
     {
         if (string.IsNullOrWhiteSpace(deviceId))
         {
@@ -69,6 +93,23 @@ public sealed class ShuffleStateChanged : DomainEventBase
     public int? FocusMinutes { get; }
 
     public int? BreakMinutes { get; }
+
+    public sealed record ShuffleDeviceContext(
+        string DeviceId,
+        string? TaskId,
+        bool IsAutoShuffle,
+        string Trigger,
+        DateTime EventTimestampUtc);
+
+    public sealed record ShuffleTimerSnapshot(
+        int? TimerDurationSeconds,
+        DateTime? TimerExpiresUtc,
+        int? TimerMode,
+        int? PomodoroPhase,
+        int? PomodoroCycleIndex,
+        int? PomodoroCycleCount,
+        int? FocusMinutes,
+        int? BreakMinutes);
 
     public bool HasActiveTask => !string.IsNullOrWhiteSpace(TaskId);
 

@@ -226,12 +226,15 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
-            await RemoveTombstoneAsync(id).ConfigureAwait(false);
-            await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Completed", "Task marked as done");
+        await RemoveTombstoneAsync(id).ConfigureAwait(false);
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }
@@ -267,11 +270,14 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
-            await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }
@@ -296,11 +302,14 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Active", "Task resumed");
-            await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Active", "Task resumed");
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }

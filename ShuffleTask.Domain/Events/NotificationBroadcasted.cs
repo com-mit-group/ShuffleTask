@@ -5,8 +5,29 @@ namespace ShuffleTask.Domain.Events;
 
 public sealed class NotificationBroadcasted : DomainEventBase
 {
-    [JsonConstructor]
     public NotificationBroadcasted(
+        NotificationIdentity identity,
+        NotificationContent content,
+        NotificationSchedule schedule,
+        bool isReminder,
+        DateTime? occuredAt = null,
+        Guid? eventId = null)
+        : this(
+            identity.NotificationId,
+            content.Title,
+            content.Message,
+            identity.DeviceId,
+            schedule.TaskId,
+            schedule.ScheduledUtc,
+            schedule.Delay,
+            isReminder,
+            occuredAt,
+            eventId)
+    {
+    }
+
+    [JsonConstructor]
+    private NotificationBroadcasted(
         string notificationId,
         string title,
         string message,
@@ -15,8 +36,8 @@ public sealed class NotificationBroadcasted : DomainEventBase
         DateTime scheduledUtc,
         TimeSpan? delay,
         bool isReminder,
-        DateTime? occuredAt = null,
-        Guid? eventId = null)
+        DateTime? occuredAt,
+        Guid? eventId)
         : base(occuredAt ?? default, eventId ?? Guid.Empty)
     {
         if (string.IsNullOrWhiteSpace(notificationId))
@@ -64,6 +85,12 @@ public sealed class NotificationBroadcasted : DomainEventBase
     public TimeSpan? Delay { get; }
 
     public bool IsReminder { get; }
+
+    public sealed record NotificationIdentity(string NotificationId, string DeviceId);
+
+    public sealed record NotificationContent(string Title, string Message);
+
+    public sealed record NotificationSchedule(string? TaskId, DateTime ScheduledUtc, TimeSpan? Delay);
 
     private static DateTime EnsureUtc(DateTime value)
     {
