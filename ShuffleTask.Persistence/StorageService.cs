@@ -4,7 +4,9 @@ using SQLite;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence.Models;
+using Yaref92.Events;
 
 namespace ShuffleTask.Persistence;
 
@@ -17,6 +19,7 @@ public class StorageService : IStorageService
     private readonly string _dbPath;
     private readonly IShuffleLogger? _logger;
     private SQLiteAsyncConnection? _db;
+    private IRealtimeSyncService? _sync;
 
     public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null)
     {
@@ -28,6 +31,12 @@ public class StorageService : IStorageService
 
         _dbPath = databasePath;
         _logger = logger;
+    }
+
+    public void AttachSyncService(IRealtimeSyncService syncService)
+    {
+        ArgumentNullException.ThrowIfNull(syncService);
+        _sync = syncService;
     }
 
     public async Task InitializeAsync()
@@ -42,6 +51,7 @@ public class StorageService : IStorageService
 
         await _db.CreateTableAsync<TaskItemRecord>();
         await _db.CreateTableAsync<KeyValueEntity>();
+        await _db.CreateTableAsync<DeletedTaskRecord>();
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
         await EnsureTaskSchemaAsync();
@@ -87,6 +97,7 @@ public class StorageService : IStorageService
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
             await AddCol("CutInLineMode", IntegerSqlType, "0");
+            await AddCol("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP");
         }
         catch
         {
@@ -119,14 +130,17 @@ public class StorageService : IStorageService
 
     public async Task AddTaskAsync(TaskItem item)
     {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         if (string.IsNullOrWhiteSpace(item.Id))
         {
             item.Id = Guid.NewGuid().ToString("n");
         }
         if (item.CreatedAt == default)
         {
-            item.CreatedAt = _clock.GetUtcNow().UtcDateTime;
+            item.CreatedAt = nowUtc;
         }
+        item.CreatedAt = EnsureUtc(item.CreatedAt);
+        item.UpdatedAt = EnsureUtc(nowUtc);
         if (item.Status != TaskLifecycleStatus.Active &&
             item.Status != TaskLifecycleStatus.Snoozed &&
             item.Status != TaskLifecycleStatus.Completed)
@@ -136,18 +150,51 @@ public class StorageService : IStorageService
 
         var record = TaskItemRecord.FromDomain(item);
         await Db.InsertAsync(record);
+        await RemoveTombstoneAsync(item.Id).ConfigureAwait(false);
+        await BroadcastTaskUpsertAsync(record.ToDomain()).ConfigureAwait(false);
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        item.UpdatedAt = EnsureUtc(nowUtc);
         var record = TaskItemRecord.FromDomain(item);
         await Db.UpdateAsync(record);
+        await RemoveTombstoneAsync(item.Id).ConfigureAwait(false);
+        await BroadcastTaskUpsertAsync(record.ToDomain()).ConfigureAwait(false);
     }
 
     public async Task DeleteTaskAsync(string id)
     {
         await AutoResumeDueTasksAsync();
-        await Db.DeleteAsync<TaskItemRecord>(id);
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        bool deleted = false;
+
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var existing = conn.Find<TaskItemRecord>(id);
+            if (existing == null)
+            {
+                return;
+            }
+
+            conn.Delete(existing);
+            var tombstone = new DeletedTaskRecord
+            {
+                Id = id,
+                DeletedAt = EnsureUtc(nowUtc)
+            };
+            conn.InsertOrReplace(tombstone);
+            deleted = true;
+        });
+
+        if (!deleted)
+        {
+            return;
+        }
+
+        _logger?.LogSyncEvent("TaskDeleted", id);
+        await BroadcastTaskDeletedAsync(id, nowUtc).ConfigureAwait(false);
     }
 
     // Lifecycle helpers
@@ -173,15 +220,21 @@ public class StorageService : IStorageService
             existing.SnoozedUntil = null;
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
             existing.CutInLineMode = CutInLineMode.None;
+            existing.UpdatedAt = EnsureUtc(nowUtc);
 
             conn.Update(existing);
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Completed", "Task marked as done");
+        await RemoveTombstoneAsync(id).ConfigureAwait(false);
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }
@@ -211,15 +264,20 @@ public class StorageService : IStorageService
             existing.SnoozedUntil = until;
             existing.NextEligibleAt = until;
             existing.CompletedAt = null;
+            existing.UpdatedAt = EnsureUtc(nowUtc);
 
             conn.Update(existing);
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }
@@ -228,6 +286,7 @@ public class StorageService : IStorageService
     {
         TaskItem? updated = null;
         string? originalStatus = null;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
         await Db.RunInTransactionAsync(conn =>
         {
@@ -238,15 +297,19 @@ public class StorageService : IStorageService
             }
 
             originalStatus = existing.Status.ToString();
-            ApplyResume(existing);
+            ApplyResume(existing, nowUtc);
             conn.Update(existing);
             updated = existing.ToDomain();
         });
 
-        if (updated != null && originalStatus != null)
+        if (updated == null)
         {
-            _logger?.LogStateTransition(id, originalStatus, "Active", "Task resumed");
+            return null;
         }
+
+        string fromStatus = originalStatus ?? updated.Status.ToString();
+        _logger?.LogStateTransition(id, fromStatus, "Active", "Task resumed");
+        await BroadcastTaskUpsertAsync(updated).ConfigureAwait(false);
 
         return updated;
     }
@@ -271,7 +334,7 @@ public class StorageService : IStorageService
             if (nextUtc <= nowUtc)
             {
                 string originalStatus = task.Status.ToString();
-                ApplyResume(task);
+                ApplyResume(task, nowUtc);
                 toUpdate.Add(task);
                 _logger?.LogStateTransition(task.Id, originalStatus, "Active", "Auto-resumed due to schedule");
             }
@@ -281,15 +344,20 @@ public class StorageService : IStorageService
         {
             await Db.UpdateAllAsync(toUpdate);
             _logger?.LogSyncEvent("AutoResume", $"Resumed {toUpdate.Count} task(s)");
+            foreach (var record in toUpdate)
+            {
+                await BroadcastTaskUpsertAsync(record.ToDomain()).ConfigureAwait(false);
+            }
         }
     }
 
-    private static void ApplyResume(TaskItemRecord task)
+    private static void ApplyResume(TaskItemRecord task, DateTime nowUtc)
     {
         task.Status = TaskLifecycleStatus.Active;
         task.SnoozedUntil = null;
         task.NextEligibleAt = null;
         task.CompletedAt = null;
+        task.UpdatedAt = EnsureUtc(nowUtc);
     }
 
     private static DateTime? ComputeNextEligibleUtc(TaskItemRecord task, DateTime nowUtc)
@@ -302,6 +370,138 @@ public class StorageService : IStorageService
             RepeatType.Interval => EnsureUtc(TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(Math.Max(1, task.IntervalDays)).UtcDateTime),
             _ => null,
         };
+    }
+
+    public async Task<bool> ApplyRemoteTaskUpsertAsync(TaskItem task, DateTime updatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        await InitializeAsync().ConfigureAwait(false);
+
+        bool changed = false;
+        DateTime normalizedUpdated = EnsureUtc(updatedAt);
+
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var tombstone = conn.Find<DeletedTaskRecord>(task.Id);
+            if (TombstoneBlocksUpsert(tombstone, normalizedUpdated))
+            {
+                return;
+            }
+
+            var record = PrepareRemoteUpsertRecord(task, normalizedUpdated);
+            var existing = conn.Find<TaskItemRecord>(task.Id);
+
+            if (!IncomingRecordIsNewer(existing, normalizedUpdated))
+            {
+                return;
+            }
+
+            PersistRemoteTask(conn, existing, record);
+
+            if (tombstone != null)
+            {
+                conn.Delete(tombstone);
+            }
+
+            changed = true;
+        });
+
+        if (changed)
+        {
+            _logger?.LogSyncEvent("RemoteTaskUpsert", task.Id);
+        }
+
+        return changed;
+    }
+
+    private static bool TombstoneBlocksUpsert(DeletedTaskRecord? tombstone, DateTime normalizedUpdated)
+    {
+        if (tombstone == null)
+        {
+            return false;
+        }
+
+        DateTime deletedAt = EnsureUtc(tombstone.DeletedAt);
+        return deletedAt >= normalizedUpdated;
+    }
+
+    private static TaskItemRecord PrepareRemoteUpsertRecord(TaskItem task, DateTime normalizedUpdated)
+    {
+        var record = TaskItemRecord.FromDomain(task);
+        record.UpdatedAt = normalizedUpdated;
+        record.CreatedAt = EnsureUtc(record.CreatedAt == default ? normalizedUpdated : record.CreatedAt);
+        return record;
+    }
+
+    private static bool IncomingRecordIsNewer(TaskItemRecord? existing, DateTime normalizedUpdated)
+    {
+        if (existing == null)
+        {
+            return true;
+        }
+
+        DateTime currentUpdated = EnsureUtc(existing.UpdatedAt);
+        return currentUpdated < normalizedUpdated;
+    }
+
+    private static void PersistRemoteTask(SQLiteConnection conn, TaskItemRecord? existing, TaskItemRecord record)
+    {
+        if (existing == null)
+        {
+            conn.Insert(record);
+            return;
+        }
+
+        conn.InsertOrReplace(record);
+    }
+
+    public async Task<bool> ApplyRemoteDeletionAsync(string id, DateTime deletedAt)
+    {
+        await InitializeAsync().ConfigureAwait(false);
+
+        bool changed = false;
+        DateTime normalizedDeleted = EnsureUtc(deletedAt);
+
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var tombstone = conn.Find<DeletedTaskRecord>(id);
+            if (tombstone != null)
+            {
+                DateTime existingDeleted = EnsureUtc(tombstone.DeletedAt);
+                if (existingDeleted >= normalizedDeleted)
+                {
+                    return;
+                }
+            }
+
+            var existing = conn.Find<TaskItemRecord>(id);
+            if (existing != null)
+            {
+                DateTime currentUpdated = EnsureUtc(existing.UpdatedAt);
+                if (currentUpdated > normalizedDeleted)
+                {
+                    return;
+                }
+
+                conn.Delete(existing);
+                changed = true;
+            }
+
+            var updatedTombstone = new DeletedTaskRecord
+            {
+                Id = id,
+                DeletedAt = normalizedDeleted
+            };
+            conn.InsertOrReplace(updatedTombstone);
+            changed = true;
+        });
+
+        if (changed)
+        {
+            _logger?.LogSyncEvent("RemoteTaskDeleted", id);
+        }
+
+        return changed;
     }
 
     private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)
@@ -324,6 +524,63 @@ public class StorageService : IStorageService
 
         DateTimeOffset fallbackLocal = new(local.Date.AddDays(7).Add(local.TimeOfDay), local.Offset);
         return EnsureUtc(fallbackLocal.UtcDateTime);
+    }
+
+    private bool ShouldBroadcast => _sync != null && _sync.ShouldBroadcastLocalChanges;
+
+    private string LocalDeviceId => _sync?.DeviceId ?? "local";
+
+    private async Task BroadcastTaskUpsertAsync(TaskItem task)
+    {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        var clone = task.Clone();
+        var evt = new TaskUpserted(clone, LocalDeviceId, EnsureUtc(task.UpdatedAt));
+        await SafePublishAsync(evt, task.Id).ConfigureAwait(false);
+    }
+
+    private async Task BroadcastTaskDeletedAsync(string taskId, DateTime deletedAt)
+    {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        var evt = new TaskDeleted(taskId, LocalDeviceId, EnsureUtc(deletedAt));
+        await SafePublishAsync(evt, taskId).ConfigureAwait(false);
+    }
+
+    private async Task SafePublishAsync<TEvent>(TEvent domainEvent, string? details)
+        where TEvent : DomainEventBase
+    {
+        try
+        {
+            await _sync!.PublishAsync(domainEvent).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogSyncEvent("PublishFailed", details, ex);
+        }
+    }
+
+    private async Task RemoveTombstoneAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id) || _db == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Db.DeleteAsync<DeletedTaskRecord>(id).ConfigureAwait(false);
+        }
+        catch
+        {
+            // best effort cleanup
+        }
     }
 
     private static Weekdays DayToWeekdayFlag(DayOfWeek dow)
@@ -411,6 +668,15 @@ public class StorageService : IStorageService
         settings.SizeBiasStrength = Math.Clamp(settings.SizeBiasStrength, 0.0, 1.0);
         settings.UrgencyDeadlineShare = Math.Clamp(settings.UrgencyDeadlineShare, 0.0, 100.0);
         return settings;
+    }
+
+    [Table("TaskDeletion")]
+    private sealed class DeletedTaskRecord
+    {
+        [PrimaryKey]
+        public string Id { get; set; } = string.Empty;
+
+        public DateTime DeletedAt { get; set; }
     }
 
     private sealed class KeyValueEntity
