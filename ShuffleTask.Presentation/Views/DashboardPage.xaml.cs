@@ -8,13 +8,6 @@ namespace ShuffleTask.Views;
 
 public partial class DashboardPage : ContentPage
 {
-    private const string PrefTimerMode = "pref.timerMode";
-    private const string PrefPomodoroPhase = "pref.pomodoro.phase";
-    private const string PrefPomodoroCycle = "pref.pomodoro.cycle";
-    private const string PrefPomodoroTotal = "pref.pomodoro.total";
-    private const string PrefPomodoroFocus = "pref.pomodoro.focus";
-    private const string PrefPomodoroBreak = "pref.pomodoro.break";
-    
     private readonly DashboardViewModel _vm;
 
     private IDispatcherTimer? _timer;
@@ -35,7 +28,7 @@ public partial class DashboardPage : ContentPage
     {
         await _vm.InitializeAsync();
 
-        var mode = (TimerMode)Preferences.Default.Get(PrefTimerMode, (int)TimerMode.LongInterval);
+        var mode = (TimerMode)Preferences.Default.Get(PreferenceKeys.TimerMode, (int)TimerMode.LongInterval);
 
         if (PersistedTimerState.TryGetActiveTimer(
                 out string taskId,
@@ -48,11 +41,11 @@ public partial class DashboardPage : ContentPage
 
             if (mode == TimerMode.Pomodoro)
             {
-                int phaseValue = Preferences.Default.Get(PrefPomodoroPhase, 0);
-                int cycle = Math.Max(1, Preferences.Default.Get(PrefPomodoroCycle, 1));
-                int total = Math.Max(1, Preferences.Default.Get(PrefPomodoroTotal, 1));
-                int focus = Math.Max(1, Preferences.Default.Get(PrefPomodoroFocus, 15));
-                int breakMinutes = Math.Max(1, Preferences.Default.Get(PrefPomodoroBreak, 5));
+                int phaseValue = Preferences.Default.Get(PreferenceKeys.PomodoroPhase, 0);
+                int cycle = Math.Max(1, Preferences.Default.Get(PreferenceKeys.PomodoroCycle, 1));
+                int total = Math.Max(1, Preferences.Default.Get(PreferenceKeys.PomodoroTotal, 1));
+                int focus = Math.Max(1, Preferences.Default.Get(PreferenceKeys.PomodoroFocus, 15));
+                int breakMinutes = Math.Max(1, Preferences.Default.Get(PreferenceKeys.PomodoroBreak, 5));
 
                 var phase = (DashboardViewModel.PomodoroPhase)Math.Clamp(phaseValue, 0, 1);
                 TimeSpan duration = phase == DashboardViewModel.PomodoroPhase.Break
@@ -147,35 +140,35 @@ public partial class DashboardPage : ContentPage
         Preferences.Default.Set(
             PreferenceKeys.TimerExpiresAt,
             DateTimeOffset.UtcNow.Add(_remaining).ToString("O", CultureInfo.InvariantCulture));
-        Preferences.Default.Set(PrefTimerMode, (int)_currentRequest.Mode);
+        Preferences.Default.Set(PreferenceKeys.TimerMode, (int)_currentRequest.Mode);
 
         if (_currentRequest.Mode == TimerMode.Pomodoro && _currentRequest.Phase.HasValue)
         {
-            Preferences.Default.Set(PrefPomodoroPhase, _currentRequest.Phase.Value == DashboardViewModel.PomodoroPhase.Break ? 1 : 0);
-            Preferences.Default.Set(PrefPomodoroCycle, _currentRequest.CycleIndex);
-            Preferences.Default.Set(PrefPomodoroTotal, _currentRequest.CycleCount);
-            Preferences.Default.Set(PrefPomodoroFocus, _currentRequest.FocusMinutes);
-            Preferences.Default.Set(PrefPomodoroBreak, _currentRequest.BreakMinutes);
+            Preferences.Default.Set(PreferenceKeys.PomodoroPhase, _currentRequest.Phase.Value == DashboardViewModel.PomodoroPhase.Break ? 1 : 0);
+            Preferences.Default.Set(PreferenceKeys.PomodoroCycle, _currentRequest.CycleIndex);
+            Preferences.Default.Set(PreferenceKeys.PomodoroTotal, _currentRequest.CycleCount);
+            Preferences.Default.Set(PreferenceKeys.PomodoroFocus, _currentRequest.FocusMinutes);
+            Preferences.Default.Set(PreferenceKeys.PomodoroBreak, _currentRequest.BreakMinutes);
         }
         else
         {
-            Preferences.Default.Remove(PrefPomodoroPhase);
-            Preferences.Default.Remove(PrefPomodoroCycle);
-            Preferences.Default.Remove(PrefPomodoroTotal);
-            Preferences.Default.Remove(PrefPomodoroFocus);
-            Preferences.Default.Remove(PrefPomodoroBreak);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroPhase);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroCycle);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroTotal);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroFocus);
+            Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
         }
     }
 
     private static void ClearPersistedState()
     {
         PersistedTimerState.Clear();
-        Preferences.Default.Remove(PrefTimerMode);
-        Preferences.Default.Remove(PrefPomodoroPhase);
-        Preferences.Default.Remove(PrefPomodoroCycle);
-        Preferences.Default.Remove(PrefPomodoroTotal);
-        Preferences.Default.Remove(PrefPomodoroFocus);
-        Preferences.Default.Remove(PrefPomodoroBreak);
+        Preferences.Default.Remove(PreferenceKeys.TimerMode);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroPhase);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroCycle);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroTotal);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroFocus);
+        Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
     }
 
     private IDispatcherTimer EnsureTimer()

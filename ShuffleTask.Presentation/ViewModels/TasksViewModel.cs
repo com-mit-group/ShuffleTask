@@ -1,23 +1,42 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Domain.Events;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class TasksViewModel : ObservableObject
+public partial class TasksViewModel : ObservableObject,
+    IAsyncEventSubscriber<TaskUpserted>,
+    IAsyncEventSubscriber<TaskDeleted>
 {
     private readonly IStorageService _storage;
     private readonly TimeProvider _clock;
+    private readonly IEventAggregator _aggregator;
+    private readonly IRealtimeSyncService? _sync;
+    private readonly SynchronizationContext? _uiContext;
 
-    public TasksViewModel(IStorageService storage, TimeProvider clock)
+    public TasksViewModel(
+        IStorageService storage,
+        TimeProvider clock,
+        IEventAggregator aggregator,
+        IRealtimeSyncService? syncService = null)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
+        _sync = syncService;
+        _uiContext = SynchronizationContext.Current;
+
+        _aggregator.SubscribeToEventType<TaskUpserted>(this);
+        _aggregator.SubscribeToEventType<TaskDeleted>(this);
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -52,6 +71,73 @@ public partial class TasksViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    public Task OnNextAsync(TaskUpserted @event, CancellationToken cancellationToken = default)
+    {
+        if (@event == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_sync != null && string.Equals(@event.DeviceId, _sync.DeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.CompletedTask;
+        }
+
+        return ReloadFromSyncAsync();
+    }
+
+    public Task OnNextAsync(TaskDeleted @event, CancellationToken cancellationToken = default)
+    {
+        if (@event == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_sync != null && string.Equals(@event.DeviceId, _sync.DeviceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.CompletedTask;
+        }
+
+        return ReloadFromSyncAsync();
+    }
+
+    private Task ReloadFromSyncAsync()
+    {
+        if (_uiContext != null)
+        {
+            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _uiContext.Post(async _ =>
+            {
+                try
+                {
+                    await LoadAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // ignore sync reload failures
+                }
+                finally
+                {
+                    completion.TrySetResult(true);
+                }
+            }, null);
+
+            return completion.Task;
+        }
+
+        return Task.Run(async () =>
+        {
+            try
+            {
+                await LoadAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // swallow reload issues triggered off the UI thread
+            }
+        });
     }
 
     public async Task TogglePauseAsync(TaskItem task)
