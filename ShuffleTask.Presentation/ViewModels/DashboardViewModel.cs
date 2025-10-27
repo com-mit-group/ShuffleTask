@@ -114,31 +114,31 @@ public partial class DashboardViewModel : ObservableObject,
     }
 
     [ObservableProperty]
-    private string title;
+    private string _title;
 
     [ObservableProperty]
-    private string description;
+    private string _description;
 
     [ObservableProperty]
-    private string schedule;
+    private string _schedule;
 
     [ObservableProperty]
-    private string timerText;
+    private string _timerText;
 
     [ObservableProperty]
-    private bool hasTask;
+    private bool _hasTask;
 
     [ObservableProperty]
-    private bool isBusy;
+    private bool _isBusy;
 
     [ObservableProperty]
-    private string cycleStatus = string.Empty;
+    private string _cycleStatus = string.Empty;
 
     [ObservableProperty]
-    private string phaseBadge = string.Empty;
+    private string _phaseBadge = string.Empty;
 
     [ObservableProperty]
-    private bool isPomodoroVisible;
+    private bool _isPomodoroVisible;
 
     public string? ActiveTaskId => _activeTask?.Id;
 
