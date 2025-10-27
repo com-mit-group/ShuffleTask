@@ -92,198 +92,129 @@ public sealed class ShuffleStateChanged : DomainEventBase
     {
         public override ShuffleStateChanged? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            if (reader.TokenType != JsonTokenType.StartObject)
-            {
-                throw new JsonException("Expected start of object while deserializing ShuffleStateChanged.");
-            }
+            var dto = JsonSerializer.Deserialize<LegacyShuffleStateChangedDto>(ref reader, options)
+                ?? throw new JsonException("Expected state payload when deserializing ShuffleStateChanged.");
 
-            string? deviceId = null;
-            string? taskId = null;
-            bool? isAutoShuffle = null;
-            string? trigger = null;
-            DateTime? eventTimestampUtc = null;
-            int? timerDurationSeconds = null;
-            DateTime? timerExpiresUtc = null;
-            int? timerMode = null;
-            int? pomodoroPhase = null;
-            int? pomodoroCycleIndex = null;
-            int? pomodoroCycleCount = null;
-            int? focusMinutes = null;
-            int? breakMinutes = null;
-            DateTime? occuredAt = null;
-            Guid? eventId = null;
+            var context = new ShuffleDeviceContext(
+                RequireString(dto.DeviceId, "deviceId"),
+                dto.TaskId,
+                RequireBoolean(dto.IsAutoShuffle, "isAutoShuffle"),
+                RequireString(dto.Trigger, "trigger"),
+                RequireDateTime(dto.EventTimestampUtc, "eventTimestampUtc"));
 
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                {
-                    break;
-                }
-
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                {
-                    throw new JsonException("Unexpected token while reading ShuffleStateChanged.");
-                }
-
-                string propertyName = reader.GetString() ?? string.Empty;
-                reader.Read();
-
-                switch (propertyName)
-                {
-                    case "deviceId":
-                        deviceId = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
-                        break;
-                    case "taskId":
-                        taskId = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
-                        break;
-                    case "isAutoShuffle":
-                        isAutoShuffle = reader.TokenType == JsonTokenType.Null ? null : reader.GetBoolean();
-                        break;
-                    case "trigger":
-                        trigger = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
-                        break;
-                    case "eventTimestampUtc":
-                        eventTimestampUtc = JsonSerializer.Deserialize<DateTime>(ref reader, options);
-                        break;
-                    case "timerDurationSeconds":
-                        timerDurationSeconds = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "timerExpiresUtc":
-                        timerExpiresUtc = JsonSerializer.Deserialize<DateTime?>(ref reader, options);
-                        break;
-                    case "timerMode":
-                        timerMode = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "pomodoroPhase":
-                        pomodoroPhase = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "pomodoroCycleIndex":
-                        pomodoroCycleIndex = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "pomodoroCycleCount":
-                        pomodoroCycleCount = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "focusMinutes":
-                        focusMinutes = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "breakMinutes":
-                        breakMinutes = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<int?>(ref reader, options);
-                        break;
-                    case "occuredAt":
-                        occuredAt = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<DateTime?>(ref reader, options);
-                        break;
-                    case "eventId":
-                        eventId = reader.TokenType == JsonTokenType.Null
-                            ? null
-                            : JsonSerializer.Deserialize<Guid?>(ref reader, options);
-                        break;
-                    default:
-                        reader.Skip();
-                        break;
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(deviceId))
-            {
-                throw new JsonException("deviceId is required for ShuffleStateChanged.");
-            }
-
-            if (isAutoShuffle is null)
-            {
-                throw new JsonException("isAutoShuffle is required for ShuffleStateChanged.");
-            }
-
-            if (trigger is null)
-            {
-                throw new JsonException("trigger is required for ShuffleStateChanged.");
-            }
-
-            if (eventTimestampUtc is null)
-            {
-                throw new JsonException("eventTimestampUtc is required for ShuffleStateChanged.");
-            }
-
-            var context = new ShuffleDeviceContext(deviceId, taskId, isAutoShuffle.Value, trigger, eventTimestampUtc.Value);
             var snapshot = new ShuffleTimerSnapshot(
-                timerDurationSeconds,
-                timerExpiresUtc,
-                timerMode,
-                pomodoroPhase,
-                pomodoroCycleIndex,
-                pomodoroCycleCount,
-                focusMinutes,
-                breakMinutes);
+                dto.TimerDurationSeconds,
+                dto.TimerExpiresUtc,
+                dto.TimerMode,
+                dto.PomodoroPhase,
+                dto.PomodoroCycleIndex,
+                dto.PomodoroCycleCount,
+                dto.FocusMinutes,
+                dto.BreakMinutes);
 
-            return new ShuffleStateChanged(context, snapshot, occuredAt, eventId);
+            return new ShuffleStateChanged(context, snapshot, dto.OccuredAt, dto.EventId);
         }
 
         public override void Write(Utf8JsonWriter writer, ShuffleStateChanged value, JsonSerializerOptions options)
         {
-            writer.WriteStartObject();
-            writer.WriteString("deviceId", value.DeviceId);
-
-            if (value.TaskId is not null)
+            var dto = new LegacyShuffleStateChangedDto
             {
-                writer.WriteString("taskId", value.TaskId);
-            }
-            else
+                DeviceId = value.DeviceId,
+                TaskId = value.TaskId,
+                IsAutoShuffle = value.IsAutoShuffle,
+                Trigger = value.Trigger,
+                EventTimestampUtc = value.EventTimestampUtc,
+                TimerDurationSeconds = value.TimerDurationSeconds,
+                TimerExpiresUtc = value.TimerExpiresUtc,
+                TimerMode = value.TimerMode,
+                PomodoroPhase = value.PomodoroPhase,
+                PomodoroCycleIndex = value.PomodoroCycleIndex,
+                PomodoroCycleCount = value.PomodoroCycleCount,
+                FocusMinutes = value.FocusMinutes,
+                BreakMinutes = value.BreakMinutes,
+                OccuredAt = value.OccuredAt,
+                EventId = value.EventId,
+            };
+
+            JsonSerializer.Serialize(writer, dto, options);
+        }
+
+        private static string RequireString(string? value, string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
             {
-                writer.WriteNull("taskId");
+                throw new JsonException($"{propertyName} is required for ShuffleStateChanged.");
             }
 
-            writer.WriteBoolean("isAutoShuffle", value.IsAutoShuffle);
-            writer.WriteString("trigger", value.Trigger);
+            return value;
+        }
 
-            writer.WritePropertyName("eventTimestampUtc");
-            JsonSerializer.Serialize(writer, value.EventTimestampUtc, options);
+        private static bool RequireBoolean(bool? value, string propertyName)
+        {
+            if (value is null)
+            {
+                throw new JsonException($"{propertyName} is required for ShuffleStateChanged.");
+            }
 
-            writer.WritePropertyName("timerDurationSeconds");
-            JsonSerializer.Serialize(writer, value.TimerDurationSeconds, options);
+            return value.Value;
+        }
 
-            writer.WritePropertyName("timerExpiresUtc");
-            JsonSerializer.Serialize(writer, value.TimerExpiresUtc, options);
+        private static DateTime RequireDateTime(DateTime? value, string propertyName)
+        {
+            if (value is null)
+            {
+                throw new JsonException($"{propertyName} is required for ShuffleStateChanged.");
+            }
 
-            writer.WritePropertyName("timerMode");
-            JsonSerializer.Serialize(writer, value.TimerMode, options);
+            return value.Value;
+        }
 
-            writer.WritePropertyName("pomodoroPhase");
-            JsonSerializer.Serialize(writer, value.PomodoroPhase, options);
+        private sealed class LegacyShuffleStateChangedDto
+        {
+            [JsonPropertyName("deviceId")]
+            public string? DeviceId { get; set; }
 
-            writer.WritePropertyName("pomodoroCycleIndex");
-            JsonSerializer.Serialize(writer, value.PomodoroCycleIndex, options);
+            [JsonPropertyName("taskId")]
+            public string? TaskId { get; set; }
 
-            writer.WritePropertyName("pomodoroCycleCount");
-            JsonSerializer.Serialize(writer, value.PomodoroCycleCount, options);
+            [JsonPropertyName("isAutoShuffle")]
+            public bool? IsAutoShuffle { get; set; }
 
-            writer.WritePropertyName("focusMinutes");
-            JsonSerializer.Serialize(writer, value.FocusMinutes, options);
+            [JsonPropertyName("trigger")]
+            public string? Trigger { get; set; }
 
-            writer.WritePropertyName("breakMinutes");
-            JsonSerializer.Serialize(writer, value.BreakMinutes, options);
+            [JsonPropertyName("eventTimestampUtc")]
+            public DateTime? EventTimestampUtc { get; set; }
 
-            writer.WritePropertyName("occuredAt");
-            JsonSerializer.Serialize(writer, value.OccuredAt, options);
+            [JsonPropertyName("timerDurationSeconds")]
+            public int? TimerDurationSeconds { get; set; }
 
-            writer.WritePropertyName("eventId");
-            JsonSerializer.Serialize(writer, value.EventId, options);
+            [JsonPropertyName("timerExpiresUtc")]
+            public DateTime? TimerExpiresUtc { get; set; }
 
-            writer.WriteEndObject();
+            [JsonPropertyName("timerMode")]
+            public int? TimerMode { get; set; }
+
+            [JsonPropertyName("pomodoroPhase")]
+            public int? PomodoroPhase { get; set; }
+
+            [JsonPropertyName("pomodoroCycleIndex")]
+            public int? PomodoroCycleIndex { get; set; }
+
+            [JsonPropertyName("pomodoroCycleCount")]
+            public int? PomodoroCycleCount { get; set; }
+
+            [JsonPropertyName("focusMinutes")]
+            public int? FocusMinutes { get; set; }
+
+            [JsonPropertyName("breakMinutes")]
+            public int? BreakMinutes { get; set; }
+
+            [JsonPropertyName("occuredAt")]
+            public DateTime? OccuredAt { get; set; }
+
+            [JsonPropertyName("eventId")]
+            public Guid? EventId { get; set; }
         }
     }
 }
