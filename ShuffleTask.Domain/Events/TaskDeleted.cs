@@ -7,7 +7,7 @@ public sealed class TaskDeleted : DomainEventBase
 {
     [JsonConstructor]
     public TaskDeleted(string taskId, string deviceId, DateTime deletedAt, DateTime? occuredAt = null, Guid? eventId = null)
-        : base(occuredAt ?? default, eventId ?? default)
+        : base(occuredAt ?? default, eventId ?? Guid.Empty)
     {
         if (string.IsNullOrWhiteSpace(taskId))
         {

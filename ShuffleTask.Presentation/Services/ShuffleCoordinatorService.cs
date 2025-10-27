@@ -765,12 +765,14 @@ public class ShuffleCoordinatorService : IDisposable
             Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
         }
 
-        return new ShuffleStateChanged(
+        var context = new ShuffleStateChanged.ShuffleDeviceContext(
             _sync?.DeviceId ?? "local",
             task.Id,
             isAutoShuffle,
             trigger,
-            now.UtcDateTime,
+            now.UtcDateTime);
+
+        var timer = new ShuffleStateChanged.ShuffleTimerSnapshot(
             seconds,
             expiresAt.UtcDateTime,
             (int)timerSettings.Mode,
@@ -779,6 +781,8 @@ public class ShuffleCoordinatorService : IDisposable
             timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.PomodoroCycles) : null,
             timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.FocusMinutes) : null,
             timerSettings.Mode == TimerMode.Pomodoro ? Math.Max(1, timerSettings.BreakMinutes) : null);
+
+        return new ShuffleStateChanged(context, timer);
     }
 
     private ShuffleStateChanged CreateClearedState(string trigger, bool isAutoShuffle)
@@ -794,12 +798,13 @@ public class ShuffleCoordinatorService : IDisposable
         Preferences.Default.Remove(PreferenceKeys.PomodoroBreak);
 
         DateTimeOffset now = GetCurrentInstant();
-        return new ShuffleStateChanged(
+        var context = new ShuffleStateChanged.ShuffleDeviceContext(
             _sync?.DeviceId ?? "local",
             null,
             isAutoShuffle,
             trigger,
-            now.UtcDateTime,
+            now.UtcDateTime);
+        var timer = new ShuffleStateChanged.ShuffleTimerSnapshot(
             null,
             null,
             null,
@@ -808,6 +813,8 @@ public class ShuffleCoordinatorService : IDisposable
             null,
             null,
             null);
+
+        return new ShuffleStateChanged(context, timer);
     }
 
     private async Task BroadcastShuffleStateAsync(ShuffleStateChanged state)
@@ -829,15 +836,16 @@ public class ShuffleCoordinatorService : IDisposable
 
     private NotificationBroadcasted CreateNotificationEvent(string title, string message, string? taskId, bool isReminder)
     {
-        return new NotificationBroadcasted(
+        var identity = new NotificationBroadcasted.NotificationIdentity(
             Guid.NewGuid().ToString("N"),
-            title,
-            message,
-            _sync?.DeviceId ?? "local",
+            _sync?.DeviceId ?? "local");
+        var content = new NotificationBroadcasted.NotificationContent(title, message);
+        var schedule = new NotificationBroadcasted.NotificationSchedule(
             taskId,
             _clock.GetUtcNow().UtcDateTime,
-            null,
-            isReminder);
+            null);
+
+        return new NotificationBroadcasted(identity, content, schedule, isReminder);
     }
 
     private async Task BroadcastNotificationAsync(NotificationBroadcasted notification)

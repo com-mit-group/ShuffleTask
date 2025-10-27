@@ -58,19 +58,8 @@ public sealed class DashboardViewModelTests
 
         var now = _clock.GetUtcNow();
         var evt = new ShuffleStateChanged(
-            deviceId: "remote-device",
-            taskId: task.Id,
-            isAutoShuffle: false,
-            trigger: "remote",
-            eventTimestampUtc: now.UtcDateTime,
-            timerDurationSeconds: 300,
-            timerExpiresUtc: now.AddSeconds(300).UtcDateTime,
-            timerMode: (int)TimerMode.LongInterval,
-            pomodoroPhase: null,
-            pomodoroCycleIndex: null,
-            pomodoroCycleCount: null,
-            focusMinutes: null,
-            breakMinutes: null);
+            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", task.Id, false, "remote", now.UtcDateTime),
+            new ShuffleStateChanged.ShuffleTimerSnapshot(300, now.AddSeconds(300).UtcDateTime, (int)TimerMode.LongInterval, null, null, null, null, null));
 
         await viewModel.OnNextAsync(evt);
 
@@ -101,38 +90,16 @@ public sealed class DashboardViewModelTests
 
         var now = _clock.GetUtcNow();
         var active = new ShuffleStateChanged(
-            deviceId: "remote-device",
-            taskId: task.Id,
-            isAutoShuffle: false,
-            trigger: "remote",
-            eventTimestampUtc: now.UtcDateTime,
-            timerDurationSeconds: 60,
-            timerExpiresUtc: now.AddSeconds(60).UtcDateTime,
-            timerMode: (int)TimerMode.LongInterval,
-            pomodoroPhase: null,
-            pomodoroCycleIndex: null,
-            pomodoroCycleCount: null,
-            focusMinutes: null,
-            breakMinutes: null);
+            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", task.Id, false, "remote", now.UtcDateTime),
+            new ShuffleStateChanged.ShuffleTimerSnapshot(60, now.AddSeconds(60).UtcDateTime, (int)TimerMode.LongInterval, null, null, null, null, null));
         await viewModel.OnNextAsync(active);
 
         bool cleared = false;
         viewModel.CountdownCleared += (_, _) => cleared = true;
 
         var clearedEvent = new ShuffleStateChanged(
-            deviceId: "remote-device",
-            taskId: null,
-            isAutoShuffle: false,
-            trigger: "clear",
-            eventTimestampUtc: now.AddMinutes(1).UtcDateTime,
-            timerDurationSeconds: null,
-            timerExpiresUtc: null,
-            timerMode: null,
-            pomodoroPhase: null,
-            pomodoroCycleIndex: null,
-            pomodoroCycleCount: null,
-            focusMinutes: null,
-            breakMinutes: null);
+            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", null, false, "clear", now.AddMinutes(1).UtcDateTime),
+            new ShuffleStateChanged.ShuffleTimerSnapshot(null, null, null, null, null, null, null, null));
 
         await viewModel.OnNextAsync(clearedEvent);
 
