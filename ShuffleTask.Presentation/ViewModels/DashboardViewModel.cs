@@ -642,18 +642,35 @@ public partial class DashboardViewModel : ObservableObject,
         var schedulingTasks = new List<Task>();
         TimeSpan offset = TimeSpan.Zero;
         bool hasBreak = session.BreakMinutes > 0;
+        bool summaryScheduled = false;
 
         for (int cycle = 1; cycle <= session.CycleCount; cycle++)
         {
-            offset = await ScheduleFocusCompletionAsync(task, session, settings, displayTitle, cycle, offset, schedulingTasks);
+            (offset, bool focusSummaryScheduled) = await ScheduleFocusCompletionAsync(
+                task,
+                session,
+                settings,
+                displayTitle,
+                cycle,
+                offset,
+                schedulingTasks);
+            summaryScheduled |= focusSummaryScheduled;
 
             if (hasBreak)
             {
-                offset = await ScheduleBreakPhaseAsync(task, session, settings, displayTitle, cycle, offset, schedulingTasks);
+                (offset, bool breakSummaryScheduled) = await ScheduleBreakPhaseAsync(
+                    task,
+                    session,
+                    settings,
+                    displayTitle,
+                    cycle,
+                    offset,
+                    schedulingTasks);
+                summaryScheduled |= breakSummaryScheduled;
             }
         }
 
-        if (!hasBreak)
+        if (!summaryScheduled)
         {
             await ScheduleSummaryAsync(task, session, settings, displayTitle, offset, schedulingTasks);
         }
@@ -664,7 +681,7 @@ public partial class DashboardViewModel : ObservableObject,
         }
     }
 
-    private async Task<TimeSpan> ScheduleFocusCompletionAsync(
+    private async Task<(TimeSpan Offset, bool SummaryScheduled)> ScheduleFocusCompletionAsync(
         TaskItem task,
         PomodoroSession session,
         AppSettings settings,
@@ -676,6 +693,7 @@ public partial class DashboardViewModel : ObservableObject,
         offset += TimeSpan.FromMinutes(session.FocusMinutes);
         bool hasBreak = session.BreakMinutes > 0;
         bool isLastCycle = cycle == session.CycleCount;
+        bool summaryScheduled = false;
 
         string focusTitle = $"{displayTitle}: Focus complete";
         string focusMessage = hasBreak
@@ -690,12 +708,13 @@ public partial class DashboardViewModel : ObservableObject,
         if (!hasBreak && isLastCycle)
         {
             await ScheduleSummaryAsync(task, session, settings, displayTitle, offset, schedulingTasks);
+            summaryScheduled = true;
         }
 
-        return offset;
+        return (offset, summaryScheduled);
     }
 
-    private async Task<TimeSpan> ScheduleBreakPhaseAsync(
+    private async Task<(TimeSpan Offset, bool SummaryScheduled)> ScheduleBreakPhaseAsync(
         TaskItem task,
         PomodoroSession session,
         AppSettings settings,
@@ -706,10 +725,12 @@ public partial class DashboardViewModel : ObservableObject,
     {
         offset += TimeSpan.FromMinutes(session.BreakMinutes);
         bool isLastCycle = cycle == session.CycleCount;
+        bool summaryScheduled = false;
 
         if (isLastCycle)
         {
             await ScheduleSummaryAsync(task, session, settings, displayTitle, offset, schedulingTasks);
+            summaryScheduled = true;
         }
         else
         {
@@ -719,7 +740,7 @@ public partial class DashboardViewModel : ObservableObject,
             await BroadcastNotificationAsync(breakTitle, breakMessage, task.Id, isReminder: false, delay: offset);
         }
 
-        return offset;
+        return (offset, summaryScheduled);
     }
 
     private async Task ScheduleSummaryAsync(
