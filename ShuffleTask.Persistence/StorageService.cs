@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence.Models;
@@ -13,6 +15,7 @@ namespace ShuffleTask.Persistence;
 public class StorageService : IStorageService
 {
     private const string SettingsKey = "app_settings";
+    private const string ProfileIdentityKey = "profile_identity";
     private const string IntegerSqlType = "INTEGER";
 
     private readonly TimeProvider _clock;
@@ -651,6 +654,71 @@ public class StorageService : IStorageService
             existing.Value = json;
             await Db.UpdateAsync(existing);
         }
+    }
+
+    public async Task<ProfileIdentity> GetProfileIdentityAsync()
+    {
+        KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(ProfileIdentityKey);
+        ProfileIdentity? identity = ParseIdentity(kv?.Value);
+        if (identity != null)
+        {
+            return identity;
+        }
+
+        identity = new ProfileIdentity(Guid.NewGuid().ToString("N"), GenerateSecret());
+        string json = JsonConvert.SerializeObject(identity);
+
+        if (kv == null)
+        {
+            kv = new KeyValueEntity
+            {
+                Key = ProfileIdentityKey,
+                Value = json
+            };
+            await Db.InsertAsync(kv);
+        }
+        else
+        {
+            kv.Value = json;
+            await Db.UpdateAsync(kv);
+        }
+
+        return identity;
+    }
+
+    private static ProfileIdentity? ParseIdentity(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            ProfileIdentity? identity = JsonConvert.DeserializeObject<ProfileIdentity>(value);
+            if (identity == null)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(identity.ProfileId) || string.IsNullOrWhiteSpace(identity.ProfileSecret))
+            {
+                return null;
+            }
+
+            return identity;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string GenerateSecret()
+    {
+        Span<byte> buffer = stackalloc byte[32];
+        RandomNumberGenerator.Fill(buffer);
+        return Convert.ToBase64String(buffer);
     }
 
     private static AppSettings NormalizeSettings(AppSettings settings)

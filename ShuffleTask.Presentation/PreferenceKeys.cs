@@ -11,6 +11,8 @@ internal static class PreferenceKeys
     public const string ShuffleCount = "pref.shuffleCount";
     public const string CutInLineTaskId = "pref.cutInLineTaskId";
     public const string DeviceId = "pref.sync.deviceId";
+    public const string ProfileId = "pref.sync.profileId";
+    public const string ProfileSecret = "pref.sync.profileSecret";
     public const string TimerMode = "pref.timerMode";
     public const string PomodoroPhase = "pref.pomodoro.phase";
     public const string PomodoroCycle = "pref.pomodoro.cycle";

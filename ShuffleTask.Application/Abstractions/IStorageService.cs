@@ -1,4 +1,5 @@
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Abstractions;
@@ -16,4 +17,5 @@ public interface IStorageService
     Task<TaskItem?> ResumeTaskAsync(string id);
     Task<AppSettings> GetSettingsAsync();
     Task SetSettingsAsync(AppSettings settings);
+    Task<ProfileIdentity> GetProfileIdentityAsync();
 }

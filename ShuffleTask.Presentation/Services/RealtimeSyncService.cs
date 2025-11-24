@@ -51,6 +51,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private bool _initialized;
     private bool _isConnected;
     private readonly string _deviceId;
+    private ProfileIdentity? _profileIdentity;
     private bool _listeningStarted;
 
     public RealtimeSyncService(
@@ -82,6 +83,10 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
     public string DeviceId => _deviceId;
 
+    public string ProfileId => _profileIdentity?.ProfileId ?? string.Empty;
+
+    public string ProfileSecret => _profileIdentity?.ProfileSecret ?? string.Empty;
+
     public bool IsConnected => _isConnected;
 
     public bool ShouldBroadcastLocalChanges => _suppression.Value == 0;
@@ -101,6 +106,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             }
 
             await LoadPendingEventsAsync().ConfigureAwait(false);
+            await EnsureProfileIdentityAsync().ConfigureAwait(false);
 
             if (_options.Enabled)
             {
@@ -234,6 +240,44 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         catch (Exception ex)
         {
             _logger?.LogSyncEvent("AttachStorageFailed", null, ex);
+        }
+    }
+
+    private async Task EnsureProfileIdentityAsync()
+    {
+        if (_profileIdentity != null)
+        {
+            return;
+        }
+
+        string cachedId = Preferences.Default.Get(PreferenceKeys.ProfileId, string.Empty);
+        string cachedSecret = Preferences.Default.Get(PreferenceKeys.ProfileSecret, string.Empty);
+        if (!string.IsNullOrWhiteSpace(cachedId) && !string.IsNullOrWhiteSpace(cachedSecret))
+        {
+            _profileIdentity = new ProfileIdentity(cachedId, cachedSecret);
+            return;
+        }
+
+        try
+        {
+            var storage = _storageFactory();
+            ProfileIdentity identity = await storage.GetProfileIdentityAsync().ConfigureAwait(false);
+            _profileIdentity = identity;
+            Preferences.Default.Set(PreferenceKeys.ProfileId, identity.ProfileId);
+            Preferences.Default.Set(PreferenceKeys.ProfileSecret, identity.ProfileSecret);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogSyncEvent("EnsureProfileIdentityFailed", null, ex);
+            if (_profileIdentity == null)
+            {
+                var fallback = new ProfileIdentity(
+                    string.IsNullOrWhiteSpace(cachedId) ? Guid.NewGuid().ToString("N") : cachedId,
+                    string.IsNullOrWhiteSpace(cachedSecret) ? Guid.NewGuid().ToString("N") : cachedSecret);
+                _profileIdentity = fallback;
+                Preferences.Default.Set(PreferenceKeys.ProfileId, fallback.ProfileId);
+                Preferences.Default.Set(PreferenceKeys.ProfileSecret, fallback.ProfileSecret);
+            }
         }
     }
 
