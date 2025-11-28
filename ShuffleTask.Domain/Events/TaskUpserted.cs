@@ -7,8 +7,8 @@ namespace ShuffleTask.Domain.Events;
 public sealed class TaskUpserted : DomainEventBase
 {
     [JsonConstructor]
-    public TaskUpserted(TaskItem task, string deviceId, DateTime updatedAt, DateTime? occuredAt = null, Guid? eventId = null)
-        : base(occuredAt ?? default, eventId ?? Guid.Empty)
+    public TaskUpserted(TaskItem task, string deviceId, DateTime updatedAt, DateTime? dateTimeOccurredUtc = null, Guid? eventId = null)
+        : base(dateTimeOccurredUtc ?? default, eventId ?? Guid.Empty)
     {
         Task = task ?? throw new ArgumentNullException(nameof(task));
         DeviceId = deviceId ?? throw new ArgumentNullException(nameof(deviceId));

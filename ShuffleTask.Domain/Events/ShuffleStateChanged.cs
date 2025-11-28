@@ -10,9 +10,9 @@ public sealed class ShuffleStateChanged : DomainEventBase
     public ShuffleStateChanged(
         ShuffleDeviceContext context,
         ShuffleTimerSnapshot timer,
-        DateTime? occuredAt = null,
+        DateTime? dateTimeOccurredUtc = null,
         Guid? eventId = null)
-        : base(occuredAt ?? default, eventId ?? Guid.Empty)
+        : base(dateTimeOccurredUtc ?? default, eventId ?? Guid.Empty)
     {
         if (string.IsNullOrWhiteSpace(context.DeviceId))
         {

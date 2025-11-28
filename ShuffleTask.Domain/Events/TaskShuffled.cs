@@ -5,7 +5,8 @@ public class TaskShuffled : DomainEventBase
 {
     public Guid TaskId { get; }
 
-    public TaskShuffled(Guid taskId, DateTime occuredAt = default, Guid eventId = default) : base(occuredAt, eventId)
+    public TaskShuffled(Guid taskId, DateTime dateTimeOccurredUtc = default, Guid eventId = default)
+        : base(dateTimeOccurredUtc, eventId)
     {
         TaskId = taskId;
     }
