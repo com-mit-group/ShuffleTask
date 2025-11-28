@@ -7,6 +7,10 @@ public interface IRealtimeSyncService
 {
     string DeviceId { get; }
 
+    string ProfileId { get; }
+
+    string ProfileSecret { get; }
+
     bool IsConnected { get; }
 
     bool ShouldBroadcastLocalChanges { get; }

@@ -168,6 +168,35 @@ public sealed class RealtimeSyncServiceTests
         Assert.That(_notifications.Shown, Is.Empty, "Self-originated notifications should not be relayed.");
     }
 
+    [Test]
+    public async Task InitializeAsync_EnsuresProfileIdentityPersistence()
+    {
+        var service = CreateService("identity-device-1");
+        await service.InitializeAsync();
+
+        Assert.That(service.ProfileId, Is.Not.Empty, "ProfileId should be generated during initialization.");
+        Assert.That(service.ProfileSecret, Is.Not.Empty, "ProfileSecret should be generated during initialization.");
+
+        string cachedId = Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.ProfileId, string.Empty);
+        string cachedSecret = Microsoft.Maui.Storage.Preferences.Default.Get(PreferenceKeys.ProfileSecret, string.Empty);
+
+        Assert.That(cachedId, Is.EqualTo(service.ProfileId), "ProfileId should be cached in preferences.");
+        Assert.That(cachedSecret, Is.EqualTo(service.ProfileSecret), "ProfileSecret should be cached in preferences.");
+
+        var service2 = CreateService("identity-device-2");
+        await service2.InitializeAsync();
+
+        Assert.That(service2.ProfileId, Is.EqualTo(service.ProfileId), "ProfileId should be reused on subsequent startups.");
+        Assert.That(service2.ProfileSecret, Is.EqualTo(service.ProfileSecret), "ProfileSecret should be reused on subsequent startups.");
+
+        ProfileIdentity storedIdentity = await _storage.GetProfileIdentityAsync();
+        Assert.That(storedIdentity.ProfileId, Is.EqualTo(service.ProfileId), "ProfileId should persist in storage.");
+        Assert.That(storedIdentity.ProfileSecret, Is.EqualTo(service.ProfileSecret), "ProfileSecret should persist in storage.");
+
+        await service.DisposeAsync();
+        await service2.DisposeAsync();
+    }
+
     private RealtimeSyncService CreateService(string deviceId)
     {
         Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, deviceId);

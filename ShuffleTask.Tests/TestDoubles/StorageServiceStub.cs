@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Tests.TestDoubles;
@@ -13,6 +14,7 @@ public class StorageServiceStub : IStorageService
     private readonly TimeProvider _clock;
     private bool _initialized;
     private AppSettings _settings = new();
+    private ProfileIdentity? _profileIdentity;
 
     public int InitializeCallCount { get; private set; }
     public int GetTasksCallCount { get; private set; }
@@ -156,6 +158,13 @@ public class StorageServiceStub : IStorageService
         SetSettingsCallCount++;
         _settings = Clone(settings);
         return Task.CompletedTask;
+    }
+
+    public Task<ProfileIdentity> GetProfileIdentityAsync()
+    {
+        EnsureInitialized();
+        _profileIdentity ??= new ProfileIdentity(Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"));
+        return Task.FromResult(_profileIdentity);
     }
 
     private void AutoResumeDueTasks()
