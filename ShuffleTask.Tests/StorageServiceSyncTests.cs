@@ -1,16 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence;
 using ShuffleTask.Tests.TestDoubles;
 using Yaref92.Events;
+using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Tests;
 
@@ -128,9 +124,16 @@ public sealed class StorageServiceSyncTests
 
     private static void Cleanup(string path)
     {
-        if (File.Exists(path))
+        try
         {
-            File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            Console.WriteLine("Failed to delete temp test file. Delete manually to save space, or ignore");
         }
     }
 

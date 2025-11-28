@@ -13,7 +13,7 @@ using ShuffleTask.Presentation.Tests.TestSupport;
 using ShuffleTask.Tests.TestDoubles;
 using ShuffleTask.ViewModels;
 using Yaref92.Events;
-using Microsoft.Extensions.Time.Testing;
+//using Microsoft.Extensions.Time.Testing;
 
 namespace ShuffleTask.Presentation.Tests;
 

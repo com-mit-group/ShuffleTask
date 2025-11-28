@@ -13,8 +13,8 @@ using Yaref92.Events.Abstractions;
 namespace ShuffleTask.ViewModels;
 
 public partial class TasksViewModel : ObservableObject,
-    IAsyncEventSubscriber<TaskUpserted>,
-    IAsyncEventSubscriber<TaskDeleted>
+    IAsyncEventHandler<TaskUpserted>,
+    IAsyncEventHandler<TaskDeleted>
 {
     private readonly IStorageService _storage;
     private readonly TimeProvider _clock;

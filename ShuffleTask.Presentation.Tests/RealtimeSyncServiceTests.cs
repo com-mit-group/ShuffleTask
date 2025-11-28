@@ -1,17 +1,15 @@
-using System;
-using System.IO;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
-using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Tests.TestSupport;
 using ShuffleTask.Tests.TestDoubles;
+using System.IO;
+using System.Reflection;
+using Yaref92.Events;
 
 namespace ShuffleTask.Presentation.Tests;
 
@@ -39,9 +37,16 @@ public sealed class RealtimeSyncServiceTests
     public async Task TearDown()
     {
         await DisposeStorageAsync();
-        if (File.Exists(_dbPath))
+        try
         {
-            File.Delete(_dbPath);
+            if (File.Exists(_dbPath))
+            {
+                File.Delete(_dbPath);
+            }
+        }
+        catch (IOException)
+        {
+            Console.WriteLine("Failed to delete temp test file. Delete manually to save space, or ignore");
         }
     }
 
@@ -125,7 +130,7 @@ public sealed class RealtimeSyncServiceTests
         var service = CreateService("pref-device");
         var now = _clock.GetUtcNow();
         var evt = new ShuffleStateChanged(
-            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", "task-123", false, trigger: "remote", now.UtcDateTime),
+            new ShuffleStateChanged.ShuffleDeviceContext("remote-device", "task-123", false, "remote", now.UtcDateTime),
             new ShuffleStateChanged.ShuffleTimerSnapshot(600, now.AddMinutes(10).UtcDateTime, (int)TimerMode.Pomodoro, 1, 2, 4, 20, 5));
 
         await InvokeSubscriberAsync(service, "ShuffleStateChangedSubscriber", evt);
@@ -192,29 +197,5 @@ public sealed class RealtimeSyncServiceTests
         {
             await asyncDisposable.DisposeAsync();
         }
-    }
-}
-
-namespace ShuffleTask.Presentation.Tests.TestSupport;
-
-internal sealed class TestNotificationService : INotificationService
-{
-    public List<(string Title, string Message)> Shown { get; } = new();
-
-    public Task InitializeAsync() => Task.CompletedTask;
-
-    public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
-        => Task.CompletedTask;
-
-    public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings)
-        => Task.CompletedTask;
-
-    public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings, TimeSpan delay)
-        => Task.CompletedTask;
-
-    public Task ShowToastAsync(string title, string message, AppSettings settings)
-    {
-        Shown.Add((title, message));
-        return Task.CompletedTask;
     }
 }

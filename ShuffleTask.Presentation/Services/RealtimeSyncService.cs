@@ -1,17 +1,10 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Sync;
-using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence;
 using Yaref92.Events;
@@ -637,7 +630,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
     }
 
-    private sealed class TaskUpsertedSubscriber : IAsyncEventSubscriber<TaskUpserted>
+    private sealed class TaskUpsertedSubscriber : IAsyncEventHandler<TaskUpserted>
     {
         private readonly RealtimeSyncService _service;
 
@@ -647,7 +640,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             => _service.HandleTaskUpsertedAsync(@event, cancellationToken);
     }
 
-    private sealed class TaskDeletedSubscriber : IAsyncEventSubscriber<TaskDeleted>
+    private sealed class TaskDeletedSubscriber : IAsyncEventHandler<TaskDeleted>
     {
         private readonly RealtimeSyncService _service;
 
@@ -657,7 +650,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             => _service.HandleTaskDeletedAsync(@event, cancellationToken);
     }
 
-    private sealed class ShuffleStateChangedSubscriber : IAsyncEventSubscriber<ShuffleStateChanged>
+    private sealed class ShuffleStateChangedSubscriber : IAsyncEventHandler<ShuffleStateChanged>
     {
         private readonly RealtimeSyncService _service;
 
@@ -667,7 +660,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             => _service.HandleShuffleStateChangedAsync(@event, cancellationToken);
     }
 
-    private sealed class NotificationBroadcastedSubscriber : IAsyncEventSubscriber<NotificationBroadcasted>
+    private sealed class NotificationBroadcastedSubscriber : IAsyncEventHandler<NotificationBroadcasted>
     {
         private readonly RealtimeSyncService _service;
 

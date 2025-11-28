@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
 using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Events;
@@ -36,7 +33,7 @@ public sealed class NotificationBroadcastedEventSubscriberTests
         Assert.That(received!.NotificationId, Is.EqualTo("notif-42"));
     }
 
-    private sealed class RecordingSubscriber(Func<NotificationBroadcasted, Task> callback) : Yaref92.Events.Abstractions.IAsyncEventSubscriber<NotificationBroadcasted>
+    private sealed class RecordingSubscriber(Func<NotificationBroadcasted, Task> callback) : Yaref92.Events.Abstractions.IAsyncEventHandler<NotificationBroadcasted>
     {
         public Task OnNextAsync(NotificationBroadcasted @event, CancellationToken cancellationToken = default)
             => callback(@event);

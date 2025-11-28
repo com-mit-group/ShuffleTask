@@ -1,15 +1,15 @@
-using System;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Sync;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Domain.Events;
 using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Tests.TestSupport;
+using ShuffleTask.Tests.TestDoubles;
+using Yaref92.Events;
 using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Presentation.Tests;
@@ -77,7 +77,7 @@ public sealed class RealtimeSyncIntegrationTests
             return replicated is not null && replicated.Title == "Replicate me";
         }, TimeSpan.FromSeconds(5), "Remote storage should receive upsert events.");
 
-        _clockA.Advance(TimeSpan.FromMinutes(5));
+        _clockA.AdvanceTime(TimeSpan.FromMinutes(5));
         task.Title = "Updated";
         await _storageA.UpdateTaskAsync(task);
 
@@ -119,7 +119,7 @@ public sealed class RealtimeSyncIntegrationTests
         {
             Enabled = true,
             ListenPort = portA,
-            ReconnectInterval = TimeSpan.FromMilliseconds(200)
+            ReconnectInterval = TimeSpan.FromMilliseconds(1)
         };
         optionsA.Peers.Add(new SyncPeer("127.0.0.1", portB));
 
@@ -127,11 +127,11 @@ public sealed class RealtimeSyncIntegrationTests
         {
             Enabled = true,
             ListenPort = portB,
-            ReconnectInterval = TimeSpan.FromMilliseconds(200)
+            ReconnectInterval = TimeSpan.FromMilliseconds(1)
         };
         optionsB.Peers.Add(new SyncPeer("127.0.0.1", portA));
 
-        await using var harness = await SyncHarness.CreateAsync(
+        await using SyncHarness harness = await SyncHarness.CreateAsync(
             _storageA,
             _storageB,
             _clockA,
@@ -176,9 +176,16 @@ public sealed class RealtimeSyncIntegrationTests
 
     private static void DeleteIfExists(string path)
     {
-        if (File.Exists(path))
+        try
         {
-            File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            Console.WriteLine("Failed to delete temp test file. Delete manually to save space, or ignore");
         }
     }
 
@@ -262,7 +269,7 @@ public sealed class RealtimeSyncIntegrationTests
         }
     }
 
-    private sealed class Bridge<TEvent> : IAsyncEventSubscriber<TEvent> where TEvent : DomainEventBase
+    private sealed class Bridge<TEvent> : IAsyncEventHandler<TEvent> where TEvent : DomainEventBase
     {
         private readonly IEventAggregator _target;
 
@@ -272,8 +279,8 @@ public sealed class RealtimeSyncIntegrationTests
             source.SubscribeToEventType(this);
         }
 
-        public Task OnNextAsync(TEvent @event, CancellationToken cancellationToken = default)
-            => _target.PublishEventAsync(@event, cancellationToken);
+        public Task OnNextAsync(TEvent domainEvent, CancellationToken cancellationToken = default)
+            => _target.PublishEventAsync(domainEvent, cancellationToken);
     }
 
     private static int GetFreeTcpPort()

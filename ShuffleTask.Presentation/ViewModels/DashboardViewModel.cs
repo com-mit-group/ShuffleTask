@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Maui.ApplicationModel;
@@ -18,7 +16,7 @@ using Yaref92.Events.Abstractions;
 namespace ShuffleTask.ViewModels;
 
 public partial class DashboardViewModel : ObservableObject,
-    IAsyncEventSubscriber<ShuffleStateChanged>
+    IAsyncEventHandler<ShuffleStateChanged>
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
@@ -245,7 +243,7 @@ public partial class DashboardViewModel : ObservableObject,
             }
         }
 
-        var timerToStart = _currentTimer ?? request;
+        var timerToStart = _currentTimer ?? fallback;
         if (remaining.HasValue)
         {
             TimerText = FormatTimerText(remaining.Value);
@@ -836,7 +834,7 @@ public partial class DashboardViewModel : ObservableObject,
         var context = new ShuffleStateChanged.ShuffleDeviceContext(
             _sync!.DeviceId,
             null,
-            isAutoShuffle: false,
+            false,
             trigger,
             now.UtcDateTime);
         var timer = new ShuffleStateChanged.ShuffleTimerSnapshot(

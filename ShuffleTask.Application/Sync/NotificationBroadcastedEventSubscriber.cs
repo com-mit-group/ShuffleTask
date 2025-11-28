@@ -3,7 +3,7 @@ using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Sync;
 
-public sealed class NotificationBroadcastedEventSubscriber(IEventAggregator eventAggregator) : IAsyncEventSubscriber<NotificationBroadcasted>
+public sealed class NotificationBroadcastedEventSubscriber(IEventAggregator eventAggregator) : IAsyncEventHandler<NotificationBroadcasted>
 {
     private readonly IEventAggregator _eventAggregator = eventAggregator;
 
