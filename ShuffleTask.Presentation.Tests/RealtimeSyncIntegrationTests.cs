@@ -244,11 +244,23 @@ public sealed class RealtimeSyncIntegrationTests
 
             Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, "device-left");
             var left = new RealtimeSyncService(clockLeft, () => leftStorage, notificationsLeft, optionsLeft);
-            await left.InitializeAsync();
+            await left.InitializeAsync(connectPeers: false);
+            TestContext.Progress.WriteLine($"Left listener started: {left.IsListening}");
 
             Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, "device-right");
             var right = new RealtimeSyncService(clockRight, () => rightStorage, notificationsRight, optionsRight);
-            await right.InitializeAsync();
+            await right.InitializeAsync(connectPeers: false);
+            TestContext.Progress.WriteLine($"Right listener started: {right.IsListening}");
+
+            bool hasTcpPeers = optionsLeft.Enabled && optionsRight.Enabled && (optionsLeft.Peers.Count > 0 || optionsRight.Peers.Count > 0);
+            if (hasTcpPeers)
+            {
+                Assert.That(left.IsListening, Is.True, "Left service should start listening before peer connections.");
+                Assert.That(right.IsListening, Is.True, "Right service should start listening before peer connections.");
+
+                await left.InitializeAsync(connectPeers: true);
+                await right.InitializeAsync(connectPeers: true);
+            }
 
             Bridge<TaskUpserted>? upserts = null;
             Bridge<TaskDeleted>? deletions = null;
