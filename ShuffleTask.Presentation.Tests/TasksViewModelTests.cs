@@ -290,7 +290,7 @@ internal sealed class SyncStub : IRealtimeSyncService
 
     public IEventAggregator Aggregator => _aggregator;
 
-    public Task InitializeAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task InitializeAsync(CancellationToken cancellationToken = default, bool connectPeers = true) => Task.CompletedTask;
 
     public Task PublishAsync<TEvent>(TEvent domainEvent, CancellationToken cancellationToken = default)
         where TEvent : DomainEventBase

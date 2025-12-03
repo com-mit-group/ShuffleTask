@@ -45,6 +45,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private bool _isConnected;
     private readonly string _deviceId;
     private bool _listeningStarted;
+    private bool _connectAttempted;
 
     public RealtimeSyncService(
         TimeProvider clock,
@@ -83,34 +84,36 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
     private bool HasPeersConfigured => _tcpTransport != null && _options.Enabled && _options.Peers.Count > 0;
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public bool IsListening => _listeningStarted;
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default, bool connectPeers = true)
     {
         await _initGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_initialized)
+            if (!_initialized)
             {
-                return;
+                await LoadPendingEventsAsync().ConfigureAwait(false);
+
+                if (_options.Enabled)
+                {
+                    await EnsureListeningAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                if (!HasPeersConfigured)
+                {
+                    SetConnected(false, null);
+                }
+
+                _initialized = true;
             }
 
-            await LoadPendingEventsAsync().ConfigureAwait(false);
-
-            if (_options.Enabled)
+            if (connectPeers && HasPeersConfigured && !_connectAttempted)
             {
-                await EnsureListeningAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            if (HasPeersConfigured)
-            {
+                _connectAttempted = true;
                 await ConnectToPeersAsync(cancellationToken).ConfigureAwait(false);
                 StartReconnectLoop();
             }
-            else
-            {
-                SetConnected(false, null);
-            }
-
-            _initialized = true;
         }
         finally
         {

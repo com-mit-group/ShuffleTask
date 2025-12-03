@@ -13,7 +13,7 @@ public interface IRealtimeSyncService
 
     IEventAggregator Aggregator { get; }
 
-    Task InitializeAsync(CancellationToken cancellationToken = default);
+    Task InitializeAsync(CancellationToken cancellationToken = default, bool connectPeers = true);
 
     Task PublishAsync<TEvent>(TEvent domainEvent, CancellationToken cancellationToken = default)
         where TEvent : DomainEventBase;
