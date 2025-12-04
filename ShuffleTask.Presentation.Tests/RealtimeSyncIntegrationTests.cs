@@ -242,15 +242,25 @@ public sealed class RealtimeSyncIntegrationTests
             var optionsLeft = leftOptions ?? new SyncOptions { Enabled = false };
             var optionsRight = rightOptions ?? new SyncOptions { Enabled = false };
 
-            Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, "device-left");
+            string leftAppData = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"sync-left-{Guid.NewGuid():N}");
+            Microsoft.Maui.Storage.FileSystem.SetAppDataDirectory(leftAppData);
+
+            string leftDeviceId = $"device-left-{Guid.NewGuid():N}";
+            Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, leftDeviceId);
             var left = new RealtimeSyncService(clockLeft, () => leftStorage, notificationsLeft, optionsLeft);
             await left.InitializeAsync(connectPeers: false);
             TestContext.Progress.WriteLine($"Left listener started: {left.IsListening}");
 
-            Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, "device-right");
+            string rightAppData = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"sync-right-{Guid.NewGuid():N}");
+            Microsoft.Maui.Storage.FileSystem.SetAppDataDirectory(rightAppData);
+
+            string rightDeviceId = $"device-right-{Guid.NewGuid():N}";
+            Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, rightDeviceId);
             var right = new RealtimeSyncService(clockRight, () => rightStorage, notificationsRight, optionsRight);
             await right.InitializeAsync(connectPeers: false);
             TestContext.Progress.WriteLine($"Right listener started: {right.IsListening}");
+
+            Assert.That(left.DeviceId, Is.Not.EqualTo(right.DeviceId), "RealtimeSyncService DeviceIds should be unique.");
 
             bool hasTcpPeers = optionsLeft.Enabled && optionsRight.Enabled && (optionsLeft.Peers.Count > 0 || optionsRight.Peers.Count > 0);
             if (hasTcpPeers)

@@ -41,11 +41,19 @@ namespace Microsoft.Maui.Storage
 
     public static class Preferences
     {
-        private static readonly InMemoryPreferences DefaultInstance = new();
+        private static readonly ConcurrentDictionary<string, InMemoryPreferences> Instances = new();
 
-        public static IPreferences Default => DefaultInstance;
+        private static string CurrentScope => FileSystem.AppDataDirectory;
 
-        public static void Reset() => DefaultInstance.Clear();
+        public static IPreferences Default => Instances.GetOrAdd(CurrentScope, _ => new InMemoryPreferences());
+
+        public static void Reset()
+        {
+            if (Instances.TryGetValue(CurrentScope, out InMemoryPreferences? preferences))
+            {
+                preferences.Clear();
+            }
+        }
     }
 
     public static class FileSystem
