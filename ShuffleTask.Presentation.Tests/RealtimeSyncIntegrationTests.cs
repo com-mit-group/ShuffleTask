@@ -150,6 +150,11 @@ public sealed class RealtimeSyncIntegrationTests
         var task = new TaskItem { Title = "Networked" };
         await _storageA.AddTaskAsync(task);
 
+        await AwaitInboundEventAsync(
+            harness.RightTrace,
+            TimeSpan.FromSeconds(5),
+            nameof(TaskUpserted));
+
         await EventuallyAsync(
             async () =>
             {
@@ -160,6 +165,11 @@ public sealed class RealtimeSyncIntegrationTests
             "Remote storage should receive network upserts.");
 
         await _storageA.DeleteTaskAsync(task.Id);
+
+        await AwaitInboundEventAsync(
+            harness.RightTrace,
+            TimeSpan.FromSeconds(5),
+            nameof(TaskDeleted));
 
         await EventuallyAsync(
             async () => await _storageB.GetTaskAsync(task.Id) is null,
@@ -213,6 +223,9 @@ public sealed class RealtimeSyncIntegrationTests
         await QueuePendingAsync(harness.Left, new TaskDeleted(deleteCandidate.Id, harness.Left.DeviceId, _clockA.GetUtcNow().UtcDateTime));
 
         await InvokeTransportConnectedAsync(harness.Left);
+
+        await AwaitInboundEventAsync(harness.RightTrace, TimeSpan.FromSeconds(5), nameof(TaskUpserted));
+        await AwaitInboundEventAsync(harness.RightTrace, TimeSpan.FromSeconds(5), nameof(TaskDeleted));
 
         await EventuallyAsync(
             async () =>
@@ -299,28 +312,52 @@ public sealed class RealtimeSyncIntegrationTests
         return list?.Count ?? 0;
     }
 
+    private static async Task AwaitInboundEventAsync(TransportTraceLog traceLog, TimeSpan timeout, string? expectedEventType)
+    {
+        TransportEventTrace? inbound = await traceLog.WaitForReceiveAsync(timeout).ConfigureAwait(false);
+        if (inbound == null)
+        {
+            Assert.Fail($"No inbound events observed within {timeout.TotalSeconds:0} seconds.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedEventType))
+        {
+            Assert.That(inbound!.EventType, Is.EqualTo(expectedEventType), "Unexpected inbound event type.");
+        }
+    }
+
     private sealed class SyncHarness : IAsyncDisposable
     {
         private readonly RealtimeSyncService _left;
         private readonly RealtimeSyncService _right;
         private readonly Bridge<TaskUpserted>? _upserts;
         private readonly Bridge<TaskDeleted>? _deletions;
+        private readonly TransportTraceLog _leftTrace;
+        private readonly TransportTraceLog _rightTrace;
 
         private SyncHarness(
             RealtimeSyncService left,
             RealtimeSyncService right,
             Bridge<TaskUpserted>? upserts,
-            Bridge<TaskDeleted>? deletions)
+            Bridge<TaskDeleted>? deletions,
+            TransportTraceLog leftTrace,
+            TransportTraceLog rightTrace)
         {
             _left = left;
             _right = right;
             _upserts = upserts;
             _deletions = deletions;
+            _leftTrace = leftTrace;
+            _rightTrace = rightTrace;
         }
 
         public RealtimeSyncService Left => _left;
 
         public RealtimeSyncService Right => _right;
+
+        public TransportTraceLog LeftTrace => _leftTrace;
+
+        public TransportTraceLog RightTrace => _rightTrace;
 
         public static async Task<SyncHarness> CreateAsync(
             StorageService leftStorage,
@@ -335,12 +372,15 @@ public sealed class RealtimeSyncIntegrationTests
             var optionsLeft = leftOptions ?? new SyncOptions { Enabled = false };
             var optionsRight = rightOptions ?? new SyncOptions { Enabled = false };
 
+            var leftTrace = new TransportTraceLog();
+            var rightTrace = new TransportTraceLog();
+
             string leftAppData = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"sync-left-{Guid.NewGuid():N}");
             Microsoft.Maui.Storage.FileSystem.SetAppDataDirectory(leftAppData);
 
             string leftDeviceId = $"device-left-{Guid.NewGuid():N}";
             Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, leftDeviceId);
-            var left = new RealtimeSyncService(clockLeft, () => leftStorage, notificationsLeft, optionsLeft);
+            var left = new RealtimeSyncService(clockLeft, () => leftStorage, notificationsLeft, optionsLeft, traceLog: leftTrace);
             await left.InitializeAsync(connectPeers: false);
             TestContext.Progress.WriteLine($"Left listener started: {left.IsListening}");
 
@@ -349,7 +389,7 @@ public sealed class RealtimeSyncIntegrationTests
 
             string rightDeviceId = $"device-right-{Guid.NewGuid():N}";
             Microsoft.Maui.Storage.Preferences.Default.Set(PreferenceKeys.DeviceId, rightDeviceId);
-            var right = new RealtimeSyncService(clockRight, () => rightStorage, notificationsRight, optionsRight);
+            var right = new RealtimeSyncService(clockRight, () => rightStorage, notificationsRight, optionsRight, traceLog: rightTrace);
             await right.InitializeAsync(connectPeers: false);
             TestContext.Progress.WriteLine($"Right listener started: {right.IsListening}");
 
@@ -374,7 +414,7 @@ public sealed class RealtimeSyncIntegrationTests
                 deletions = new Bridge<TaskDeleted>(left.Aggregator, right.Aggregator);
             }
 
-            return new SyncHarness(left, right, upserts, deletions);
+            return new SyncHarness(left, right, upserts, deletions, leftTrace, rightTrace);
         }
 
         public async ValueTask DisposeAsync()

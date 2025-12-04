@@ -33,6 +33,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private readonly NetworkedEventAggregator _networkAggregator;
     private readonly IEventTransport _transport;
     private readonly TCPEventTransport? _tcpTransport;
+    private readonly TransportTraceLog _traceLog;
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private readonly SemaphoreSlim _pendingGate = new(1, 1);
     private readonly List<PendingSyncEvent> _pendingEvents = new();
@@ -53,13 +54,15 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         Func<StorageService> storageFactory,
         INotificationService notificationService,
         SyncOptions? options = null,
-        IShuffleLogger? logger = null)
+        IShuffleLogger? logger = null,
+        TransportTraceLog? traceLog = null)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _storageFactory = storageFactory ?? throw new ArgumentNullException(nameof(storageFactory));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _options = options ?? SyncOptions.LoadFromEnvironment();
         _logger = logger;
+        _traceLog = traceLog ?? new TransportTraceLog();
 
         _localAggregator = new EventAggregator();
         var serializer = new JsonEventSerializer();
@@ -84,6 +87,8 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     public bool ShouldBroadcastLocalChanges => _suppression.Value == 0;
 
     public IEventAggregator Aggregator => _networkAggregator;
+
+    public TransportTraceLog TransportTrace => _traceLog;
 
     private bool HasPeersConfigured => _tcpTransport != null && _options.Enabled && _options.Peers.Count > 0;
 
@@ -137,6 +142,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
         try
         {
+            _traceLog.RecordSend(domainEvent, _deviceId);
             await _networkAggregator.PublishEventAsync(domainEvent, cancellationToken).ConfigureAwait(false);
 
             if (syncTargetsAvailable && !connectedSnapshot)
@@ -394,6 +400,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             await storage.ApplyRemoteTaskUpsertAsync(evt.Task, evt.UpdatedAt).ConfigureAwait(false);
         }
 
+        _traceLog.RecordReceive(evt, evt.DeviceId);
         SetConnected(true, null);
         await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -417,6 +424,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             await storage.ApplyRemoteDeletionAsync(evt.TaskId, evt.DeletedAt).ConfigureAwait(false);
         }
 
+        _traceLog.RecordReceive(evt, evt.DeviceId);
         SetConnected(true, null);
         await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -433,6 +441,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
 
         if (!isLocal)
         {
+            _traceLog.RecordReceive(evt, evt.DeviceId);
             SetConnected(true, null);
             await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -466,6 +475,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             _logger?.LogSyncEvent("NotificationRelayFailed", evt.NotificationId, ex);
         }
 
+        _traceLog.RecordReceive(evt, evt.DeviceId);
         SetConnected(true, null);
         await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -639,6 +649,8 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             changed = previous != connected;
             _isConnected = connected;
         }
+
+        _traceLog.RecordConnection(connected ? "Connected" : "Disconnected", error?.Message);
 
         if (!changed)
         {
