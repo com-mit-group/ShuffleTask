@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Storage;
@@ -65,6 +66,8 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         _tcpTransport = new TCPEventTransport(_options.ListenPort, serializer);
         _transport = _tcpTransport;
         _networkAggregator = new NetworkedEventAggregator(_localAggregator, _transport, _options.DeduplicationWindow);
+
+        AttachTransportCallbacks();
 
         _pendingPath = Path.Combine(FileSystem.AppDataDirectory, "sync-pending.json");
         _deviceId = EnsureDeviceId();
@@ -233,6 +236,47 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         }
     }
 
+    private void AttachTransportCallbacks()
+    {
+        if (_tcpTransport == null)
+        {
+            return;
+        }
+
+        TryAttachConnectedEvent(_tcpTransport.GetType().GetEvent("Connected"));
+        TryAttachConnectedEvent(_tcpTransport.GetType().GetEvent("ClientConnected"));
+    }
+
+    private void TryAttachConnectedEvent(EventInfo? eventInfo)
+    {
+        if (eventInfo == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var handler = Delegate.CreateDelegate(eventInfo.EventHandlerType!, this, nameof(OnTransportConnected));
+            eventInfo.AddEventHandler(_tcpTransport, handler);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogSyncEvent("TransportCallbackAttachFailed", eventInfo.Name, ex);
+        }
+    }
+
+    private async void OnTransportConnected(object? sender, EventArgs e)
+    {
+        try
+        {
+            await NotifyTransportConnectedAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogSyncEvent("TransportCallbackFailed", null, ex);
+        }
+    }
+
     private async Task EnsureListeningAsync(CancellationToken cancellationToken)
     {
         if (_listeningStarted || _tcpTransport == null)
@@ -276,6 +320,7 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 await _tcpTransport.ConnectToPeerAsync(peer.Host, peer.Port, cancellationToken).ConfigureAwait(false);
                 anyConnected = true;
+                await NotifyTransportConnectedAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -289,8 +334,13 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         if (anyConnected && !wasConnected)
         {
             _logger?.LogSyncEvent("SyncReconnected", null);
-            await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async Task NotifyTransportConnectedAsync(CancellationToken cancellationToken)
+    {
+        SetConnected(true, null);
+        await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void StartReconnectLoop()

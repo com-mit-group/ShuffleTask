@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Sync;
@@ -166,6 +167,66 @@ public sealed class RealtimeSyncIntegrationTests
             "Remote storage should receive network deletions.");
     }
 
+    [Test]
+    public async Task PendingEvents_FlushAfterReconnect()
+    {
+        int portA = GetFreeTcpPort();
+        int portB = GetFreeTcpPort();
+
+        var optionsA = new SyncOptions
+        {
+            Enabled = true,
+            ListenPort = portA,
+            ReconnectInterval = TimeSpan.FromMilliseconds(1)
+        };
+        optionsA.Peers.Add(new SyncPeer("127.0.0.1", portB));
+
+        var optionsB = new SyncOptions
+        {
+            Enabled = true,
+            ListenPort = portB,
+            ReconnectInterval = TimeSpan.FromMilliseconds(1)
+        };
+        optionsB.Peers.Add(new SyncPeer("127.0.0.1", portA));
+
+        await using SyncHarness harness = await SyncHarness.CreateAsync(
+            _storageA,
+            _storageB,
+            _clockA,
+            _clockB,
+            _notificationsA,
+            _notificationsB,
+            optionsA,
+            optionsB);
+
+        await EventuallyAsync(
+            () => Task.FromResult(harness.Left.IsConnected && harness.Right.IsConnected),
+            TimeSpan.FromSeconds(5),
+            "Services should connect over TCP.");
+
+        var pendingTask = new TaskItem { Title = "Reconnect pending" };
+        var deleteCandidate = new TaskItem { Title = "Remove after reconnect" };
+        await _storageB.AddTaskAsync(deleteCandidate);
+
+        await ForceDisconnectAsync(harness.Left);
+        await QueuePendingAsync(harness.Left, new TaskUpserted(TaskItem.Clone(pendingTask), harness.Left.DeviceId, _clockA.GetUtcNow().UtcDateTime));
+        await QueuePendingAsync(harness.Left, new TaskDeleted(deleteCandidate.Id, harness.Left.DeviceId, _clockA.GetUtcNow().UtcDateTime));
+
+        await InvokeTransportConnectedAsync(harness.Left);
+
+        await EventuallyAsync(
+            async () =>
+            {
+                TaskItem? replicated = await _storageB.GetTaskAsync(pendingTask.Id);
+                TaskItem? removed = await _storageB.GetTaskAsync(deleteCandidate.Id);
+                return replicated is not null && removed is null;
+            },
+            TimeSpan.FromSeconds(10),
+            "Pending upserts and deletes should flush once the transport reconnects.");
+
+        Assert.That(GetPendingCount(harness.Left), Is.EqualTo(0), "Pending queue should be drained after reconnect.");
+    }
+
     private static async Task DisposeAsync(StorageService storage)
     {
         if (storage is IAsyncDisposable asyncDisposable)
@@ -204,6 +265,38 @@ public sealed class RealtimeSyncIntegrationTests
         }
 
         Assert.Fail(failureMessage);
+    }
+
+    private static async Task QueuePendingAsync(RealtimeSyncService service, DomainEventBase domainEvent)
+    {
+        MethodInfo? method = service.GetType().GetMethod("QueueEventAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, "QueueEventAsync should be available for queuing pending events.");
+        await ((Task)method!.Invoke(service, new object[] { domainEvent })!).ConfigureAwait(false);
+    }
+
+    private static async Task InvokeTransportConnectedAsync(RealtimeSyncService service)
+    {
+        MethodInfo? method = service.GetType().GetMethod("NotifyTransportConnectedAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, "NotifyTransportConnectedAsync should exist to trigger flushes.");
+        await ((Task)method!.Invoke(service, new object?[] { CancellationToken.None })!).ConfigureAwait(false);
+    }
+
+    private static async Task ForceDisconnectAsync(RealtimeSyncService service)
+    {
+        MethodInfo? method = service.GetType().GetMethod("SetConnected", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(method, Is.Not.Null, "SetConnected should exist to toggle connectivity.");
+        method!.Invoke(service, new object?[] { false, null });
+
+        // Ensure we do not process pending events until reconnection is triggered explicitly.
+        await Task.Yield();
+    }
+
+    private static int GetPendingCount(RealtimeSyncService service)
+    {
+        FieldInfo? pendingField = service.GetType().GetField("_pendingEvents", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(pendingField, Is.Not.Null, "Pending list field should exist.");
+        var list = (System.Collections.ICollection?)pendingField!.GetValue(service);
+        return list?.Count ?? 0;
     }
 
     private sealed class SyncHarness : IAsyncDisposable
