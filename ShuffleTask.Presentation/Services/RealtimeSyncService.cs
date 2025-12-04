@@ -263,6 +263,12 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         bool anyConnected = false;
         Exception? lastError = null;
 
+        bool wasConnected;
+        lock (_connectionLock)
+        {
+            wasConnected = _isConnected;
+        }
+
         foreach (var peer in _options.Peers)
         {
             try
@@ -275,14 +281,14 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
             {
                 lastError = ex;
                 _logger?.LogSyncEvent("ConnectFailed", $"{peer.Host}:{peer.Port}", ex);
-                SetConnected(false, ex);
             }
         }
 
         SetConnected(anyConnected, anyConnected ? null : lastError);
 
-        if (anyConnected)
+        if (anyConnected && !wasConnected)
         {
+            _logger?.LogSyncEvent("SyncReconnected", null);
             await FlushPendingEventsAsync(cancellationToken).ConfigureAwait(false);
         }
     }
@@ -576,9 +582,11 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
     private void SetConnected(bool connected, Exception? error)
     {
         bool changed;
+        bool previous;
         lock (_connectionLock)
         {
-            changed = _isConnected != connected;
+            previous = _isConnected;
+            changed = previous != connected;
             _isConnected = connected;
         }
 
@@ -586,6 +594,9 @@ public sealed class RealtimeSyncService : IRealtimeSyncService, IAsyncDisposable
         {
             return;
         }
+
+        var transitionDetails = $"Previous={(previous ? "Connected" : "Disconnected")}; Current={(connected ? "Connected" : "Disconnected")}";
+        _logger?.LogSyncEvent("SyncConnectionStateChanged", transitionDetails);
 
         if (error != null)
         {
