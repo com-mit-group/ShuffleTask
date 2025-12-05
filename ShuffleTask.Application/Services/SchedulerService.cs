@@ -9,13 +9,11 @@ public class SchedulerService : ISchedulerService
 {
     private readonly bool _deterministic;
     private readonly IShuffleLogger? _logger;
-    private readonly INetworkSyncService? _networkSync;
 
-    public SchedulerService(bool deterministic = false, IShuffleLogger? logger = null, INetworkSyncService? networkSync = null)
+    public SchedulerService(bool deterministic = false, IShuffleLogger? logger = null)
     {
         _deterministic = deterministic;
         _logger = logger;
-        _networkSync = networkSync;
     }
 
     public TimeSpan NextGap(AppSettings settings, DateTimeOffset now)
@@ -41,10 +39,6 @@ public class SchedulerService : ISchedulerService
     public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
     {
         var selection = PickNextTask(tasks, settings, now, _deterministic, _logger);
-        if (selection != null)
-        {
-            _ = _networkSync?.PublishShuffleResponseAsync(selection);
-        }
 
         return selection;
     }

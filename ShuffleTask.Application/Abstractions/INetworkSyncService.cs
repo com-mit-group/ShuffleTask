@@ -14,11 +14,6 @@ public interface INetworkSyncService
 
     Task PublishTaskDeletedAsync(string taskId, CancellationToken cancellationToken = default);
 
-    Task PublishShuffleRequestAsync(string? taskId, CancellationToken cancellationToken = default);
-
-    Task PublishShuffleResponseAsync(TaskItem task, CancellationToken cancellationToken = default);
-
-    Task PublishNotificationIntentAsync(string title, string message, string? taskId, CancellationToken cancellationToken = default);
-
-    Task ExecuteWithoutBroadcastAsync(Func<Task> action, CancellationToken cancellationToken = default);
+    Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default);
+    Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default);
 }

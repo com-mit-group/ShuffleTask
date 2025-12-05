@@ -1,4 +1,3 @@
-using System.Globalization;
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Application.Abstractions;
@@ -16,10 +15,9 @@ public class StorageService : IStorageService
     private readonly TimeProvider _clock;
     private readonly string _dbPath;
     private readonly IShuffleLogger? _logger;
-    private INetworkSyncService? _networkSync;
     private SQLiteAsyncConnection? _db;
 
-    public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null, INetworkSyncService? networkSync = null)
+    public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null)
     {
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         if (string.IsNullOrWhiteSpace(databasePath))
@@ -29,12 +27,6 @@ public class StorageService : IStorageService
 
         _dbPath = databasePath;
         _logger = logger;
-        _networkSync = networkSync;
-    }
-
-    public void AttachNetworkSync(INetworkSyncService networkSync)
-    {
-        _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
     }
 
     public async Task InitializeAsync()
@@ -143,21 +135,18 @@ public class StorageService : IStorageService
 
         var record = TaskItemRecord.FromDomain(item);
         await Db.InsertAsync(record);
-        await PublishUpsertAsync(item).ConfigureAwait(false);
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
         var record = TaskItemRecord.FromDomain(item);
         await Db.UpdateAsync(record);
-        await PublishUpsertAsync(item).ConfigureAwait(false);
     }
 
     public async Task DeleteTaskAsync(string id)
     {
         await AutoResumeDueTasksAsync();
         await Db.DeleteAsync<TaskItemRecord>(id);
-        await PublishDeleteAsync(id).ConfigureAwait(false);
     }
 
     // Lifecycle helpers
@@ -191,7 +180,6 @@ public class StorageService : IStorageService
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
-            await PublishUpsertAsync(updated).ConfigureAwait(false);
         }
 
         return updated;
@@ -230,7 +218,6 @@ public class StorageService : IStorageService
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
-            await PublishUpsertAsync(updated).ConfigureAwait(false);
         }
 
         return updated;
@@ -258,7 +245,6 @@ public class StorageService : IStorageService
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Active", "Task resumed");
-            await PublishUpsertAsync(updated).ConfigureAwait(false);
         }
 
         return updated;
@@ -315,26 +301,6 @@ public class StorageService : IStorageService
             RepeatType.Interval => EnsureUtc(TimeZoneInfo.ConvertTime(new DateTimeOffset(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc)), TimeZoneInfo.Local).AddDays(Math.Max(1, task.IntervalDays)).UtcDateTime),
             _ => null,
         };
-    }
-
-    private Task PublishUpsertAsync(TaskItem task)
-    {
-        if (_networkSync?.ShouldBroadcast != true)
-        {
-            return Task.CompletedTask;
-        }
-
-        return _networkSync.PublishTaskUpsertAsync(task);
-    }
-
-    private Task PublishDeleteAsync(string taskId)
-    {
-        if (_networkSync?.ShouldBroadcast != true)
-        {
-            return Task.CompletedTask;
-        }
-
-        return _networkSync.PublishTaskDeletedAsync(taskId);
     }
 
     private static DateTime? ComputeWeeklyNext(Weekdays weekdays, DateTime nowUtc)

@@ -15,6 +15,7 @@ public partial class DashboardViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
+    private readonly INetworkSyncService _networkSyncService;
     private readonly INotificationService _notifications;
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
@@ -29,7 +30,7 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSyncService)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -43,6 +44,7 @@ public partial class DashboardViewModel : ObservableObject
         TimerText = "--:--";
         CycleStatus = string.Empty;
         PhaseBadge = string.Empty;
+        _networkSyncService = networkSyncService;
     }
 
     public event EventHandler<TimerRequest>? CountdownRequested;
@@ -261,9 +263,11 @@ public partial class DashboardViewModel : ObservableObject
         var duration = TimeSpan.FromMinutes(snoozeMinutes);
 
         var updated = await _storage.SnoozeTaskAsync(_activeTask.Id, duration);
-        if (updated != null)
+
+        if (updated is not null)
         {
             _activeTask = updated;
+            await _networkSyncService.PublishTaskUpsertAsync(_activeTask);
         }
 
         var snapshot = _activeTask;
@@ -360,7 +364,7 @@ public partial class DashboardViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    public Task ApplyAutoShuffleAsync(TaskItem task, AppSettings settings)
+    public Task ApplyAutoOrCrossDeviceShuffleAsync(TaskItem task, AppSettings settings)
     {
         _settings = settings;
         BindTask(task);

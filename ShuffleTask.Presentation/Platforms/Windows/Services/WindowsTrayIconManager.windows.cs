@@ -6,7 +6,7 @@ using Microsoft.UI.Windowing;
 using WinRT.Interop;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
-namespace ShuffleTask.Presentation.Services;
+namespace ShuffleTask.Presentation.Platforms.Windows.Services;
 
 internal sealed class WindowsTrayIconManager : IDisposable
 {
@@ -140,7 +140,7 @@ internal sealed class WindowsTrayIconManager : IDisposable
             string? executablePath = Process.GetCurrentProcess().MainModule?.FileName;
             if (!string.IsNullOrEmpty(executablePath))
             {
-                Icon? associatedIcon = Icon.ExtractAssociatedIcon(executablePath);
+                var associatedIcon = Icon.ExtractAssociatedIcon(executablePath);
                 if (associatedIcon != null)
                 {
                     return (associatedIcon, true);

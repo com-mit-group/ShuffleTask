@@ -13,8 +13,8 @@ namespace ShuffleTask.Presentation.Services;
 public partial class NotificationService
 {
     private const string AndroidNotificationAction = "com.commitgroup.shuffletask.SHOW_NOTIFICATION";
-    private const string AndroidNotificationExtraTitle = "ShuffleTask.Notification.Title";
-    private const string AndroidNotificationExtraMessage = "ShuffleTask.Notification.Message";
+    private const string AndroidNotificationExtraTitle = "ShuffleTask.Notification.TimeUpTitle";
+    private const string AndroidNotificationExtraMessage = "ShuffleTask.Notification.TimeUpMessage";
     private const string AndroidNotificationExtraSound = "ShuffleTask.Notification.Sound";
     private const string AndroidNotificationExtraId = "ShuffleTask.Notification.Id";
 

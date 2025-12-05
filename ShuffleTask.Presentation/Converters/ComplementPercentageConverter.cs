@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace ShuffleTask.Converters;
+namespace ShuffleTask.Presentation.Converters;
 
 public class ComplementPercentageConverter : IValueConverter
 {

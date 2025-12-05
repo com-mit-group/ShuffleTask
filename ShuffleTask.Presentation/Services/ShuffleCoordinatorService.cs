@@ -359,11 +359,6 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelPersistentSchedule();
 
-        if (_networkSync != null)
-        {
-            await _networkSync.PublishShuffleRequestAsync(taskId).ConfigureAwait(false);
-        }
-
         bool executed = false;
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -460,10 +455,12 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-        await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", settings).ConfigureAwait(false);
+        const string TimeUpTitle = "Time's up";
+        const string TimeUpMessage = "Shuffling a new task...";
+        await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            await _networkSync.PublishNotificationIntentAsync("Time's up", "Shuffling a new task...", null).ConfigureAwait(false);
+            await _networkSync.PublishTimeUpNotificationAsync().ConfigureAwait(false);
         }
         PersistedTimerState.Clear();
     }
@@ -515,11 +512,8 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         ClearPendingShuffle();
-        if (_networkSync != null)
-        {
-            await _networkSync.PublishShuffleResponseAsync(task).ConfigureAwait(false);
-        }
-        var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
+
+        EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
         await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
@@ -571,7 +565,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
         {
-            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings));
+            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoOrCrossDeviceShuffleAsync(task, settings));
             await applyTask.ConfigureAwait(false);
         }
 
@@ -579,8 +573,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            string message = $"Start {task.Title} for {minutes} minute(s).";
-            await _networkSync.PublishNotificationIntentAsync(task.Title, message, task.Id).ConfigureAwait(false);
+            await _networkSync.PublishTaskStartedAsync(task.Id, minutes).ConfigureAwait(false);
         }
     }
 

@@ -1,4 +1,4 @@
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 internal static class PreferenceKeys
 {

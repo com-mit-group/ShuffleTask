@@ -1,7 +1,7 @@
 using System.Globalization;
 using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Converters;
+namespace ShuffleTask.Presentation.Converters;
 
 public class WeekdaysConverter : IValueConverter
 {
