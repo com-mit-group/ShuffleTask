@@ -16,6 +16,7 @@
     <Compile Include="../ShuffleTask.Presentation/Services/RealtimeSyncService.cs" Link="Services/RealtimeSyncService.cs" />
     <Compile Include="../ShuffleTask.Presentation/ViewModels/DashboardViewModel.cs" Link="ViewModels/DashboardViewModel.cs" />
     <Compile Include="../ShuffleTask.Presentation/ViewModels/TasksViewModel.cs" Link="ViewModels/TasksViewModel.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Services/TransportTraceLog.cs" Link="Services/TransportTraceLog.cs" />
   </ItemGroup>
 
   <ItemGroup>
