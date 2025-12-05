@@ -315,12 +315,30 @@ public sealed class RealtimeSyncIntegrationTests
 
     private static async Task AwaitInboundEventAsync(TransportTraceLog traceLog, TimeSpan timeout, string? expectedEventType)
     {
+        DateTime deadline = DateTime.UtcNow + timeout;
         TransportEventTrace? inbound = FindMatchingInbound(traceLog, expectedEventType);
 
-        if (inbound == null)
+        while (inbound == null && DateTime.UtcNow < deadline)
         {
-            inbound = await traceLog.WaitForReceiveAsync(timeout).ConfigureAwait(false);
+            TimeSpan remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            TransportEventTrace? next = await traceLog.WaitForReceiveAsync(remaining).ConfigureAwait(false);
+            if (next == null)
+            {
+                break;
+            }
+
+            if (IsExpectedType(next, expectedEventType))
+            {
+                inbound = next;
+            }
         }
+
+        inbound ??= FindMatchingInbound(traceLog, expectedEventType);
 
         if (inbound == null)
         {
@@ -331,6 +349,9 @@ public sealed class RealtimeSyncIntegrationTests
         {
             Assert.That(inbound!.EventType, Is.EqualTo(expectedEventType), "Unexpected inbound event type.");
         }
+
+        static bool IsExpectedType(TransportEventTrace trace, string? expectedType)
+            => string.IsNullOrWhiteSpace(expectedType) || string.Equals(trace.EventType, expectedType, StringComparison.Ordinal);
 
         static TransportEventTrace? FindMatchingInbound(TransportTraceLog log, string? expectedType)
         {
