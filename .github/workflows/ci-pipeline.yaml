@@ -368,15 +368,6 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
-    - name: Resolve workload cache buster
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      shell: pwsh
-      run: |
-        $effective = "workload-cache-${{ github.run_id }}-$(New-Guid)"
-
-        "DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE=$effective" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        Write-Host "Using workload cache buster: '$effective'"
-
     - name: Ensure workload cache directories
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
@@ -388,6 +379,12 @@ jobs:
             New-Item -ItemType Directory -Path $fullPath | Out-Null
           }
         }
+
+    - name: Initialize workload cache buster
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      shell: pwsh
+      run: |
+        "DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE=baseline" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Restore cached .NET workloads
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
@@ -456,6 +453,15 @@ jobs:
           Write-Host "All required workloads already installed."
           "missing=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         }
+
+    - name: Resolve workload cache buster when missing workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.detect-workloads.outputs.missing == 'true' }}
+      shell: pwsh
+      run: |
+        $effective = "workload-cache-${{ github.run_id }}-$(New-Guid)"
+
+        "DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE=$effective" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        Write-Host "Using workload cache buster: '$effective'"
 
     - name: Install workload
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.detect-workloads.outputs.missing == 'true' }}
