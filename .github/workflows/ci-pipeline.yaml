@@ -361,9 +361,45 @@ jobs:
         fetch-depth: 0
         persist-credentials: false
         
-    - name: Remove preinstalled dotnet versions
+    - name: Remove .NET 10 SDKs on Windows
+      shell: pwsh
       run: |
-        rm -rf /usr/share/dotnet
+        $dotnet = "C:\Program Files\dotnet"
+    
+        Write-Host "Removing .NET 10 SDKs and runtimes from: $dotnet"
+    
+        # Remove SDKs
+        $sdkPath = Join-Path $dotnet "sdk"
+        if (Test-Path $sdkPath) {
+            Get-ChildItem $sdkPath -Directory | Where-Object { $_.Name -like "10.*" } | ForEach-Object {
+                Write-Host "Removing SDK: $($_.FullName)"
+                Remove-Item -Recurse -Force $_.FullName
+            }
+        }
+    
+        # Remove runtimes
+        $sharedPath = Join-Path $dotnet "shared"
+        if (Test-Path $sharedPath) {
+            Get-ChildItem $sharedPath -Directory | ForEach-Object {
+                $runtimeFolder = $_.FullName
+                Get-ChildItem $runtimeFolder -Directory | Where-Object { $_.Name -like "10.*" } | ForEach-Object {
+                    Write-Host "Removing runtime: $($_.FullName)"
+                    Remove-Item -Recurse -Force $_.FullName
+                }
+            }
+        }
+    
+        # Remove .NET 10 packs (Android/MAUI etc.)
+        $packs = Join-Path $dotnet "packs"
+        if (Test-Path $packs) {
+            Get-ChildItem $packs -Directory | Where-Object { $_.Name -like "*10.*" } | ForEach-Object {
+                Write-Host "Removing pack: $($_.FullName)"
+                Remove-Item -Recurse -Force $_.FullName
+            }
+        }
+    
+        Write-Host "Finished removing .NET 10 components."
+
 
     - name: Setup .NET
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
