@@ -1,9 +1,11 @@
 ﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
+using Microsoft.Extensions.Logging;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
+using Yaref92.Events;
 
 namespace ShuffleTask;
 
@@ -56,7 +58,17 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
+        builder.Services.AddSingleton<NetworkedEventAggregator>();
+        builder.Services.AddSingleton<INetworkSyncService>(sp =>
+        {
+            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var sync = new NetworkSyncService(aggregator, storage, logger);
+            storage.AttachNetworkSync(sync);
+            return sync;
+        });
+        builder.Services.AddSingleton<ISchedulerService>(sp => new SchedulerService(deterministic: false, networkSync: sp.GetService<INetworkSyncService>()));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
         // ViewModels

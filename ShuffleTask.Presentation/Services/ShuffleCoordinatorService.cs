@@ -15,6 +15,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly INetworkSyncService? _networkSync;
     private readonly TimeProvider _clock;
     private readonly IPersistentBackgroundService _backgroundService;
 
@@ -31,13 +32,15 @@ public class ShuffleCoordinatorService : IDisposable
         ISchedulerService scheduler,
         INotificationService notifications,
         TimeProvider clock,
-        IPersistentBackgroundService backgroundService)
+        IPersistentBackgroundService backgroundService,
+        INetworkSyncService? networkSync = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
+        _networkSync = networkSync;
     }
 
     public void Dispose()
@@ -356,6 +359,11 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelPersistentSchedule();
 
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishShuffleRequestAsync(taskId).ConfigureAwait(false);
+        }
+
         bool executed = false;
 
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -453,6 +461,10 @@ public class ShuffleCoordinatorService : IDisposable
 
         var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
         await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishNotificationIntentAsync("Time's up", "Shuffling a new task...", null).ConfigureAwait(false);
+        }
         PersistedTimerState.Clear();
     }
 
@@ -503,6 +515,10 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         ClearPendingShuffle();
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishShuffleResponseAsync(task).ConfigureAwait(false);
+        }
         var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
@@ -561,6 +577,11 @@ public class ShuffleCoordinatorService : IDisposable
 
         int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            string message = $"Start {task.Title} for {minutes} minute(s).";
+            await _networkSync.PublishNotificationIntentAsync(task.Title, message, task.Id).ConfigureAwait(false);
+        }
     }
 
     private async Task HandleCutInLineModeAsync(TaskItem task)
