@@ -380,21 +380,6 @@ jobs:
           }
         }
 
-    - name: Restore cached .NET workloads
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      id: restore-dotnet-workloads
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          'C:\Program Files\dotnet\packs'
-          'C:\Program Files\dotnet\sdk-manifests'
-          C:\ProgramData\dotnet\workload*
-          'C:\Program Files\dotnet\metadata'
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
-        restore-keys: |
-          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
-          ${{ runner.os }}-dotnet-
-
     - name: Restore cached Android SDK
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       id: restore-android-sdk
@@ -420,11 +405,65 @@ jobs:
           -p $env:NUGET_TOKEN `
           --store-password-in-clear-text
 
-    - name: Install workload
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
+    - name: Detect missing workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: detect-workloads
       shell: pwsh
       run: |
-        dotnet workload install maui-android wasi-experimental --skip-manifest-update
+        $required = @('android', 'maui-android', 'wasi-experimental')
+        $installedOutput = dotnet workload list --include-previews
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to list workloads"
+          exit 1
+        }
+
+        $missing = @()
+        foreach ($workload in $required) {
+          if (-not ($installedOutput | Select-String -Pattern "^$workload\s" -SimpleMatch:$false)) {
+            $missing += $workload
+          }
+        }
+
+        if ($missing.Count -gt 0) {
+          Write-Host "Missing workloads: $($missing -join ', ')"
+          "missing=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        } else {
+          Write-Host "All required workloads already installed."
+          "missing=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        }
+
+    - name: Resolve workload cache buster when missing workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.detect-workloads.outputs.missing == 'true' }}
+      shell: pwsh
+      run: |
+        $effective = "workload-cache-${{ github.run_id }}-$(New-Guid)"
+
+        "DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE=$effective" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        Write-Host "Using workload cache buster: '$effective'"
+
+    - name: Restore cached .NET workloads
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
+      id: restore-dotnet-workloads
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          'C:\Program Files\dotnet\packs'
+          'C:\Program Files\dotnet\sdk-manifests'
+          C:\ProgramData\dotnet\workload*
+          'C:\Program Files\dotnet\metadata'
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}
+        restore-keys: |
+          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}-
+          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
+          ${{ runner.os }}-dotnet-
+
+    - name: Install workload
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && (steps.detect-workloads.outputs.missing == 'true' || steps.restore-dotnet-workloads.outputs.cache-hit != 'true') }}
+      shell: pwsh
+      run: |
+        $workloads = @('android', 'maui-android', 'wasi-experimental')
+
+        dotnet workload install $workloads --skip-manifest-update
         if ($LASTEXITCODE -ne 0) {
           Write-Error "Failed to install workloads"
           exit 1
@@ -442,7 +481,7 @@ jobs:
         }
 
     - name: Save .NET workloads cache
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true' }}
+      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && (steps.detect-workloads.outputs.missing == 'true' || steps.restore-dotnet-workloads.outputs.cache-hit != 'true') }}
       uses: actions/cache/save@v4
       with:
         path: |
@@ -450,7 +489,7 @@ jobs:
           'C:\Program Files\dotnet\sdk-manifests'
           C:\ProgramData\dotnet\workload*
           'C:\Program Files\dotnet\metadata'
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}
+        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}
 
     - name: Save Android SDK cache
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
