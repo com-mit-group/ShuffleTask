@@ -17,5 +17,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ShuffleTask.Application\ShuffleTask.Application.csproj" />
     <ProjectReference Include="..\ShuffleTask.Domain\ShuffleTask.Domain.csproj" />
+    <ProjectReference Include="..\ShuffleTask.Persistence\ShuffleTask.Persistence.csproj" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -10,7 +10,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../ShuffleTask.Presentation/PreferenceKeys.cs" Link="PreferenceKeys.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Utilities/PersistedTimerState.cs" Link="Utilities/PersistedTimerState.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Utilities/TaskTimerSettings.cs" Link="Utilities/TaskTimerSettings.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Services/RealtimeSyncService.cs" Link="Services/RealtimeSyncService.cs" />
+    <Compile Include="../ShuffleTask.Presentation/ViewModels/DashboardViewModel.cs" Link="ViewModels/DashboardViewModel.cs" />
     <Compile Include="../ShuffleTask.Presentation/ViewModels/TasksViewModel.cs" Link="ViewModels/TasksViewModel.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Services/TransportTraceLog.cs" Link="Services/TransportTraceLog.cs" />
   </ItemGroup>
 
   <ItemGroup>
