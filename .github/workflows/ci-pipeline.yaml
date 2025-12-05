@@ -461,7 +461,7 @@ jobs:
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' && (steps.detect-workloads.outputs.missing == 'true' || steps.restore-dotnet-workloads.outputs.cache-hit != 'true') }}
       shell: pwsh
       run: |
-        $workloads = "android maui-android wasi-experimental"
+        $workloads = @('android', 'maui-android', 'wasi-experimental')
 
         dotnet workload install $workloads --skip-manifest-update
         if ($LASTEXITCODE -ne 0) {
