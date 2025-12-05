@@ -212,10 +212,6 @@ jobs:
       with:
         fetch-depth: 0
         persist-credentials: false
-        
-    - name: Remove preinstalled dotnet versions
-      run: |
-        sudo rm -rf /usr/share/dotnet
 
     - name: Setup .NET
       id: setupDotnet
@@ -364,6 +360,10 @@ jobs:
       with:
         fetch-depth: 0
         persist-credentials: false
+        
+    - name: Remove preinstalled dotnet versions
+      run: |
+        rm -rf /usr/share/dotnet
 
     - name: Setup .NET
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
