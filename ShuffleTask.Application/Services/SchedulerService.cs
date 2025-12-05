@@ -37,7 +37,11 @@ public class SchedulerService : ISchedulerService
     }
 
     public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
-        => PickNextTask(tasks, settings, now, _deterministic, _logger);
+    {
+        var selection = PickNextTask(tasks, settings, now, _deterministic, _logger);
+
+        return selection;
+    }
 
     public static TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, bool deterministic, IShuffleLogger? logger = null)
     {

@@ -2,9 +2,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.LifecycleEvents;
 using Microsoft.Maui.Platform;
-using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Platforms.Windows.Services;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation.Platforms.Windows;
 
 public static partial class MauiProgram
 {

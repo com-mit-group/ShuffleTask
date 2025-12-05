@@ -1,11 +1,14 @@
-﻿using ShuffleTask.Application.Abstractions;
+﻿using Microsoft.Extensions.Logging;
+using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
+using Yaref92.Events;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {
@@ -56,11 +59,45 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
+        builder.Services.AddSingleton<NetworkedEventAggregator>();
+        builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var notificationIntentAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications);
+            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
+            aggregator.SubscribeToEventType(notificationIntentAsyncHandler);
+            return notificationIntentAsyncHandler;
+        });
+        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications);
+            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
+            aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
+            return timeUpNotificationAsyncHandler;
+        });
+        builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
+        builder.Services.AddSingleton<ISchedulerService>(sp => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
         // ViewModels
-        builder.Services.AddSingleton<DashboardViewModel>();
+        builder.Services.AddSingleton<DashboardViewModel>(sp =>
+        {
+            var storage = sp.GetRequiredService<IStorageService>();
+            var scheduler = sp.GetRequiredService<ISchedulerService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var shuffleCoordinator = sp.GetRequiredService<ShuffleCoordinatorService>();
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            var networkSync = sp.GetRequiredService<INetworkSyncService>();
+            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync);
+            var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
+            taskStartedHandler.RegisterDashboard(dashboardViewModel);
+            return dashboardViewModel;
+        });
         builder.Services.AddSingleton<TasksViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
