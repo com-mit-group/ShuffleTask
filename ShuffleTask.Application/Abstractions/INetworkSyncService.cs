@@ -1,6 +1,5 @@
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Application.Models;
-using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Abstractions;
 
@@ -15,8 +14,6 @@ public interface INetworkSyncService
     NetworkOptions GetCurrentOptions();
 
     Task ApplyOptionsAsync(NetworkOptions options, CancellationToken cancellationToken = default);
-
-    Task RegisterInboundHandlerAsync<T>(IAsyncEventHandler<T> handler) where T : class, IDomainEvent;
 
     Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
 
