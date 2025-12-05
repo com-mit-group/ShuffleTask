@@ -409,6 +409,8 @@ public class StorageService : IStorageService
         settings.RepeatUrgencyPenalty = Math.Clamp(settings.RepeatUrgencyPenalty, 0.0, 2.0);
         settings.SizeBiasStrength = Math.Clamp(settings.SizeBiasStrength, 0.0, 1.0);
         settings.UrgencyDeadlineShare = Math.Clamp(settings.UrgencyDeadlineShare, 0.0, 100.0);
+        settings.Network ??= NetworkOptions.CreateDefault();
+        settings.Network.Normalize();
         return settings;
     }
 

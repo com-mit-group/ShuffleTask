@@ -6,7 +6,6 @@ using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
-using Yaref92.Events;
 
 namespace ShuffleTask.Presentation;
 
@@ -59,15 +58,14 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
         {
             var logger = sp.GetService<ILogger<NetworkSyncService>>();
             var storage = sp.GetRequiredService<StorageService>();
             var notifications = sp.GetRequiredService<INotificationService>();
             var notificationIntentAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications);
-            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
-            aggregator.SubscribeToEventType(notificationIntentAsyncHandler);
+            var networkSync = sp.GetRequiredService<INetworkSyncService>();
+            networkSync.RegisterInboundHandlerAsync(notificationIntentAsyncHandler).GetAwaiter().GetResult();
             return notificationIntentAsyncHandler;
         });
         builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
@@ -76,8 +74,8 @@ public static partial class MauiProgram
             var storage = sp.GetRequiredService<StorageService>();
             var notifications = sp.GetRequiredService<INotificationService>();
             var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications);
-            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
-            aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
+            var networkSync = sp.GetRequiredService<INetworkSyncService>();
+            networkSync.RegisterInboundHandlerAsync(timeUpNotificationAsyncHandler).GetAwaiter().GetResult();
             return timeUpNotificationAsyncHandler;
         });
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
