@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -314,7 +315,13 @@ public sealed class RealtimeSyncIntegrationTests
 
     private static async Task AwaitInboundEventAsync(TransportTraceLog traceLog, TimeSpan timeout, string? expectedEventType)
     {
-        TransportEventTrace? inbound = await traceLog.WaitForReceiveAsync(timeout).ConfigureAwait(false);
+        TransportEventTrace? inbound = FindMatchingInbound(traceLog, expectedEventType);
+
+        if (inbound == null)
+        {
+            inbound = await traceLog.WaitForReceiveAsync(timeout).ConfigureAwait(false);
+        }
+
         if (inbound == null)
         {
             Assert.Fail($"No inbound events observed within {timeout.TotalSeconds:0} seconds.");
@@ -323,6 +330,13 @@ public sealed class RealtimeSyncIntegrationTests
         if (!string.IsNullOrWhiteSpace(expectedEventType))
         {
             Assert.That(inbound!.EventType, Is.EqualTo(expectedEventType), "Unexpected inbound event type.");
+        }
+
+        static TransportEventTrace? FindMatchingInbound(TransportTraceLog log, string? expectedType)
+        {
+            return string.IsNullOrWhiteSpace(expectedType)
+                ? log.ReceivedEvents.LastOrDefault()
+                : log.ReceivedEvents.LastOrDefault(e => string.Equals(e.EventType, expectedType, StringComparison.Ordinal));
         }
     }
 
