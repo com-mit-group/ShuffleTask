@@ -3,6 +3,9 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
@@ -18,6 +21,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly List<Action<NetworkedEventAggregator>> _inboundSubscriptions = new();
+    private readonly HashSet<Type> _eventTypes = new();
     private NetworkOptions? _options;
     private NetworkedEventAggregator? _aggregator;
     private TCPEventTransport? _transport;
@@ -32,6 +36,13 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _logger = logger;
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
+        _eventTypes = new HashSet<Type>
+        {
+            typeof(TaskUpsertedEvent),
+            typeof(TaskDeletedEvent),
+            typeof(TaskStarted),
+            typeof(TimeUpNotificationEvent),
+        };
     }
 
     public string DeviceId { get; private set; }
@@ -57,6 +68,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     {
         ArgumentNullException.ThrowIfNull(handler);
         await InitializeAsync(null, CancellationToken.None).ConfigureAwait(false);
+        EnsureEventTypeTracked<T>();
+        _aggregator?.RegisterEventType<T>();
         _aggregator?.SubscribeToEventType(handler);
         _inboundSubscriptions.Add(agg => agg.SubscribeToEventType(handler));
     }
@@ -187,6 +200,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             authSecret);
         _aggregator = new NetworkedEventAggregator(_localAggregator, _transport, ownsLocalAggregator: true, ownsTransport: false);
 
+        RegisterTrackedEventTypes();
+
         SubscribeToInboundEvents();
 
         await _transport.StartListeningAsync(cancellationToken).ConfigureAwait(false);
@@ -218,5 +233,30 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         {
             subscription(_aggregator);
         }
+    }
+
+    private void RegisterTrackedEventTypes()
+    {
+        if (_aggregator is null)
+        {
+            return;
+        }
+
+        var registerMethod = typeof(NetworkedEventAggregator).GetMethod(nameof(NetworkedEventAggregator.RegisterEventType));
+        if (registerMethod is null)
+        {
+            return;
+        }
+
+        foreach (var eventType in _eventTypes)
+        {
+            var generic = registerMethod.MakeGenericMethod(eventType);
+            generic.Invoke(_aggregator, null);
+        }
+    }
+
+    private void EnsureEventTypeTracked<T>() where T : class, IDomainEvent
+    {
+        _eventTypes.Add(typeof(T));
     }
 }
