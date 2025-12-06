@@ -59,11 +59,7 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<NetworkedEventAggregator>(sp =>
-        {
-            var networkSync = (NetworkSyncService)sp.GetRequiredService<INetworkSyncService>();
-            return networkSync.GetAggregator();
-        });
+        builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
         {
             var logger = sp.GetService<ILogger<NetworkSyncService>>();
