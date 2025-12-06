@@ -1,5 +1,6 @@
 using System.Runtime.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using ShuffleTask.Application.Models;
 
 namespace ShuffleTask.Application.Models;
 
@@ -85,6 +86,9 @@ public partial class AppSettings : ObservableObject
     // Strength of the size-based multiplier; 0 disables, higher values boost large work
     [ObservableProperty]
     private double sizeBiasStrength = 0.2;
+
+    [ObservableProperty]
+    private NetworkOptions network = NetworkOptions.CreateDefault();
 
     public double ImportanceWeight
     {

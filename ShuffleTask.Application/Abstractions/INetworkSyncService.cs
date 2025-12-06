@@ -1,4 +1,5 @@
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Application.Models;
 
 namespace ShuffleTask.Application.Abstractions;
 
@@ -9,6 +10,12 @@ public interface INetworkSyncService
     string? UserId { get; }
 
     bool ShouldBroadcast { get; }
+
+    NetworkOptions GetCurrentOptions();
+
+    Task ApplyOptionsAsync(NetworkOptions options, CancellationToken cancellationToken = default);
+
+    Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
 
     Task PublishTaskUpsertAsync(TaskItem task, CancellationToken cancellationToken = default);
 

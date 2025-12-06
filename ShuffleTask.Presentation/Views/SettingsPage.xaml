@@ -43,6 +43,14 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -300,7 +308,72 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Grid Grid.Row="23"
+            <Label Grid.Row="23"
+                   Text="Local host"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="23"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.Host}" />
+
+            <Label Grid.Row="24"
+                   Text="Listening port"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="24"
+                   Grid.Column="1"
+                   Keyboard="Numeric"
+                   Text="{Binding Settings.Network.ListeningPort}" />
+
+            <Label Grid.Row="25"
+                   Text="Device id"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="25"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.DeviceId}" />
+
+            <Label Grid.Row="26"
+                   Text="User id"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="26"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.UserId}" />
+
+            <Label Grid.Row="27"
+                   Text="Peer host"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="27"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.PeerHost}" />
+
+            <Label Grid.Row="28"
+                   Text="Peer port"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="28"
+                   Grid.Column="1"
+                   Keyboard="Numeric"
+                   Text="{Binding Settings.Network.PeerPort}" />
+
+            <Label Grid.Row="29"
+                   Text="Auth token"
+                   VerticalOptions="Center" />
+            <Label Grid.Row="29"
+                   Grid.Column="1"
+                   LineBreakMode="CharacterWrap"
+                   Text="{Binding AuthTokenPreview}" />
+
+            <Grid Grid.Row="30"
+                  Grid.ColumnSpan="2"
+                  ColumnDefinitions="*,*"
+                  ColumnSpacing="16">
+                <Button Grid.Column="0"
+                        Text="Connect to peer"
+                        Command="{Binding ConnectPeerCommand}" />
+                <Label Grid.Column="1"
+                       Text="{Binding LocalConnectionSummary}"
+                       HorizontalTextAlignment="End"
+                       VerticalOptions="Center" />
+            </Grid>
+
+            <Grid Grid.Row="31"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -312,7 +385,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="24"
+            <ActivityIndicator Grid.Row="32"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
