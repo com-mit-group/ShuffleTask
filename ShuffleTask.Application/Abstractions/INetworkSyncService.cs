@@ -11,9 +11,7 @@ public interface INetworkSyncService
 
     bool ShouldBroadcast { get; }
 
-    NetworkOptions GetCurrentOptions();
-
-    Task ApplyOptionsAsync(NetworkOptions options, CancellationToken cancellationToken = default);
+    NetworkOptions NetworkOptions { get; }
 
     Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
 
@@ -23,4 +21,5 @@ public interface INetworkSyncService
 
     Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default);
     Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default);
+    Task InitAsync(CancellationToken cancellationToken = default);
 }

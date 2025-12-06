@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.EventsHandlers;
@@ -7,6 +9,9 @@ using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
 using Yaref92.Events;
+using Yaref92.Events.Abstractions;
+using Yaref92.Events.Serialization;
+using Yaref92.Events.Transports;
 
 namespace ShuffleTask.Presentation;
 
@@ -59,28 +64,7 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<NetworkedEventAggregator>();
-        builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
-        {
-            var logger = sp.GetService<ILogger<NetworkSyncService>>();
-            var storage = sp.GetRequiredService<StorageService>();
-            var notifications = sp.GetRequiredService<INotificationService>();
-            var notificationIntentAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications);
-            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
-            aggregator.SubscribeToEventType(notificationIntentAsyncHandler);
-            return notificationIntentAsyncHandler;
-        });
-        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
-        {
-            var logger = sp.GetService<ILogger<NetworkSyncService>>();
-            var storage = sp.GetRequiredService<StorageService>();
-            var notifications = sp.GetRequiredService<INotificationService>();
-            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications);
-            var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
-            aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
-            return timeUpNotificationAsyncHandler;
-        });
-        builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
+        SetupEventAggregation(builder);
         builder.Services.AddSingleton<ISchedulerService>(sp => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
@@ -119,6 +103,70 @@ public static partial class MauiProgram
 
         return app;
     }
+
+    private static void SetupEventAggregation(MauiAppBuilder builder)
+    {
+        // Register AppSettings as singleton, loaded from storage
+        builder.Services.AddSingleton<AppSettings>(sp =>
+        {
+            var storage = sp.GetRequiredService<IStorageService>();
+            // Load synchronously during DI setup
+            AppSettings settings = null;
+            Task.Run(async () =>
+            {
+                await storage.InitializeAsync().ConfigureAwait(false);
+                settings = await storage.GetSettingsAsync().ConfigureAwait(false);
+                settings.Network ??= NetworkOptions.CreateDefault();
+                settings.Network.Normalize();
+            }).Wait();
+            return settings;
+        });
+        
+        builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+        
+        // TCPEventTransport gets NetworkOptions from AppSettings
+        builder.Services.AddSingleton<IEventTransport, TCPEventTransport>(sp =>
+        {
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var options = appSettings.Network ?? NetworkOptions.CreateDefault();
+            options.Normalize();
+            string authSecret = options.ResolveAuthenticationSecret();
+            return new TCPEventTransport(
+                options.ListeningPort,
+                new JsonEventSerializer(),
+                TimeSpan.FromSeconds(20),
+                authSecret);
+        });
+        builder.Services.AddSingleton<NetworkedEventAggregator>();
+        builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
+        builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var taskStartedAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications);
+            return taskStartedAsyncHandler;
+        });
+        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications);
+
+            var ns = sp.GetRequiredService<INetworkSyncService>();
+            Task initTask = Task.Run(() => ns.InitAsync());
+            initTask.ContinueWith((t, o) =>
+            {
+                var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
+                var taskStartedAsyncHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
+                aggregator.SubscribeToEventType(taskStartedAsyncHandler);
+                aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
+            }, TaskScheduler.Default);
+            return timeUpNotificationAsyncHandler;
+        });
+    }
+
     static partial void ConfigurePlatform(MauiAppBuilder builder);
     static partial void ResolvePlatformServiceProvider(ref IServiceProvider? services);
 }

@@ -16,11 +16,6 @@ public partial class AppSettings : ObservableObject
     private const double DefaultImportanceWeight = 60.0;
     private const double DefaultUrgencyWeight = 40.0;
 
-    public AppSettings()
-    {
-        NormalizeWeights();
-    }
-
     [ObservableProperty]
     private TimeSpan workStart = new(9, 0, 0); // default 09:00
 
@@ -88,7 +83,13 @@ public partial class AppSettings : ObservableObject
     private double sizeBiasStrength = 0.2;
 
     [ObservableProperty]
-    private NetworkOptions network = NetworkOptions.CreateDefault();
+    private NetworkOptions network;
+
+    public AppSettings()
+    {
+        this.network = NetworkOptions.CreateDefault();
+        NormalizeWeights();
+    }
 
     public double ImportanceWeight
     {

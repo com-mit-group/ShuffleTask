@@ -6,6 +6,7 @@ using ShuffleTask.Domain.Entities;
 using System;
 using System.Threading;
 using Yaref92.Events;
+using Yaref92.Events.Abstractions;
 using Yaref92.Events.Serialization;
 using Yaref92.Events.Transports;
 
@@ -14,22 +15,55 @@ namespace ShuffleTask.Application.Services;
 public class NetworkSyncService : INetworkSyncService, IDisposable
 {
     private readonly IStorageService _storage;
+    private readonly AppSettings _appSettings;
     private readonly ILogger<NetworkSyncService>? _logger;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
-    private NetworkOptions? _options;
-    private NetworkedEventAggregator? _aggregator;
-    private TCPEventTransport? _transport;
+    private readonly NetworkedEventAggregator _aggregator;
+    private readonly TCPEventTransport _transport;
     private bool _disposed;
+    private bool _initialized;
 
     public NetworkSyncService(
         IStorageService storage,
+        AppSettings appSettings,
+        NetworkedEventAggregator aggregator,
+        IEventTransport transport,
         ILogger<NetworkSyncService>? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
+        _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
+        _transport = (transport as TCPEventTransport) ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger;
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
+    }
+
+    public async Task InitAsync(CancellationToken cancellationToken = default)
+    {
+        await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_initialized)
+            {
+                return;
+            }
+            
+            // Get NetworkOptions from AppSettings
+            var options = NetworkOptions;
+            options.Normalize();
+            DeviceId = options.DeviceId;
+            UserId = options.UserId;
+
+            await InitEventAggregationAsync(cancellationToken).ConfigureAwait(false);
+
+            _initialized = true;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     public string DeviceId { get; private set; }
@@ -38,22 +72,13 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public bool ShouldBroadcast => !_suppressBroadcast.Value;
 
-    private Guid SessionUserGuid => (_options ?? NetworkOptions.CreateDefault()).ResolveSessionUserId();
+    private Guid SessionUserGuid => NetworkOptions.ResolveSessionUserId();
 
-    public NetworkOptions GetCurrentOptions()
-    {
-        return (_options ?? NetworkOptions.CreateDefault()).Clone();
-    }
-
-    public async Task ApplyOptionsAsync(NetworkOptions options, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        await EnsureInitializedAsync(options.Clone(), cancellationToken).ConfigureAwait(false);
-    }
+    public NetworkOptions NetworkOptions => _appSettings.Network ?? NetworkOptions.CreateDefault();
 
     public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(null, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         if (_transport is null || string.IsNullOrWhiteSpace(host) || port <= 0)
         {
             return;
@@ -69,7 +94,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
-        await EnsureInitializedAsync(null, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskUpsertedEvent(task, DeviceId, UserId);
         await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
     }
@@ -81,7 +106,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
-        await EnsureInitializedAsync(null, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskDeletedEvent(taskId, DeviceId, UserId);
         await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
     }
@@ -93,14 +118,14 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
-        await EnsureInitializedAsync(null, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskStarted(DeviceId, UserId, taskId, minutes);
         await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(null, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
         await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
     }
@@ -116,61 +141,17 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _disposed = true;
     }
 
-    public NetworkedEventAggregator GetAggregator()
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        EnsureInitializedAsync(null, CancellationToken.None).GetAwaiter().GetResult();
-        return _aggregator ?? throw new InvalidOperationException("Network aggregator not initialized.");
-    }
-
-    private async Task EnsureInitializedAsync(NetworkOptions? overrideOptions, CancellationToken cancellationToken)
-    {
-        await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (_initialized)
         {
-            if (_aggregator is not null && overrideOptions is null)
-            {
-                return;
-            }
-
-            NetworkOptions options = overrideOptions ?? await LoadOptionsAsync(cancellationToken).ConfigureAwait(false);
-            options.Normalize();
-            DeviceId = options.DeviceId;
-            UserId = options.UserId;
-            _options = options;
-
-            if (_aggregator is null || _transport is null)
-            {
-                await BuildTransportAsync(options, cancellationToken).ConfigureAwait(false);
-            }
+            return;
         }
-        finally
-        {
-            _initLock.Release();
-        }
+        await InitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<NetworkOptions> LoadOptionsAsync(CancellationToken cancellationToken)
+    private async Task InitEventAggregationAsync(CancellationToken cancellationToken)
     {
-        await _storage.InitializeAsync().ConfigureAwait(false);
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-        settings.Network ??= NetworkOptions.CreateDefault();
-        settings.Network.Normalize();
-        return settings.Network.Clone();
-    }
-
-    private async Task BuildTransportAsync(NetworkOptions options, CancellationToken cancellationToken)
-    {
-        options.EnsureListeningPort();
-        string authSecret = options.ResolveAuthenticationSecret();
-
-        var localAggregator = new EventAggregator();
-        _transport = new TCPEventTransport(
-            options.ListeningPort,
-            new JsonEventSerializer(),
-            TimeSpan.FromSeconds(20),
-            authSecret);
-        _aggregator = new NetworkedEventAggregator(localAggregator, _transport, ownsLocalAggregator: true, ownsTransport: false);
-
         RegisterTrackedEventTypes();
 
         SubscribeToInboundEvents();

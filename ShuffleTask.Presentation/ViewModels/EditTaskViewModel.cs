@@ -84,7 +84,7 @@ public partial class EditTaskViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    // Per-task timer override settings
+    // Per-task timer override _settings
     [ObservableProperty]
     private bool useCustomTimer;
 
@@ -207,7 +207,7 @@ public partial class EditTaskViewModel : ObservableObject
         CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
 
-        // Load custom timer settings
+        // Load custom timer _settings
         UseCustomTimer = _workingCopy.CustomTimerMode.HasValue;
         if (UseCustomTimer)
         {
@@ -274,7 +274,7 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.Paused = IsPaused;
             _workingCopy.CutInLineMode = CutInLineMode;
 
-            // Save custom timer settings
+            // Save custom timer _settings
             if (UseCustomTimer)
             {
                 _workingCopy.CustomTimerMode = CustomTimerMode;

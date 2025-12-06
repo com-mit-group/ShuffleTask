@@ -17,7 +17,7 @@ internal class TimeUpNotificationAsyncHandler(ILogger<NetworkSyncService>? logge
 
     public async Task OnNextAsync(TimeUpNotificationEvent domainEvent, CancellationToken cancellationToken = default)
     {
-        Models.AppSettings settings = await Storage.GetSettingsAsync().ConfigureAwait(false);
+        Application.Models.AppSettings settings = await Storage.GetSettingsAsync().ConfigureAwait(false);
         Logger?.LogInformation("Time up for last task");
         await Notifications.ShowToastAsync(TimeUpNotificationEvent.TimeUpTitle, TimeUpNotificationEvent.TimeUpMessage, settings).ConfigureAwait(false);
 

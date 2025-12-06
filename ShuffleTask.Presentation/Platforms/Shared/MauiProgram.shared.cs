@@ -1,6 +1,6 @@
 using System;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {

@@ -1,4 +1,4 @@
-using ShuffleTask.Presentation.Platforms.Windows;
+using ShuffleTask.Presentation;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Views;

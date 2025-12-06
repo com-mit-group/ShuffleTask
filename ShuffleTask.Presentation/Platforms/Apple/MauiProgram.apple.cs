@@ -4,7 +4,7 @@ using Microsoft.Maui;
 using Microsoft.Maui.ApplicationModel;
 using UIKit;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {

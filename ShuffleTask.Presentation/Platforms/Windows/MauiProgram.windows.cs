@@ -4,7 +4,7 @@ using Microsoft.Maui.LifecycleEvents;
 using Microsoft.Maui.Platform;
 using ShuffleTask.Presentation.Platforms.Windows.Services;
 
-namespace ShuffleTask.Presentation.Platforms.Windows;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {

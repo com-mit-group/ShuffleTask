@@ -9,9 +9,9 @@ public partial class NetworkOptions : ObservableObject
     private const int MinPort = 15000;
     private const int MaxPort = 45000;
     private const int PortRange = MaxPort - MinPort;
-
+    private const string LocalHostString = "127.0.0.1";
     [ObservableProperty]
-    private string host = "127.0.0.1";
+    private string host = LocalHostString;
 
     [ObservableProperty]
     private int listeningPort;
@@ -23,7 +23,7 @@ public partial class NetworkOptions : ObservableObject
     private string? userId = Environment.UserName;
 
     [ObservableProperty]
-    private string peerHost = "127.0.0.1";
+    private string peerHost = LocalHostString;
 
     [ObservableProperty]
     private int peerPort;
@@ -35,27 +35,13 @@ public partial class NetworkOptions : ObservableObject
         return options;
     }
 
-    public NetworkOptions Clone()
-    {
-        return new NetworkOptions
-        {
-            Host = Host,
-            ListeningPort = ListeningPort,
-            DeviceId = DeviceId,
-            UserId = UserId,
-            PeerHost = PeerHost,
-            PeerPort = PeerPort,
-        };
-    }
-
     public void Normalize()
     {
-        Host = string.IsNullOrWhiteSpace(Host) ? "127.0.0.1" : Host.Trim();
+        Host = string.IsNullOrWhiteSpace(Host) ? LocalHostString : Host.Trim();
         DeviceId = string.IsNullOrWhiteSpace(DeviceId) ? Environment.MachineName : DeviceId.Trim();
         UserId = string.IsNullOrWhiteSpace(UserId) ? null : UserId.Trim();
-        PeerHost = string.IsNullOrWhiteSpace(PeerHost) ? "127.0.0.1" : PeerHost.Trim();
+        PeerHost = string.IsNullOrWhiteSpace(PeerHost) ? LocalHostString : PeerHost.Trim();
         ListeningPort = NormalizePort(ListeningPort, DeviceId);
-        PeerPort = NormalizePort(PeerPort, DeviceId, allowZero: true);
     }
 
     public string ResolveAuthenticationSecret()
@@ -80,7 +66,7 @@ public partial class NetworkOptions : ObservableObject
         return $"{sessionUserId}@{Host}:{ListeningPort}||{secret}";
     }
 
-    public void EnsureListeningPort()
+    private void EnsureListeningPort()
     {
         ListeningPort = NormalizePort(ListeningPort, DeviceId);
     }

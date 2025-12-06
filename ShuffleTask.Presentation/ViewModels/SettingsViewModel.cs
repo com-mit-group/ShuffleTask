@@ -15,15 +15,14 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
-    private NetworkOptions? _currentNetworkOptions;
 
     [ObservableProperty]
-    private AppSettings settings = new();
+    private AppSettings _settings;
 
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync)
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -31,6 +30,7 @@ public partial class SettingsViewModel : ObservableObject
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     public bool UsePomodoro
@@ -59,11 +59,10 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _storage.InitializeAsync();
-            Settings = await _storage.GetSettingsAsync();
+            var loadedSettings = await _storage.GetSettingsAsync();
+            UpdateSettingsFrom(loadedSettings);
             Settings.NormalizeWeights();
             await _notifications.InitializeAsync();
-            TrackNetworkOptions(Settings.Network);
-            await _networkSync.ApplyOptionsAsync(Settings.Network);
         }
         finally
         {
@@ -85,7 +84,6 @@ public partial class SettingsViewModel : ObservableObject
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
             await _coordinator.RefreshAsync();
-            await _networkSync.ApplyOptionsAsync(Settings.Network);
         }
         finally
         {
@@ -132,7 +130,6 @@ public partial class SettingsViewModel : ObservableObject
         {
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
-            await _networkSync.ApplyOptionsAsync(Settings.Network);
             await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
         }
         finally
@@ -162,30 +159,50 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnSettingsChanged(AppSettings value)
     {
         OnPropertyChanged(nameof(UsePomodoro));
-        TrackNetworkOptions(value.Network);
-    }
-
-    private void TrackNetworkOptions(NetworkOptions? options)
-    {
-        if (_currentNetworkOptions is not null)
-        {
-            _currentNetworkOptions.PropertyChanged -= OnNetworkChanged;
-        }
-
-        if (options is null)
-        {
-            return;
-        }
-
-        _currentNetworkOptions = options;
-        _currentNetworkOptions.PropertyChanged += OnNetworkChanged;
         OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
     }
 
     private void OnNetworkChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Settings.Network?.EnsureListeningPort();
         OnPropertyChanged(nameof(LocalConnectionSummary));
         OnPropertyChanged(nameof(AuthTokenPreview));
+    }
+
+    private void UpdateSettingsFrom(AppSettings source)
+    {
+        if (source == null) return;
+
+        // Update all properties from source to the singleton Settings instance
+        // This ensures NetworkOptions stays in sync automatically
+        Settings.WorkStart = source.WorkStart;
+        Settings.WorkEnd = source.WorkEnd;
+        Settings.TimerMode = source.TimerMode;
+        Settings.FocusMinutes = source.FocusMinutes;
+        Settings.BreakMinutes = source.BreakMinutes;
+        Settings.PomodoroCycles = source.PomodoroCycles;
+        Settings.MinGapMinutes = source.MinGapMinutes;
+        Settings.MaxGapMinutes = source.MaxGapMinutes;
+        Settings.ReminderMinutes = source.ReminderMinutes;
+        Settings.EnableNotifications = source.EnableNotifications;
+        Settings.SoundOn = source.SoundOn;
+        Settings.Active = source.Active;
+        Settings.AutoShuffleEnabled = source.AutoShuffleEnabled;
+        Settings.ManualShuffleRespectsAllowedPeriod = source.ManualShuffleRespectsAllowedPeriod;
+        Settings.MaxDailyShuffles = source.MaxDailyShuffles;
+        Settings.QuietHoursStart = source.QuietHoursStart;
+        Settings.QuietHoursEnd = source.QuietHoursEnd;
+        Settings.StreakBias = source.StreakBias;
+        Settings.StableRandomnessPerDay = source.StableRandomnessPerDay;
+        Settings.ImportanceWeight = source.ImportanceWeight;
+        Settings.UrgencyWeight = source.UrgencyWeight;
+        Settings.UrgencyDeadlineShare = source.UrgencyDeadlineShare;
+        Settings.RepeatUrgencyPenalty = source.RepeatUrgencyPenalty;
+        Settings.SizeBiasStrength = source.SizeBiasStrength;
+        
+        // Update NetworkOptions - this automatically updates Settings.Network
+        if (source.Network != null)
+        {
+            Settings.Network = source.Network;
+        }
     }
 }

@@ -4,7 +4,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              xmlns:controls="clr-namespace:ShuffleTask.Controls"
-             xmlns:converters="clr-namespace:ShuffleTask.Converters"
+             xmlns:converters="clr-namespace:ShuffleTask.Presentation.Converters"
              x:Class="ShuffleTask.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel"
              Title="Settings">

@@ -1,4 +1,4 @@
-using ShuffleTask.Presentation.Platforms.Windows;
+using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Services;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Core;
