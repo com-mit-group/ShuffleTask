@@ -1,9 +1,11 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Events;
+using ShuffleTask.Domain.Entities;
 using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Services;
+
 internal class TaskUpsertedAsyncHandler : IAsyncEventHandler<TaskUpsertedEvent>
 {
     private readonly ILogger<NetworkSyncService>? _logger;
@@ -24,19 +26,62 @@ internal class TaskUpsertedAsyncHandler : IAsyncEventHandler<TaskUpsertedEvent>
 
         try
         {
-            Domain.Entities.TaskItem? existing = await _storage.GetTaskAsync(domainEvent.Task.Id).ConfigureAwait(false);
+            TaskItem? existing = await _storage.GetTaskAsync(domainEvent.Task.Id).ConfigureAwait(false);
+            TaskItem incoming = NormalizeIncoming(domainEvent.Task, existing);
+
             if (existing == null)
             {
-                await _storage.AddTaskAsync(domainEvent.Task).ConfigureAwait(false);
+                await _storage.AddTaskAsync(incoming).ConfigureAwait(false);
+                return;
             }
-            else
+
+            if (IsStale(incoming, existing))
             {
-                await _storage.UpdateTaskAsync(domainEvent.Task).ConfigureAwait(false);
+                _logger?.LogInformation(
+                    "Ignoring stale task update for {TaskId} with version {Version}",
+                    incoming.Id,
+                    incoming.EventVersion);
+                return;
             }
+
+            incoming.CreatedAt = existing.CreatedAt;
+            await _storage.UpdateTaskAsync(incoming).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to apply inbound task upsert for {TaskId}", domainEvent.Task.Id);
         }
+    }
+
+    private static bool IsStale(TaskItem incoming, TaskItem existing)
+    {
+        return incoming.EventVersion > 0 && incoming.EventVersion <= existing.EventVersion;
+    }
+
+    private static TaskItem NormalizeIncoming(TaskItem task, TaskItem? existing)
+    {
+        TaskItem normalized = task.Clone();
+
+        if (string.IsNullOrWhiteSpace(normalized.Id) && existing != null)
+        {
+            normalized.Id = existing.Id;
+        }
+        else if (string.IsNullOrWhiteSpace(normalized.Id))
+        {
+            normalized.Id = Guid.NewGuid().ToString("n");
+        }
+
+        if (normalized.CreatedAt == default)
+        {
+            normalized.CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow;
+        }
+
+        if (normalized.EventVersion <= 0)
+        {
+            normalized.EventVersion = (existing?.EventVersion ?? 0) + 1;
+        }
+
+        normalized.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
+        return normalized;
     }
 }

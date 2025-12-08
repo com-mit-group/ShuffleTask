@@ -55,6 +55,16 @@ public abstract class TaskItemData
 
     public CutInLineMode CutInLineMode { get; set; }
 
+    /// <summary>
+    /// Tracks when individual fields were last updated to support conflict resolution during sync.
+    /// </summary>
+    public Dictionary<string, DateTime> FieldUpdatedAt { get; set; } = new();
+
+    /// <summary>
+    /// Monotonic event version used for idempotency when applying remote updates.
+    /// </summary>
+    public int EventVersion { get; set; }
+
     protected void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -85,5 +95,8 @@ public abstract class TaskItemData
         CustomBreakMinutes = source.CustomBreakMinutes;
         CustomPomodoroCycles = source.CustomPomodoroCycles;
         CutInLineMode = source.CutInLineMode;
+
+        FieldUpdatedAt = new Dictionary<string, DateTime>(source.FieldUpdatedAt);
+        EventVersion = source.EventVersion;
     }
 }
