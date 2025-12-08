@@ -129,7 +129,6 @@ public static partial class MauiProgram
         {
             var appSettings = sp.GetRequiredService<AppSettings>();
             var options = appSettings.Network ?? NetworkOptions.CreateDefault();
-            options.Normalize();
             string authSecret = options.ResolveAuthenticationSecret();
             return new TCPEventTransport(
                 options.ListeningPort,

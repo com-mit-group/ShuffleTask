@@ -313,7 +313,7 @@
                    VerticalOptions="Center" />
             <Entry Grid.Row="23"
                    Grid.Column="1"
-                   Text="{Binding Settings.Network.Host}" />
+                   Text="{Binding Settings.Network.Host}" IsReadOnly="True" />
 
             <Label Grid.Row="24"
                    Text="Listening port"
@@ -321,7 +321,7 @@
             <Entry Grid.Row="24"
                    Grid.Column="1"
                    Keyboard="Numeric"
-                   Text="{Binding Settings.Network.ListeningPort}" />
+                   Text="{Binding Settings.Network.ListeningPort}" IsReadOnly="True" />
 
             <Label Grid.Row="25"
                    Text="Device id"
