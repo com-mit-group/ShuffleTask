@@ -75,6 +75,7 @@ public class StorageService : IStorageService
             await AddCol("CustomEndTime", "TEXT", "NULL");
             await AddCol("Paused", IntegerSqlType, "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
+            await AddCol("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP");
             await AddCol("Description", "TEXT", "''");
             await AddCol("Status", IntegerSqlType, "0");
             await AddCol("SnoozedUntil", "TEXT", "NULL");
@@ -86,7 +87,6 @@ public class StorageService : IStorageService
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
             await AddCol("CutInLineMode", IntegerSqlType, "0");
-            await AddCol("FieldUpdatedAt", "TEXT", "'{}'");
             await AddCol("EventVersion", IntegerSqlType, "0");
         }
         catch
@@ -96,6 +96,23 @@ public class StorageService : IStorageService
     }
 
     private SQLiteAsyncConnection Db => _db ?? throw new InvalidOperationException("StorageService not initialized. Call InitializeAsync() first.");
+
+    private void EnsureMetadata(TaskItemData item, TaskItemRecord? existing, bool bumpVersion)
+    {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+
+        item.CreatedAt = item.CreatedAt == default ? nowUtc : EnsureUtc(item.CreatedAt);
+        item.UpdatedAt = item.UpdatedAt == default ? nowUtc : EnsureUtc(item.UpdatedAt);
+
+        if (existing == null)
+        {
+            item.EventVersion = Math.Max(1, item.EventVersion);
+            return;
+        }
+
+        int baseVersion = Math.Max(item.EventVersion, existing.EventVersion);
+        item.EventVersion = bumpVersion ? Math.Max(baseVersion, existing.EventVersion + 1) : baseVersion;
+    }
 
     // Tasks CRUD
     public async Task<List<TaskItem>> GetTasksAsync()
@@ -124,10 +141,6 @@ public class StorageService : IStorageService
         {
             item.Id = Guid.NewGuid().ToString("n");
         }
-        if (item.CreatedAt == default)
-        {
-            item.CreatedAt = _clock.GetUtcNow().UtcDateTime;
-        }
         if (item.Status != TaskLifecycleStatus.Active &&
             item.Status != TaskLifecycleStatus.Snoozed &&
             item.Status != TaskLifecycleStatus.Completed)
@@ -135,7 +148,7 @@ public class StorageService : IStorageService
             item.Status = TaskLifecycleStatus.Active;
         }
 
-        item.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
+        EnsureMetadata(item, null, bumpVersion: true);
 
         var record = TaskItemRecord.FromDomain(item);
         await Db.InsertAsync(record);
@@ -143,8 +156,27 @@ public class StorageService : IStorageService
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
-        item.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
+        var existing = await Db.FindAsync<TaskItemRecord>(item.Id);
+
+        if (existing != null)
+        {
+            item.CreatedAt = existing.CreatedAt;
+        }
+
+        if (item.UpdatedAt == default)
+        {
+            item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+        }
+
+        EnsureMetadata(item, existing, bumpVersion: true);
+
         var record = TaskItemRecord.FromDomain(item);
+        if (existing == null)
+        {
+            await Db.InsertAsync(record);
+            return;
+        }
+
         await Db.UpdateAsync(record);
     }
 
@@ -169,6 +201,9 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             DateTime doneAt = EnsureUtc(nowUtc);
             existing.LastDoneAt = doneAt;
@@ -177,6 +212,9 @@ public class StorageService : IStorageService
             existing.SnoozedUntil = null;
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
             existing.CutInLineMode = CutInLineMode.None;
+
+            existing.UpdatedAt = EnsureUtc(nowUtc);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
 
             conn.Update(existing);
             updated = existing.ToDomain();
@@ -209,12 +247,18 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             DateTime until = EnsureUtc(nowUtc.Add(duration));
             existing.Status = TaskLifecycleStatus.Snoozed;
             existing.SnoozedUntil = until;
             existing.NextEligibleAt = until;
             existing.CompletedAt = null;
+
+            existing.UpdatedAt = EnsureUtc(nowUtc);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
 
             conn.Update(existing);
             updated = existing.ToDomain();
@@ -241,8 +285,13 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             ApplyResume(existing);
+            existing.UpdatedAt = EnsureUtc(_clock.GetUtcNow().UtcDateTime);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
             conn.Update(existing);
             updated = existing.ToDomain();
         });
@@ -275,7 +324,11 @@ public class StorageService : IStorageService
             if (nextUtc <= nowUtc)
             {
                 string originalStatus = task.Status.ToString();
+                var baseline = new TaskItemRecord();
+                baseline.CopyFrom(task);
                 ApplyResume(task);
+                task.UpdatedAt = EnsureUtc(nowUtc);
+                EnsureMetadata(task, baseline, bumpVersion: true);
                 toUpdate.Add(task);
                 _logger?.LogStateTransition(task.Id, originalStatus, "Active", "Auto-resumed due to schedule");
             }

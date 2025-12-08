@@ -58,6 +58,7 @@ public class StorageServiceStub : IStorageService
     public Task AddTaskAsync(TaskItem item)
     {
         EnsureInitialized();
+        EnsureMetadata(item, null, bumpVersion: true);
         _tasks[item.Id] = Clone(item);
         return Task.CompletedTask;
     }
@@ -66,6 +67,7 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         UpdateTaskCallCount++;
+        EnsureMetadata(item, _tasks.TryGetValue(item.Id, out var existing) ? existing : null, bumpVersion: true);
         _tasks[item.Id] = Clone(item);
         return Task.CompletedTask;
     }
@@ -97,6 +99,8 @@ public class StorageServiceStub : IStorageService
         existing.SnoozedUntil = null;
         existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
 
+        EnsureMetadata(existing, existing, bumpVersion: true, updatedAtOverride: doneAt);
+
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
     }
@@ -124,6 +128,8 @@ public class StorageServiceStub : IStorageService
         existing.NextEligibleAt = until;
         existing.CompletedAt = null;
 
+        EnsureMetadata(existing, existing, bumpVersion: true, updatedAtOverride: nowUtc);
+
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
     }
@@ -139,6 +145,7 @@ public class StorageServiceStub : IStorageService
         }
 
         ApplyResume(existing);
+        EnsureMetadata(existing, existing, bumpVersion: true);
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
     }
@@ -178,6 +185,7 @@ public class StorageServiceStub : IStorageService
             if (nextUtc <= nowUtc)
             {
                 ApplyResume(task);
+                EnsureMetadata(task, task, bumpVersion: true, updatedAtOverride: nowUtc);
             }
         }
     }
@@ -246,6 +254,34 @@ public class StorageServiceStub : IStorageService
         {
             throw new InvalidOperationException("StorageService not initialized. Call InitializeAsync() first.");
         }
+    }
+
+    private void EnsureMetadata(TaskItem task, TaskItem? existing, bool bumpVersion, DateTime? updatedAtOverride = null)
+    {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+
+        task.CreatedAt = task.CreatedAt == default
+            ? nowUtc
+            : EnsureUtc(task.CreatedAt);
+
+        task.UpdatedAt = updatedAtOverride.HasValue
+            ? EnsureUtc(updatedAtOverride.Value)
+            : task.UpdatedAt == default
+                ? nowUtc
+                : EnsureUtc(task.UpdatedAt);
+
+        int existingVersion = existing?.EventVersion ?? 0;
+        int baseVersion = Math.Max(task.EventVersion, existingVersion);
+
+        if (existing == null)
+        {
+            task.EventVersion = Math.Max(1, baseVersion);
+            return;
+        }
+
+        task.EventVersion = bumpVersion
+            ? Math.Max(baseVersion, existingVersion + 1)
+            : Math.Max(1, baseVersion);
     }
 
     private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
