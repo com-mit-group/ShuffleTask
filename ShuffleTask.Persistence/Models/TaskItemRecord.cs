@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Domain.Entities;
 
@@ -12,22 +11,6 @@ internal sealed class TaskItemRecord : TaskItemData
     {
         get => base.Id;
         set => base.Id = value;
-    }
-
-    [Ignore]
-    public new Dictionary<string, DateTime> FieldUpdatedAt
-    {
-        get => base.FieldUpdatedAt;
-        set => base.FieldUpdatedAt = value;
-    }
-
-    [Column("FieldUpdatedAt")]
-    public string FieldUpdatedAtJson
-    {
-        get => JsonConvert.SerializeObject(base.FieldUpdatedAt);
-        set => base.FieldUpdatedAt = string.IsNullOrWhiteSpace(value)
-            ? new Dictionary<string, DateTime>()
-            : JsonConvert.DeserializeObject<Dictionary<string, DateTime>>(value) ?? new Dictionary<string, DateTime>();
     }
 
     [Indexed]
@@ -55,6 +38,11 @@ internal sealed class TaskItemRecord : TaskItemData
         if (AllowedPeriod == AllowedPeriod.Custom && CustomStartTime is null && CustomEndTime is null)
         {
             AllowedPeriod = AllowedPeriod.OffWork;
+        }
+
+        if (UpdatedAt == default)
+        {
+            UpdatedAt = CreatedAt;
         }
 
         return TaskItem.FromData(this);

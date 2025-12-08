@@ -60,6 +60,8 @@ public class StorageServiceStubTests
         Assert.That(retrieved!.Id, Is.EqualTo(task.Id));
         Assert.That(retrieved.Title, Is.EqualTo(task.Title));
         Assert.That(retrieved.Importance, Is.EqualTo(task.Importance));
+        Assert.That(retrieved.EventVersion, Is.GreaterThanOrEqualTo(1));
+        Assert.That(retrieved.UpdatedAt, Is.Not.EqualTo(default(DateTime)));
     }
 
     [Test]
@@ -77,6 +79,10 @@ public class StorageServiceStubTests
 
         await stub.AddTaskAsync(task);
 
+        var original = await stub.GetTaskAsync("update-test");
+        var originalVersion = original!.EventVersion;
+        var originalUpdatedAt = original.UpdatedAt;
+
         task.Title = "Updated";
         task.Importance = 4;
         await stub.UpdateTaskAsync(task);
@@ -84,6 +90,8 @@ public class StorageServiceStubTests
         var retrieved = await stub.GetTaskAsync("update-test");
         Assert.That(retrieved!.Title, Is.EqualTo("Updated"));
         Assert.That(retrieved.Importance, Is.EqualTo(4));
+        Assert.That(retrieved.EventVersion, Is.GreaterThan(originalVersion));
+        Assert.That(retrieved.UpdatedAt, Is.GreaterThan(originalUpdatedAt));
         Assert.That(stub.UpdateTaskCallCount, Is.EqualTo(1));
     }
 
@@ -119,12 +127,15 @@ public class StorageServiceStubTests
         };
 
         await stub.AddTaskAsync(task);
+        var before = await stub.GetTaskAsync("complete-me");
         var completed = await stub.MarkTaskDoneAsync("complete-me");
 
         Assert.That(completed, Is.Not.Null);
         Assert.That(completed!.Status, Is.EqualTo(TaskLifecycleStatus.Completed));
         Assert.That(completed.CompletedAt, Is.Not.Null);
         Assert.That(completed.LastDoneAt, Is.Not.Null);
+        Assert.That(completed.UpdatedAt, Is.EqualTo(completed.CompletedAt));
+        Assert.That(completed.EventVersion, Is.GreaterThan(before!.EventVersion));
         Assert.That(stub.MarkDoneCallCount, Is.EqualTo(1));
     }
 
@@ -143,12 +154,15 @@ public class StorageServiceStubTests
         };
 
         await stub.AddTaskAsync(task);
+        var before = await stub.GetTaskAsync("snooze-me");
         var snoozed = await stub.SnoozeTaskAsync("snooze-me", TimeSpan.FromMinutes(30));
 
         Assert.That(snoozed, Is.Not.Null);
         Assert.That(snoozed!.Status, Is.EqualTo(TaskLifecycleStatus.Snoozed));
         Assert.That(snoozed.SnoozedUntil, Is.Not.Null);
         Assert.That(snoozed.NextEligibleAt, Is.Not.Null);
+        Assert.That(snoozed.UpdatedAt, Is.GreaterThan(before!.UpdatedAt));
+        Assert.That(snoozed.EventVersion, Is.GreaterThan(before.EventVersion));
         Assert.That(stub.SnoozeCallCount, Is.EqualTo(1));
     }
 
@@ -169,12 +183,15 @@ public class StorageServiceStubTests
         };
 
         await stub.AddTaskAsync(task);
+        var before = await stub.GetTaskAsync("resume-me");
         var resumed = await stub.ResumeTaskAsync("resume-me");
 
         Assert.That(resumed, Is.Not.Null);
         Assert.That(resumed!.Status, Is.EqualTo(TaskLifecycleStatus.Active));
         Assert.That(resumed.SnoozedUntil, Is.Null);
         Assert.That(resumed.NextEligibleAt, Is.Null);
+        Assert.That(resumed.UpdatedAt, Is.GreaterThan(before!.UpdatedAt));
+        Assert.That(resumed.EventVersion, Is.GreaterThan(before.EventVersion));
         Assert.That(stub.ResumeCallCount, Is.EqualTo(1));
     }
 
@@ -195,6 +212,7 @@ public class StorageServiceStubTests
         };
 
         await stub.AddTaskAsync(snoozedTask);
+        var before = await stub.GetTaskAsync("auto-resume");
 
         // Advance time past the snooze period
         clock.AdvanceTime(TimeSpan.FromMinutes(10));
@@ -203,6 +221,8 @@ public class StorageServiceStubTests
 
         Assert.That(tasks.Count, Is.EqualTo(1));
         Assert.That(tasks[0].Status, Is.EqualTo(TaskLifecycleStatus.Active));
+        Assert.That(tasks[0].UpdatedAt, Is.GreaterThan(before!.UpdatedAt));
+        Assert.That(tasks[0].EventVersion, Is.GreaterThan(before.EventVersion));
     }
 
     [Test]

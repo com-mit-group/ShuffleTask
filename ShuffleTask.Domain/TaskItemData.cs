@@ -34,6 +34,8 @@ public abstract class TaskItemData
 
     public DateTime CreatedAt { get; set; }
 
+    public DateTime UpdatedAt { get; set; }
+
     public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
 
     public DateTime? SnoozedUntil { get; set; }
@@ -54,11 +56,6 @@ public abstract class TaskItemData
     public int? CustomPomodoroCycles { get; set; }
 
     public CutInLineMode CutInLineMode { get; set; }
-
-    /// <summary>
-    /// Tracks when individual fields were last updated to support conflict resolution during sync.
-    /// </summary>
-    public Dictionary<string, DateTime> FieldUpdatedAt { get; set; } = new();
 
     /// <summary>
     /// Monotonic event version used for idempotency when applying remote updates.
@@ -96,7 +93,7 @@ public abstract class TaskItemData
         CustomPomodoroCycles = source.CustomPomodoroCycles;
         CutInLineMode = source.CutInLineMode;
 
-        FieldUpdatedAt = new Dictionary<string, DateTime>(source.FieldUpdatedAt);
+        UpdatedAt = source.UpdatedAt;
         EventVersion = source.EventVersion;
     }
 }

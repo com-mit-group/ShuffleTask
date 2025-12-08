@@ -55,7 +55,12 @@ internal class TaskUpsertedAsyncHandler : IAsyncEventHandler<TaskUpsertedEvent>
 
     private static bool IsStale(TaskItem incoming, TaskItem existing)
     {
-        return incoming.EventVersion > 0 && incoming.EventVersion <= existing.EventVersion;
+        if (incoming.EventVersion > 0 && incoming.EventVersion <= existing.EventVersion)
+        {
+            return true;
+        }
+
+        return incoming.EventVersion <= 0 && incoming.UpdatedAt != default && incoming.UpdatedAt <= existing.UpdatedAt;
     }
 
     private static TaskItem NormalizeIncoming(TaskItem task, TaskItem? existing)
@@ -76,12 +81,15 @@ internal class TaskUpsertedAsyncHandler : IAsyncEventHandler<TaskUpsertedEvent>
             normalized.CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow;
         }
 
+        if (normalized.UpdatedAt == default)
+        {
+            normalized.UpdatedAt = existing?.UpdatedAt ?? DateTime.UtcNow;
+        }
+
         if (normalized.EventVersion <= 0)
         {
             normalized.EventVersion = (existing?.EventVersion ?? 0) + 1;
         }
-
-        normalized.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
         return normalized;
     }
 }
