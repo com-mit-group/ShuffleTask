@@ -4,6 +4,7 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation.Services;
 using System.ComponentModel;
+using Yaref92.Events.Connections;
 
 namespace ShuffleTask.ViewModels;
 
@@ -131,6 +132,11 @@ public partial class SettingsViewModel : ObservableObject
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
             await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+        }
+        catch (TcpConnectionDisconnectedException ex)
+        {
+            // Handle connection errors (log, notify user, etc.)
+            System.Diagnostics.Debug.WriteLine($"Error connecting to peer: {ex.Message}");
         }
         finally
         {
