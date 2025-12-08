@@ -86,6 +86,8 @@ public class StorageService : IStorageService
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
             await AddCol("CutInLineMode", IntegerSqlType, "0");
+            await AddCol("FieldUpdatedAt", "TEXT", "'{}'");
+            await AddCol("EventVersion", IntegerSqlType, "0");
         }
         catch
         {
@@ -133,12 +135,15 @@ public class StorageService : IStorageService
             item.Status = TaskLifecycleStatus.Active;
         }
 
+        item.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
+
         var record = TaskItemRecord.FromDomain(item);
         await Db.InsertAsync(record);
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
+        item.FieldUpdatedAt ??= new Dictionary<string, DateTime>();
         var record = TaskItemRecord.FromDomain(item);
         await Db.UpdateAsync(record);
     }
