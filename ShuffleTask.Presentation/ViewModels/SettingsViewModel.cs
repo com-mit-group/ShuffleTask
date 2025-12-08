@@ -60,9 +60,8 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _storage.InitializeAsync();
-            var loadedSettings = await _storage.GetSettingsAsync();
-            UpdateSettingsFrom(loadedSettings);
             Settings.NormalizeWeights();
+            Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
         }
         finally
@@ -174,41 +173,4 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(AuthTokenPreview));
     }
 
-    private void UpdateSettingsFrom(AppSettings source)
-    {
-        if (source == null) return;
-
-        // Update all properties from source to the singleton Settings instance
-        // This ensures NetworkOptions stays in sync automatically
-        Settings.WorkStart = source.WorkStart;
-        Settings.WorkEnd = source.WorkEnd;
-        Settings.TimerMode = source.TimerMode;
-        Settings.FocusMinutes = source.FocusMinutes;
-        Settings.BreakMinutes = source.BreakMinutes;
-        Settings.PomodoroCycles = source.PomodoroCycles;
-        Settings.MinGapMinutes = source.MinGapMinutes;
-        Settings.MaxGapMinutes = source.MaxGapMinutes;
-        Settings.ReminderMinutes = source.ReminderMinutes;
-        Settings.EnableNotifications = source.EnableNotifications;
-        Settings.SoundOn = source.SoundOn;
-        Settings.Active = source.Active;
-        Settings.AutoShuffleEnabled = source.AutoShuffleEnabled;
-        Settings.ManualShuffleRespectsAllowedPeriod = source.ManualShuffleRespectsAllowedPeriod;
-        Settings.MaxDailyShuffles = source.MaxDailyShuffles;
-        Settings.QuietHoursStart = source.QuietHoursStart;
-        Settings.QuietHoursEnd = source.QuietHoursEnd;
-        Settings.StreakBias = source.StreakBias;
-        Settings.StableRandomnessPerDay = source.StableRandomnessPerDay;
-        Settings.ImportanceWeight = source.ImportanceWeight;
-        Settings.UrgencyWeight = source.UrgencyWeight;
-        Settings.UrgencyDeadlineShare = source.UrgencyDeadlineShare;
-        Settings.RepeatUrgencyPenalty = source.RepeatUrgencyPenalty;
-        Settings.SizeBiasStrength = source.SizeBiasStrength;
-        
-        // Update NetworkOptions - this automatically updates Settings.Network
-        if (source.Network != null)
-        {
-            Settings.Network = source.Network;
-        }
-    }
 }

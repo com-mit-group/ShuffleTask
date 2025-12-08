@@ -15,6 +15,7 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly AppSettings _settings;
     private readonly INetworkSyncService? _networkSync;
     private readonly TimeProvider _clock;
     private readonly IPersistentBackgroundService _backgroundService;
@@ -31,6 +32,7 @@ public class ShuffleCoordinatorService : IDisposable
         IStorageService storage,
         ISchedulerService scheduler,
         INotificationService notifications,
+        AppSettings settings,
         TimeProvider clock,
         IPersistentBackgroundService backgroundService,
         INetworkSyncService? networkSync = null)
@@ -38,6 +40,7 @@ public class ShuffleCoordinatorService : IDisposable
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
         _networkSync = networkSync;
@@ -182,7 +185,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelTimerInternal();
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        var settings = _settings;
         if (!ShouldAutoShuffle(settings))
         {
             ClearPendingShuffle();
@@ -454,7 +457,7 @@ public class ShuffleCoordinatorService : IDisposable
             return;
         }
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        var settings = _settings;
         const string TimeUpTitle = "Time's up";
         const string TimeUpMessage = "Shuffling a new task...";
         await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
@@ -477,7 +480,7 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        var settings = _settings;
         if (!ShouldAutoShuffle(settings))
         {
             ClearPendingShuffle();

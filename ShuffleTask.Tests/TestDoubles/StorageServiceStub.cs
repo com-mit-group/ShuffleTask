@@ -12,7 +12,7 @@ public class StorageServiceStub : IStorageService
     private readonly Dictionary<string, TaskItem> _tasks = new();
     private readonly TimeProvider _clock;
     private bool _initialized;
-    private AppSettings _settings = new();
+    private readonly AppSettings _settings;
 
     public int InitializeCallCount { get; private set; }
     public int GetTasksCallCount { get; private set; }
@@ -24,9 +24,10 @@ public class StorageServiceStub : IStorageService
     public int GetSettingsCallCount { get; private set; }
     public int SetSettingsCallCount { get; private set; }
 
-    public StorageServiceStub(TimeProvider? clock = null)
+    public StorageServiceStub(TimeProvider? clock = null, AppSettings? settings = null)
     {
         _clock = clock ?? TimeProvider.System;
+        _settings = settings ?? new AppSettings();
     }
 
     public Task InitializeAsync()
@@ -154,14 +155,15 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         GetSettingsCallCount++;
-        return Task.FromResult(Clone(_settings));
+        return Task.FromResult(_settings);
     }
 
     public Task SetSettingsAsync(AppSettings settings)
     {
         EnsureInitialized();
         SetSettingsCallCount++;
-        _settings = Clone(settings);
+        _settings.CopyFrom(settings);
+        _settings.NormalizeWeights();
         return Task.CompletedTask;
     }
 
@@ -285,28 +287,6 @@ public class StorageServiceStub : IStorageService
     }
 
     private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
-
-    private static AppSettings Clone(AppSettings settings)
-    {
-        return new AppSettings
-        {
-            WorkStart = settings.WorkStart,
-            WorkEnd = settings.WorkEnd,
-            MinGapMinutes = settings.MinGapMinutes,
-            MaxGapMinutes = settings.MaxGapMinutes,
-            ReminderMinutes = settings.ReminderMinutes,
-            EnableNotifications = settings.EnableNotifications,
-            SoundOn = settings.SoundOn,
-            Active = settings.Active,
-            StreakBias = settings.StreakBias,
-            StableRandomnessPerDay = settings.StableRandomnessPerDay,
-            ImportanceWeight = settings.ImportanceWeight,
-            UrgencyWeight = settings.UrgencyWeight,
-            UrgencyDeadlineShare = settings.UrgencyDeadlineShare,
-            RepeatUrgencyPenalty = settings.RepeatUrgencyPenalty,
-            SizeBiasStrength = settings.SizeBiasStrength
-        };
-    }
 
     private static DateTime EnsureUtc(DateTime value)
     {

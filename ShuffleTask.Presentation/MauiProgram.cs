@@ -77,7 +77,8 @@ public static partial class MauiProgram
             var shuffleCoordinator = sp.GetRequiredService<ShuffleCoordinatorService>();
             var timeProvider = sp.GetRequiredService<TimeProvider>();
             var networkSync = sp.GetRequiredService<INetworkSyncService>();
-            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync);
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings);
             var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
             taskStartedHandler.RegisterDashboard(dashboardViewModel);
             return dashboardViewModel;
@@ -143,7 +144,8 @@ public static partial class MauiProgram
             var logger = sp.GetService<ILogger<NetworkSyncService>>();
             var storage = sp.GetRequiredService<StorageService>();
             var notifications = sp.GetRequiredService<INotificationService>();
-            var taskStartedAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications);
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var taskStartedAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications, appSettings);
             return taskStartedAsyncHandler;
         });
         builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
@@ -151,7 +153,8 @@ public static partial class MauiProgram
             var logger = sp.GetService<ILogger<NetworkSyncService>>();
             var storage = sp.GetRequiredService<StorageService>();
             var notifications = sp.GetRequiredService<INotificationService>();
-            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications);
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications, appSettings);
 
             var ns = sp.GetRequiredService<INetworkSyncService>();
             Task initTask = Task.Run(() => ns.InitAsync());
