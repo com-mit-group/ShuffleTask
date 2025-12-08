@@ -103,6 +103,40 @@ public partial class AppSettings : ObservableObject
         set => UpdateImportanceAndUrgency(null, value);
     }
 
+    public void CopyFrom(AppSettings? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        WorkStart = source.WorkStart;
+        WorkEnd = source.WorkEnd;
+        TimerMode = source.TimerMode;
+        FocusMinutes = source.FocusMinutes;
+        BreakMinutes = source.BreakMinutes;
+        PomodoroCycles = source.PomodoroCycles;
+        MinGapMinutes = source.MinGapMinutes;
+        MaxGapMinutes = source.MaxGapMinutes;
+        ReminderMinutes = source.ReminderMinutes;
+        EnableNotifications = source.EnableNotifications;
+        SoundOn = source.SoundOn;
+        Active = source.Active;
+        AutoShuffleEnabled = source.AutoShuffleEnabled;
+        ManualShuffleRespectsAllowedPeriod = source.ManualShuffleRespectsAllowedPeriod;
+        MaxDailyShuffles = source.MaxDailyShuffles;
+        QuietHoursStart = source.QuietHoursStart;
+        QuietHoursEnd = source.QuietHoursEnd;
+        StreakBias = source.StreakBias;
+        StableRandomnessPerDay = source.StableRandomnessPerDay;
+        ImportanceWeight = source.ImportanceWeight;
+        UrgencyWeight = source.UrgencyWeight;
+        UrgencyDeadlineShare = source.UrgencyDeadlineShare;
+        RepeatUrgencyPenalty = source.RepeatUrgencyPenalty;
+        SizeBiasStrength = source.SizeBiasStrength;
+        Network = source.Network;
+    }
+
     public void NormalizeWeights()
     {
         double sum = importanceWeight + urgencyWeight;

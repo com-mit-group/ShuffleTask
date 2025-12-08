@@ -13,13 +13,15 @@ public partial class TasksViewModel : ObservableObject
     private readonly IStorageService _storage;
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
+    private readonly AppSettings _settings;
 
-    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService)
+    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSyncService = networkSyncService;
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -39,7 +41,7 @@ public partial class TasksViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             List<TaskItem> items = await _storage.GetTasksAsync();
-            AppSettings settings = await _storage.GetSettingsAsync();
+            AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
             Tasks.Clear();

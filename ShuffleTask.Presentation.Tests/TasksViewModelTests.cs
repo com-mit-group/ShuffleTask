@@ -1,6 +1,7 @@
 using NSubstitute;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Tests.TestDoubles;
@@ -14,15 +15,17 @@ public class TasksViewModelTests
     private StorageServiceStub _storage = null!;
     private TasksViewModel _viewModel = null!;
     private TimeProvider _clock = null!;
+    private AppSettings _settings = null!;
 
     [SetUp]
     public async Task SetUp()
     {
         _clock = TimeProvider.System;
+        _settings = new AppSettings();
         _storage = new StorageServiceStub(_clock);
         await _storage.InitializeAsync();
         var ns = Substitute.For<INetworkSyncService>();
-        _viewModel = new TasksViewModel(_storage, _clock, ns);
+        _viewModel = new TasksViewModel(_storage, _clock, ns, _settings);
     }
 
     private TaskItem CreateTask(string id, TimeSpan createdOffset, bool paused = false)

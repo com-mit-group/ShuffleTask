@@ -266,4 +266,30 @@ public class StorageServiceStubTests
         Assert.That(stub.GetSettingsCallCount, Is.EqualTo(1));
         Assert.That(stub.SetSettingsCallCount, Is.EqualTo(1));
     }
+
+    [Test]
+    public async Task SetSettingsAsync_UpdatesSharedInstanceWithoutReads()
+    {
+        var shared = new AppSettings
+        {
+            ReminderMinutes = 10,
+            EnableNotifications = true,
+            Active = false
+        };
+        var stub = new StorageServiceStub(TimeProvider.System, shared);
+        await stub.InitializeAsync();
+
+        shared.ReminderMinutes = 45;
+        shared.EnableNotifications = false;
+
+        await stub.SetSettingsAsync(shared);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stub.GetSettingsCallCount, Is.EqualTo(0));
+            Assert.That(stub.SetSettingsCallCount, Is.EqualTo(1));
+            Assert.That(shared.ReminderMinutes, Is.EqualTo(45));
+            Assert.IsFalse(shared.EnableNotifications);
+        });
+    }
 }
