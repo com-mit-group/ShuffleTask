@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation.Services;
@@ -16,6 +18,8 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
+    private string? _lastUserId;
+    private bool _lastAnonymousMode;
 
     [ObservableProperty]
     private AppSettings _settings;
@@ -32,6 +36,8 @@ public partial class SettingsViewModel : ObservableObject
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _lastUserId = settings.Network?.UserId;
+        _lastAnonymousMode = settings.Network?.AnonymousSession ?? true;
     }
 
     public bool UsePomodoro
@@ -63,6 +69,8 @@ public partial class SettingsViewModel : ObservableObject
             Settings.NormalizeWeights();
             Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
+            _lastUserId = Settings.Network?.UserId;
+            _lastAnonymousMode = Settings.Network?.AnonymousSession ?? true;
         }
         finally
         {
@@ -81,9 +89,22 @@ public partial class SettingsViewModel : ObservableObject
         IsBusy = true;
         try
         {
+            bool wasAnonymous = _lastAnonymousMode || string.IsNullOrWhiteSpace(_lastUserId);
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
             await _coordinator.RefreshAsync();
+
+            if (wasAnonymous && !Settings.Network.AnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+            {
+                bool migrate = await PromptMigrateDeviceTasksAsync();
+                if (migrate)
+                {
+                    await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+                }
+            }
+
+            _lastUserId = Settings.Network.UserId;
+            _lastAnonymousMode = Settings.Network.AnonymousSession;
         }
         finally
         {
@@ -143,12 +164,51 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void Logout()
+    {
+        if (Settings?.Network == null)
+        {
+            return;
+        }
+
+        Settings.Network.AnonymousSession = true;
+        Settings.Network.UserId = null;
+        OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+    }
+
     public string LocalConnectionSummary =>
         Settings?.Network is null
             ? string.Empty
             : $"{Settings.Network.Host}:{Settings.Network.ListeningPort} ({Settings.Network.DeviceId})";
 
     public string AuthTokenPreview => Settings?.Network?.BuildAuthToken() ?? string.Empty;
+
+    public bool IsAnonymousSession
+    {
+        get => Settings?.Network?.AnonymousSession ?? true;
+        set
+        {
+            if (Settings?.Network == null)
+            {
+                return;
+            }
+
+            Settings.Network.AnonymousSession = value;
+            if (value)
+            {
+                Settings.Network.UserId = null;
+            }
+
+            OnPropertyChanged(nameof(IsAnonymousSession));
+            OnPropertyChanged(nameof(CanSyncAcrossDevices));
+            OnPropertyChanged(nameof(IsLoggedIn));
+        }
+    }
+
+    public bool CanSyncAcrossDevices => !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings?.Network?.UserId);
+
+    public bool IsLoggedIn => !IsAnonymousSession;
 
     private void ApplyValidation()
     {
@@ -159,6 +219,9 @@ public partial class SettingsViewModel : ObservableObject
         Settings.BreakMinutes = Math.Clamp(Settings.BreakMinutes, 1, 120);
         Settings.PomodoroCycles = Math.Clamp(Settings.PomodoroCycles, 1, 12);
         Settings.Network?.Normalize();
+        OnPropertyChanged(nameof(IsAnonymousSession));
+        OnPropertyChanged(nameof(CanSyncAcrossDevices));
+        OnPropertyChanged(nameof(IsLoggedIn));
     }
 
     partial void OnSettingsChanged(AppSettings value)
@@ -171,6 +234,17 @@ public partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(LocalConnectionSummary));
         OnPropertyChanged(nameof(AuthTokenPreview));
+        OnPropertyChanged(nameof(IsAnonymousSession));
+        OnPropertyChanged(nameof(CanSyncAcrossDevices));
+        OnPropertyChanged(nameof(IsLoggedIn));
+    }
+
+    private Task<bool> PromptMigrateDeviceTasksAsync()
+    {
+        const string title = "Sync device tasks?";
+        const string message = "You just signed in. Do you want to attach tasks from this device to your account for cross-device sync?";
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Application.Current?.MainPage?.DisplayAlert(title, message, "Yes", "No") ?? Task.FromResult(false));
     }
 
 }

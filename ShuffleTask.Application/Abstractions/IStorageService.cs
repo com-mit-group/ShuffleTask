@@ -16,4 +16,5 @@ public interface IStorageService
     Task<TaskItem?> ResumeTaskAsync(string id);
     Task<AppSettings> GetSettingsAsync();
     Task SetSettingsAsync(AppSettings settings);
+    Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId);
 }
