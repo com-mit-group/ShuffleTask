@@ -81,6 +81,27 @@ public class StorageServiceStub : IStorageService
         return Task.CompletedTask;
     }
 
+    public Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
+    {
+        EnsureInitialized();
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(userId))
+        {
+            return Task.FromResult(0);
+        }
+
+        int updated = 0;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        foreach (var task in _tasks.Values.Where(t => string.IsNullOrWhiteSpace(t.UserId) && t.DeviceId == deviceId))
+        {
+            task.UserId = userId;
+            task.DeviceId = null;
+            EnsureMetadata(task, task, bumpVersion: true, updatedAtOverride: nowUtc);
+            updated++;
+        }
+
+        return Task.FromResult(updated);
+    }
+
     public Task<TaskItem?> MarkTaskDoneAsync(string id)
     {
         EnsureInitialized();
@@ -262,6 +283,7 @@ public class StorageServiceStub : IStorageService
     {
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
+        EnsureOwnership(task, existing);
         task.CreatedAt = task.CreatedAt == default
             ? nowUtc
             : EnsureUtc(task.CreatedAt);
@@ -284,6 +306,24 @@ public class StorageServiceStub : IStorageService
         task.EventVersion = bumpVersion
             ? Math.Max(baseVersion, existingVersion + 1)
             : Math.Max(1, baseVersion);
+    }
+
+    private static void EnsureOwnership(TaskItemData task, TaskItem? existing)
+    {
+        string? preferredUser = string.IsNullOrWhiteSpace(task.UserId) ? existing?.UserId : task.UserId;
+        string? preferredDevice = string.IsNullOrWhiteSpace(task.DeviceId) ? existing?.DeviceId : task.DeviceId;
+
+        if (!string.IsNullOrWhiteSpace(preferredUser))
+        {
+            task.UserId = preferredUser;
+            task.DeviceId = null;
+            return;
+        }
+
+        task.UserId = null;
+        task.DeviceId = string.IsNullOrWhiteSpace(preferredDevice)
+            ? Environment.MachineName
+            : preferredDevice.Trim();
     }
 
     private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);

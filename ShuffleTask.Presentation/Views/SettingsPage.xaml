@@ -331,49 +331,69 @@
                    Text="{Binding Settings.Network.DeviceId}" />
 
             <Label Grid.Row="26"
-                   Text="User id"
+                   Text="Anonymous session"
                    VerticalOptions="Center" />
-            <Entry Grid.Row="26"
-                   Grid.Column="1"
-                   Text="{Binding Settings.Network.UserId}" />
+            <Switch Grid.Row="26"
+                    Grid.Column="1"
+                    IsToggled="{Binding IsAnonymousSession}" />
 
             <Label Grid.Row="27"
-                   Text="Peer host"
-                   VerticalOptions="Center" />
+                   Text="User id"
+                   VerticalOptions="Center"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
             <Entry Grid.Row="27"
                    Grid.Column="1"
-                   Text="{Binding Settings.Network.PeerHost}" />
+                   Text="{Binding Settings.Network.UserId}"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
 
             <Label Grid.Row="28"
-                   Text="Peer port"
-                   VerticalOptions="Center" />
+                   Text="Peer host"
+                   VerticalOptions="Center"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
             <Entry Grid.Row="28"
                    Grid.Column="1"
-                   Keyboard="Numeric"
-                   Text="{Binding Settings.Network.PeerPort}" />
+                   Text="{Binding Settings.Network.PeerHost}"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
 
             <Label Grid.Row="29"
-                   Text="Auth token"
-                   VerticalOptions="Center" />
-            <Label Grid.Row="29"
+                   Text="Peer port"
+                   VerticalOptions="Center"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
+            <Entry Grid.Row="29"
                    Grid.Column="1"
-                   LineBreakMode="CharacterWrap"
-                   Text="{Binding AuthTokenPreview}" />
+                   Keyboard="Numeric"
+                   Text="{Binding Settings.Network.PeerPort}"
+                   IsEnabled="{Binding CanSyncAcrossDevices}" />
 
-            <Grid Grid.Row="30"
-                  Grid.ColumnSpan="2"
-                  ColumnDefinitions="*,*"
-                  ColumnSpacing="16">
+            <Button Grid.Row="30"
+                    Grid.ColumnSpan="2"
+                    Text="Logout"
+                    Command="{Binding LogoutCommand}"
+                    IsEnabled="{Binding IsLoggedIn}" />
+
+            <Label Grid.Row="31"
+                    Text="Auth token"
+                    VerticalOptions="Center" />
+            <Label Grid.Row="31"
+                    Grid.Column="1"
+                    LineBreakMode="CharacterWrap"
+                    Text="{Binding AuthTokenPreview}" />
+
+            <Grid Grid.Row="32"
+                   Grid.ColumnSpan="2"
+                   ColumnDefinitions="*,*"
+                   ColumnSpacing="16">
                 <Button Grid.Column="0"
                         Text="Connect to peer"
-                        Command="{Binding ConnectPeerCommand}" />
+                        Command="{Binding ConnectPeerCommand}"
+                        IsEnabled="{Binding CanSyncAcrossDevices}" />
                 <Label Grid.Column="1"
                        Text="{Binding LocalConnectionSummary}"
                        HorizontalTextAlignment="End"
                        VerticalOptions="Center" />
             </Grid>
 
-            <Grid Grid.Row="31"
+            <Grid Grid.Row="33"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -385,7 +405,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="32"
+            <ActivityIndicator Grid.Row="34"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"

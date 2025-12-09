@@ -4,6 +4,10 @@ public abstract class TaskItemData
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("n");
 
+    public string? DeviceId { get; set; }
+
+    public string? UserId { get; set; }
+
     public string Title { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;
@@ -67,6 +71,8 @@ public abstract class TaskItemData
         ArgumentNullException.ThrowIfNull(source);
 
         Id = source.Id;
+        DeviceId = source.DeviceId;
+        UserId = source.UserId;
         Title = source.Title;
         Description = source.Description;
         Importance = source.Importance;

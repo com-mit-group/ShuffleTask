@@ -21,7 +21,10 @@ public partial class NetworkOptions : ObservableObject
     private string deviceId = Environment.MachineName;
 
     [ObservableProperty]
-    private string? userId = Environment.UserName;
+    private string? userId;
+
+    [ObservableProperty]
+    private bool anonymousSession = true;
 
     [ObservableProperty]
     private string peerHost = LocalHostString;
@@ -56,7 +59,8 @@ public partial class NetworkOptions : ObservableObject
     {
         ResolveLocalHost();
         DeviceId = string.IsNullOrWhiteSpace(DeviceId) ? Environment.MachineName : DeviceId.Trim();
-        UserId = string.IsNullOrWhiteSpace(UserId) ? null : UserId.Trim();
+        AnonymousSession = AnonymousSession || string.IsNullOrWhiteSpace(UserId);
+        UserId = AnonymousSession ? null : string.IsNullOrWhiteSpace(UserId) ? null : UserId.Trim();
         PeerHost = string.IsNullOrWhiteSpace(PeerHost) ? LocalHostString : PeerHost.Trim();
         ListeningPort = NormalizePort(ListeningPort, DeviceId);
     }

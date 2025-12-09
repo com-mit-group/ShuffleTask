@@ -14,6 +14,20 @@ internal sealed class TaskItemRecord : TaskItemData
     }
 
     [Indexed]
+    public new string? DeviceId
+    {
+        get => base.DeviceId;
+        set => base.DeviceId = value;
+    }
+
+    [Indexed]
+    public new string? UserId
+    {
+        get => base.UserId;
+        set => base.UserId = value;
+    }
+
+    [Indexed]
     public new string Title
     {
         get => base.Title;

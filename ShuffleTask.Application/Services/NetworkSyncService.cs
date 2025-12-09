@@ -70,16 +70,18 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public string? UserId { get; private set; }
 
-    public bool ShouldBroadcast => !_suppressBroadcast.Value;
+    public bool ShouldBroadcast => !_suppressBroadcast.Value && !IsAnonymous;
 
     private Guid SessionUserGuid => NetworkOptions.ResolveSessionUserId();
 
     public NetworkOptions NetworkOptions => _appSettings.Network ?? NetworkOptions.CreateDefault();
 
+    private bool IsAnonymous => NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
+
     public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-        if (_transport is null || string.IsNullOrWhiteSpace(host) || port <= 0)
+        if (_transport is null || string.IsNullOrWhiteSpace(host) || port <= 0 || IsAnonymous)
         {
             return;
         }
@@ -125,6 +127,11 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
     {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
         await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);

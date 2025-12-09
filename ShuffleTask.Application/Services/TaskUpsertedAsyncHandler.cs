@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Domain.Entities;
+using System;
 using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Services;
@@ -89,6 +90,18 @@ internal class TaskUpsertedAsyncHandler : IAsyncEventHandler<TaskUpsertedEvent>
         if (normalized.EventVersion <= 0)
         {
             normalized.EventVersion = (existing?.EventVersion ?? 0) + 1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalized.UserId))
+        {
+            normalized.DeviceId = null;
+        }
+        else
+        {
+            normalized.UserId = existing?.UserId;
+            normalized.DeviceId = string.IsNullOrWhiteSpace(normalized.DeviceId)
+                ? existing?.DeviceId ?? Environment.MachineName
+                : normalized.DeviceId.Trim();
         }
         return normalized;
     }

@@ -88,6 +88,8 @@ public class StorageService : IStorageService
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
             await AddCol("CutInLineMode", IntegerSqlType, "0");
             await AddCol("EventVersion", IntegerSqlType, "0");
+            await AddCol("DeviceId", "TEXT", "''");
+            await AddCol("UserId", "TEXT", "NULL");
         }
         catch
         {
@@ -101,6 +103,7 @@ public class StorageService : IStorageService
     {
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
+        EnsureOwnership(item, existing);
         item.CreatedAt = item.CreatedAt == default ? nowUtc : EnsureUtc(item.CreatedAt);
         item.UpdatedAt = item.UpdatedAt == default ? nowUtc : EnsureUtc(item.UpdatedAt);
 
@@ -112,6 +115,24 @@ public class StorageService : IStorageService
 
         int baseVersion = Math.Max(item.EventVersion, existing.EventVersion);
         item.EventVersion = bumpVersion ? Math.Max(baseVersion, existing.EventVersion + 1) : baseVersion;
+    }
+
+    private static void EnsureOwnership(TaskItemData item, TaskItemRecord? existing)
+    {
+        string? preferredUser = string.IsNullOrWhiteSpace(item.UserId) ? existing?.UserId : item.UserId;
+        string? preferredDevice = string.IsNullOrWhiteSpace(item.DeviceId) ? existing?.DeviceId : item.DeviceId;
+
+        if (!string.IsNullOrWhiteSpace(preferredUser))
+        {
+            item.UserId = preferredUser;
+            item.DeviceId = null;
+            return;
+        }
+
+        item.UserId = null;
+        item.DeviceId = string.IsNullOrWhiteSpace(preferredDevice)
+            ? Environment.MachineName
+            : preferredDevice.Trim();
     }
 
     // Tasks CRUD
@@ -184,6 +205,35 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
         await Db.DeleteAsync<TaskItemRecord>(id);
+    }
+
+    public async Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(userId))
+        {
+            return 0;
+        }
+
+        int updated = 0;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var matches = conn.Table<TaskItemRecord>()
+                .Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId)
+                .ToList();
+
+            foreach (var task in matches)
+            {
+                task.UserId = userId;
+                task.DeviceId = null;
+                task.UpdatedAt = EnsureUtc(nowUtc);
+                task.EventVersion = Math.Max(task.EventVersion + 1, 1);
+                conn.Update(task);
+                updated++;
+            }
+        });
+
+        return updated;
     }
 
     // Lifecycle helpers
