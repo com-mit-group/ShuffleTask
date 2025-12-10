@@ -252,6 +252,10 @@ public partial class SettingsViewModel : ObservableObject
 
     public bool IsLoggedIn => !IsAnonymousSession;
 
+    public string UserDisplayLabel => string.IsNullOrWhiteSpace(Settings?.Network?.UserId)
+        ? "Not logged in"
+        : Settings.Network.UserId;
+
     private void ApplyValidation()
     {
         Settings.ReminderMinutes = Math.Clamp(Settings.ReminderMinutes, 1, 480);
@@ -286,6 +290,7 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAnonymousSession));
         OnPropertyChanged(nameof(CanSyncAcrossDevices));
         OnPropertyChanged(nameof(IsLoggedIn));
+        OnPropertyChanged(nameof(UserDisplayLabel));
     }
 
     private void UpdateNetworkSubscription(NetworkOptions? oldNetwork, NetworkOptions? newNetwork)
