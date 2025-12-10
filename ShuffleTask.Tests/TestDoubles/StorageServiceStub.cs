@@ -1,9 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace ShuffleTask.Tests.TestDoubles;
 
@@ -79,6 +80,7 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         UpdateTaskCallCount++;
+        item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
         EnsureMetadata(item, _tasks.TryGetValue(item.Id, out var existing) ? existing : null, bumpVersion: true);
         _tasks[item.Id] = Clone(item);
         return Task.CompletedTask;
@@ -178,6 +180,7 @@ public class StorageServiceStub : IStorageService
         }
 
         ApplyResume(existing);
+        existing.UpdatedAt = EnsureUtc(_clock.GetUtcNow().UtcDateTime);
         EnsureMetadata(existing, existing, bumpVersion: true);
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
@@ -219,6 +222,7 @@ public class StorageServiceStub : IStorageService
             if (nextUtc <= nowUtc)
             {
                 ApplyResume(task);
+                task.UpdatedAt = EnsureUtc(nowUtc);
                 EnsureMetadata(task, task, bumpVersion: true, updatedAtOverride: nowUtc);
             }
         }

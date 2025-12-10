@@ -67,7 +67,8 @@ public class StorageServiceStubTests
     [Test]
     public async Task UpdateTask_ModifiesExistingTask()
     {
-        var stub = new StorageServiceStub();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2024, 6, 15, 10, 0, 0, TimeSpan.Zero));
+        var stub = new StorageServiceStub(clock);
         await stub.InitializeAsync();
 
         var task = new TaskItem
@@ -85,6 +86,7 @@ public class StorageServiceStubTests
 
         task.Title = "Updated";
         task.Importance = 4;
+        clock.AdvanceTime(TimeSpan.FromSeconds(1));
         await stub.UpdateTaskAsync(task);
 
         var retrieved = await stub.GetTaskAsync("update-test");
@@ -155,6 +157,7 @@ public class StorageServiceStubTests
 
         await stub.AddTaskAsync(task);
         var before = await stub.GetTaskAsync("snooze-me");
+        clock.AdvanceTime(TimeSpan.FromSeconds(1));
         var snoozed = await stub.SnoozeTaskAsync("snooze-me", TimeSpan.FromMinutes(30));
 
         Assert.That(snoozed, Is.Not.Null);
@@ -184,6 +187,7 @@ public class StorageServiceStubTests
 
         await stub.AddTaskAsync(task);
         var before = await stub.GetTaskAsync("resume-me");
+        clock.AdvanceTime(TimeSpan.FromSeconds(1));
         var resumed = await stub.ResumeTaskAsync("resume-me");
 
         Assert.That(resumed, Is.Not.Null);
@@ -207,8 +211,8 @@ public class StorageServiceStubTests
             Id = "auto-resume",
             Title = "Should resume",
             Status = TaskLifecycleStatus.Snoozed,
-            SnoozedUntil = clock.GetUtcNow().AddMinutes(-5).UtcDateTime,
-            NextEligibleAt = clock.GetUtcNow().AddMinutes(-5).UtcDateTime
+            SnoozedUntil = clock.GetUtcNow().AddMinutes(5).UtcDateTime,
+            NextEligibleAt = clock.GetUtcNow().AddMinutes(5).UtcDateTime
         };
 
         await stub.AddTaskAsync(snoozedTask);
