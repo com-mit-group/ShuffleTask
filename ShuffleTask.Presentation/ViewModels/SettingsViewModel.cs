@@ -369,18 +369,29 @@ public partial class SettingsViewModel : ObservableObject
             }
         }
 
+        var (userScope, deviceScope) = ResolveTaskScopes();
+
         await _coordinator.RefreshAsync();
-        await RefreshBoundCollectionsAsync();
+        await RefreshBoundCollectionsAsync(userScope, deviceScope);
     }
 
-    private Task RefreshBoundCollectionsAsync()
+    private (string? UserId, string DeviceId) ResolveTaskScopes()
+    {
+        bool anonymous = IsAnonymousSession;
+        string? userScope = anonymous ? null : Settings.Network?.UserId;
+        string deviceScope = anonymous ? Settings.Network?.DeviceId ?? string.Empty : string.Empty;
+
+        return (userScope, deviceScope);
+    }
+
+    private Task RefreshBoundCollectionsAsync(string? userScope, string? deviceScope)
     {
         if (_tasksViewModel is null)
         {
             return Task.CompletedTask;
         }
 
-        return MainThread.InvokeOnMainThreadAsync(_tasksViewModel.LoadAsync);
+        return MainThread.InvokeOnMainThreadAsync(() => _tasksViewModel.LoadAsync(userScope, deviceScope));
     }
 
 }
