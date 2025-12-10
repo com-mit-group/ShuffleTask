@@ -335,7 +335,8 @@
                    VerticalOptions="Center" />
             <Switch Grid.Row="26"
                     Grid.Column="1"
-                    IsToggled="{Binding IsAnonymousSession}" />
+                    IsToggled="{Binding IsAnonymousSession}"
+                    IsEnabled="False" />
 
             <Label Grid.Row="27"
                    Text="User id"
