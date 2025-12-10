@@ -18,6 +18,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
+    private readonly TasksViewModel _tasksViewModel;
     private const int MaxUsernameLength = 64;
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
@@ -29,7 +30,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings)
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings, TasksViewModel tasksViewModel)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -37,6 +38,7 @@ public partial class SettingsViewModel : ObservableObject
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
+        _tasksViewModel = tasksViewModel ?? throw new ArgumentNullException(nameof(tasksViewModel));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         UpdateNetworkSubscription(null, settings.Network);
         _lastUserId = settings.Network?.UserId;
@@ -95,15 +97,14 @@ public partial class SettingsViewModel : ObservableObject
             bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
-            await _coordinator.RefreshAsync();
-
-            if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+            bool sessionChanged = wasAnonymous != IsAnonymousSession || !string.Equals(_lastUserId, Settings.Network.UserId, StringComparison.Ordinal);
+            if (sessionChanged)
             {
-                bool migrate = await PromptMigrateDeviceTasksAsync();
-                if (migrate)
-                {
-                    await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
-                }
+                await HandleSessionTransitionAsync(wasAnonymous);
+            }
+            else
+            {
+                await _coordinator.RefreshAsync();
             }
 
             _lastUserId = Settings.Network.UserId;
@@ -196,16 +197,7 @@ public partial class SettingsViewModel : ObservableObject
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
             OnNetworkChanged(this, new PropertyChangedEventArgs(nameof(Settings.Network.UserId)));
-            await _coordinator.RefreshAsync();
-
-            if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
-            {
-                bool migrate = await PromptMigrateDeviceTasksAsync();
-                if (migrate)
-                {
-                    await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
-                }
-            }
+            await HandleSessionTransitionAsync(wasAnonymous);
 
             _lastUserId = Settings.Network.UserId;
             _lastAnonymousMode = IsAnonymousSession;
@@ -227,10 +219,16 @@ public partial class SettingsViewModel : ObservableObject
         IsBusy = true;
         try
         {
+            bool wasAnonymous = _lastAnonymousMode;
             await _networkSync.DisconnectAsync();
             Settings.Network.AnonymousSession = true;
             Settings.Network.UserId = null;
             OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+            await _storage.SetSettingsAsync(Settings);
+            await HandleSessionTransitionAsync(wasAnonymous);
+
+            _lastUserId = Settings.Network.UserId;
+            _lastAnonymousMode = IsAnonymousSession;
         }
         finally
         {
@@ -352,6 +350,31 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         return candidate;
+    }
+
+    private async Task HandleSessionTransitionAsync(bool wasAnonymous)
+    {
+        if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+        {
+            bool migrate = await PromptMigrateDeviceTasksAsync();
+            if (migrate)
+            {
+                await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+            }
+        }
+
+        await _coordinator.RefreshAsync();
+        await RefreshBoundCollectionsAsync();
+    }
+
+    private Task RefreshBoundCollectionsAsync()
+    {
+        if (_tasksViewModel is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return MainThread.InvokeOnMainThreadAsync(_tasksViewModel.LoadAsync);
     }
 
 }
