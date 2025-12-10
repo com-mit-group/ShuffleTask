@@ -80,6 +80,11 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     private bool IsAnonymous => NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
 
+    public Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default)
+    {
+        return EnsureInitializedAsync(cancellationToken);
+    }
+
     public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);

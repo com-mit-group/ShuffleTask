@@ -220,11 +220,12 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             bool wasAnonymous = _lastAnonymousMode;
+            await _networkSync.RequestGracefulFlushAsync();
             await _networkSync.DisconnectAsync();
             Settings.Network.AnonymousSession = true;
             Settings.Network.UserId = null;
-            OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await _storage.SetSettingsAsync(Settings);
+            OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await HandleSessionTransitionAsync(wasAnonymous);
 
             _lastUserId = Settings.Network.UserId;
