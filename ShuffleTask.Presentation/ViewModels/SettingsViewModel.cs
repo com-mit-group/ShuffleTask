@@ -216,16 +216,25 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Logout()
+    private async Task LogoutAsync()
     {
-        if (Settings?.Network == null)
+        if (IsBusy || Settings?.Network == null)
         {
             return;
         }
 
-        Settings.Network.AnonymousSession = true;
-        Settings.Network.UserId = null;
-        OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+        IsBusy = true;
+        try
+        {
+            await _networkSync.DisconnectAsync();
+            Settings.Network.AnonymousSession = true;
+            Settings.Network.UserId = null;
+            OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     public string LocalConnectionSummary =>

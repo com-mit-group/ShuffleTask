@@ -89,6 +89,20 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await _transport.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Error disconnecting from peers.");
+        }
+    }
+
     public async Task PublishTaskUpsertAsync(TaskItem task, CancellationToken cancellationToken = default)
     {
         if (!ShouldBroadcast)
