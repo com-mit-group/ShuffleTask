@@ -151,7 +151,8 @@ public partial class DashboardViewModel : ObservableObject
                 return;
             }
 
-            var tasks = await _storage.GetTasksAsync();
+            var network = _settings.Network;
+            var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty);
             DateTimeOffset now = _clock.GetUtcNow();
             string? previousId = _activeTask?.Id;
 

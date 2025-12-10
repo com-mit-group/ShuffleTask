@@ -40,7 +40,9 @@ public partial class TasksViewModel : ObservableObject
         try
         {
             await _storage.InitializeAsync();
-            List<TaskItem> items = await _storage.GetTasksAsync();
+            List<TaskItem> items = await _storage.GetTasksAsync(
+                _settings.Network?.UserId,
+                _settings.Network?.DeviceId ?? string.Empty);
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
