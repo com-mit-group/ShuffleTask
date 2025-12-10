@@ -194,6 +194,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network.AnonymousSession = false;
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
+            OnNetworkChanged(this, new PropertyChangedEventArgs(nameof(Settings.Network.UserId)));
             await _coordinator.RefreshAsync();
 
             if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
