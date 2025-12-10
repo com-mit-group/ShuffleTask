@@ -66,7 +66,7 @@ public abstract class TaskItemData
     /// </summary>
     public int EventVersion { get; set; }
 
-    protected void CopyFrom(TaskItemData source)
+    public void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
 

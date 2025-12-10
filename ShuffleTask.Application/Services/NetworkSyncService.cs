@@ -21,6 +21,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly NetworkedEventAggregator _aggregator;
     private readonly TCPEventTransport _transport;
+    private readonly object _connectionLock = new();
+    private CancellationTokenSource _peerConnectionCts = new();
     private bool _disposed;
     private bool _initialized;
 
@@ -86,7 +88,22 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
-        await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, cancellationToken).ConfigureAwait(false);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
+        await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+    }
+
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            CancelConnections();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Error disconnecting from peers.");
+        }
     }
 
     public async Task PublishTaskUpsertAsync(TaskItem task, CancellationToken cancellationToken = default)
@@ -173,6 +190,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         {
             await _transport.DisposeAsync().ConfigureAwait(false);
         }
+        CancelConnections();
     }
 
     private void SubscribeToInboundEvents()
@@ -197,5 +215,35 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.RegisterEventType<TaskDeletedEvent>();
         _aggregator.RegisterEventType<TaskStarted>();
         _aggregator.RegisterEventType<TimeUpNotificationEvent>();
+    }
+
+    private CancellationTokenSource EnsureConnectionCts()
+    {
+        lock (_connectionLock)
+        {
+            if (_peerConnectionCts.IsCancellationRequested)
+            {
+                _peerConnectionCts.Dispose();
+                _peerConnectionCts = new CancellationTokenSource();
+            }
+
+            return _peerConnectionCts;
+        }
+    }
+
+    private void CancelConnections()
+    {
+        lock (_connectionLock)
+        {
+            var existingCts = _peerConnectionCts;
+            _peerConnectionCts = new CancellationTokenSource();
+
+            if (!existingCts.IsCancellationRequested)
+            {
+                existingCts.Cancel();
+            }
+
+            existingCts.Dispose();
+        }
     }
 }

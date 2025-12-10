@@ -216,16 +216,25 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Logout()
+    private async Task LogoutAsync()
     {
-        if (Settings?.Network == null)
+        if (IsBusy || Settings?.Network == null)
         {
             return;
         }
 
-        Settings.Network.AnonymousSession = true;
-        Settings.Network.UserId = null;
-        OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+        IsBusy = true;
+        try
+        {
+            await _networkSync.DisconnectAsync();
+            Settings.Network.AnonymousSession = true;
+            Settings.Network.UserId = null;
+            OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     public string LocalConnectionSummary =>
@@ -310,7 +319,7 @@ public partial class SettingsViewModel : ObservableObject
         const string title = "Sync device tasks?";
         const string message = "You just signed in. Do you want to attach tasks from this device to your account for cross-device sync?";
         return MainThread.InvokeOnMainThreadAsync(() =>
-            Application.Current?.MainPage?.DisplayAlert(title, message, "Yes", "No") ?? Task.FromResult(false));
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "Yes", "No") ?? Task.FromResult(false));
     }
 
     private async Task<string?> GetUsernameAsync(string? username)
