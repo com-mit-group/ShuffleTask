@@ -14,6 +14,8 @@ public interface INetworkSyncService
 
     NetworkOptions NetworkOptions { get; }
 
+    Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default);
+
     Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
 
     Task DisconnectAsync(CancellationToken cancellationToken = default);

@@ -4,6 +4,7 @@ using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
@@ -22,7 +23,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly NetworkedEventAggregator _aggregator;
     private readonly TCPEventTransport _transport;
     private readonly object _connectionLock = new();
+    private readonly object _publishLock = new();
     private CancellationTokenSource _peerConnectionCts = new();
+    private List<Task> _inFlightPublishes = new();
     private bool _disposed;
     private bool _initialized;
 
@@ -80,6 +83,24 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     private bool IsAnonymous => NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
 
+    public async Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        Task[] pendingPublishes;
+        lock (_publishLock)
+        {
+            pendingPublishes = _inFlightPublishes.ToArray();
+        }
+
+        if (pendingPublishes.Length == 0)
+        {
+            return;
+        }
+
+        await Task.WhenAll(pendingPublishes).WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
@@ -115,7 +136,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskUpsertedEvent(task, DeviceId, UserId);
-        await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskDeletedAsync(string taskId, CancellationToken cancellationToken = default)
@@ -127,7 +148,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskDeletedEvent(taskId, DeviceId, UserId);
-        await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default)
@@ -139,7 +160,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskStarted(DeviceId, UserId, taskId, minutes);
-        await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
@@ -151,7 +172,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
-        await _aggregator!.PublishEventAsync(evt, cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose()
@@ -244,6 +265,28 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             }
 
             existingCts.Dispose();
+        }
+    }
+
+    private async Task PublishWithTrackingAsync(Func<Task> publishAction, CancellationToken cancellationToken)
+    {
+        Task publishTask;
+        lock (_publishLock)
+        {
+            publishTask = publishAction();
+            _inFlightPublishes.Add(publishTask);
+        }
+
+        try
+        {
+            await publishTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_publishLock)
+            {
+                _inFlightPublishes.Remove(publishTask);
+            }
         }
     }
 }
