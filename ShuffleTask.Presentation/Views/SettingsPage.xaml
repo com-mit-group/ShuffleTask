@@ -340,12 +340,15 @@
 
             <Label Grid.Row="27"
                    Text="User id"
-                   VerticalOptions="Center"
-                   IsEnabled="{Binding CanSyncAcrossDevices}" />
-            <Entry Grid.Row="27"
-                   Grid.Column="1"
-                   Text="{Binding Settings.Network.UserId}"
-                   IsEnabled="{Binding CanSyncAcrossDevices}" />
+                   VerticalOptions="Center" />
+            <Grid Grid.Row="27" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Entry Grid.Column="0"
+                       Text="{Binding Settings.Network.UserId}"
+                       IsReadOnly="True" />
+                <Button Grid.Column="1"
+                        Text="Login"
+                        Command="{Binding LoginCommand}" />
+            </Grid>
 
             <Label Grid.Row="28"
                    Text="Peer host"

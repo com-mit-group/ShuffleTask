@@ -18,6 +18,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
+    private const int MaxUsernameLength = 64;
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
@@ -167,6 +168,53 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task LoginAsync(string? username)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (Settings?.Network is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            string? trimmedUsername = await GetUsernameAsync(username);
+            if (string.IsNullOrWhiteSpace(trimmedUsername))
+            {
+                return;
+            }
+
+            bool wasAnonymous = IsAnonymousSession;
+            Settings.Network.UserId = trimmedUsername;
+            Settings.Network.AnonymousSession = false;
+            ApplyValidation();
+            await _storage.SetSettingsAsync(Settings);
+            await _coordinator.RefreshAsync();
+
+            if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+            {
+                bool migrate = await PromptMigrateDeviceTasksAsync();
+                if (migrate)
+                {
+                    await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+                }
+            }
+
+            _lastUserId = Settings.Network.UserId;
+            _lastAnonymousMode = IsAnonymousSession;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private void Logout()
     {
         if (Settings?.Network == null)
@@ -262,6 +310,37 @@ public partial class SettingsViewModel : ObservableObject
         const string message = "You just signed in. Do you want to attach tasks from this device to your account for cross-device sync?";
         return MainThread.InvokeOnMainThreadAsync(() =>
             Application.Current?.MainPage?.DisplayAlert(title, message, "Yes", "No") ?? Task.FromResult(false));
+    }
+
+    private async Task<string?> GetUsernameAsync(string? username)
+    {
+        string? candidate = username;
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            candidate = await MainThread.InvokeOnMainThreadAsync(() =>
+                Application.Current?.MainPage?.DisplayPromptAsync(
+                    "Login",
+                    "Enter your username",
+                    "OK",
+                    "Cancel",
+                    initialValue: _lastUserId ?? string.Empty,
+                    maxLength: MaxUsernameLength) ?? Task.FromResult<string?>(null));
+        }
+
+        candidate = candidate?.Trim();
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        if (candidate.Length > MaxUsernameLength)
+        {
+            candidate = candidate[..MaxUsernameLength];
+        }
+
+        return candidate;
     }
 
 }
