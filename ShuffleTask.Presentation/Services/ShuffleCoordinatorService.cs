@@ -252,7 +252,8 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
     {
-        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
         if (tasks.Count == 0)
         {
             ClearPendingShuffle();
@@ -551,7 +552,8 @@ public class ShuffleCoordinatorService : IDisposable
             return task;
         }
 
-        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
         TaskItem? candidate = _scheduler.PickNextTask(tasks, settings, now);
         if (candidate != null)
         {

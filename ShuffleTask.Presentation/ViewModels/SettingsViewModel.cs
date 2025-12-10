@@ -127,7 +127,8 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _storage.InitializeAsync();
-            var items = await _storage.GetTasksAsync();
+            var network = Settings.Network;
+            var items = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty);
             DateTimeOffset now = _clock.GetUtcNow();
             var next = _scheduler.PickNextTask(items, Settings, now);
             if (next != null && Settings.EnableNotifications)

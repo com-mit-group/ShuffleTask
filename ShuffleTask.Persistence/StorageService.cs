@@ -136,13 +136,24 @@ public class StorageService : IStorageService
     }
 
     // Tasks CRUD
-    public async Task<List<TaskItem>> GetTasksAsync()
+    public async Task<List<TaskItem>> GetTasksAsync(string? userId = "", string deviceId = "")
     {
         await AutoResumeDueTasksAsync();
 
-        var records = await Db.Table<TaskItemRecord>()
-                              .OrderByDescending(t => t.CreatedAt)
-                              .ToListAsync();
+        var query = Db.Table<TaskItemRecord>().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(t => t.UserId == userId);
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            query = query.Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId);
+        }
+
+        var records = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
         return records.Select(r => r.ToDomain()).ToList();
     }
 

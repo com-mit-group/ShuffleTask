@@ -37,12 +37,23 @@ public class StorageServiceStub : IStorageService
         return Task.CompletedTask;
     }
 
-    public Task<List<TaskItem>> GetTasksAsync()
+    public Task<List<TaskItem>> GetTasksAsync(string? userId = "", string deviceId = "")
     {
         EnsureInitialized();
         AutoResumeDueTasks();
         GetTasksCallCount++;
-        var snapshot = _tasks.Values
+        var query = _tasks.Values.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(t => t.UserId == userId);
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            query = query.Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId);
+        }
+
+        var snapshot = query
             .OrderByDescending(t => t.CreatedAt)
             .Select(Clone)
             .ToList();
