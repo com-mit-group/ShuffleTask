@@ -18,6 +18,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
+    private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
 
@@ -36,8 +37,9 @@ public partial class SettingsViewModel : ObservableObject
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        UpdateNetworkSubscription(null, settings.Network);
         _lastUserId = settings.Network?.UserId;
-        _lastAnonymousMode = settings.Network?.AnonymousSession ?? true;
+        _lastAnonymousMode = IsAnonymousSession;
     }
 
     public bool UsePomodoro
@@ -70,7 +72,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
             _lastUserId = Settings.Network?.UserId;
-            _lastAnonymousMode = Settings.Network?.AnonymousSession ?? true;
+            _lastAnonymousMode = IsAnonymousSession;
         }
         finally
         {
@@ -89,12 +91,12 @@ public partial class SettingsViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            bool wasAnonymous = _lastAnonymousMode || string.IsNullOrWhiteSpace(_lastUserId);
+            bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
             await _storage.SetSettingsAsync(Settings);
             await _coordinator.RefreshAsync();
 
-            if (wasAnonymous && !Settings.Network.AnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+            if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
             {
                 bool migrate = await PromptMigrateDeviceTasksAsync();
                 if (migrate)
@@ -104,7 +106,7 @@ public partial class SettingsViewModel : ObservableObject
             }
 
             _lastUserId = Settings.Network.UserId;
-            _lastAnonymousMode = Settings.Network.AnonymousSession;
+            _lastAnonymousMode = IsAnonymousSession;
         }
         finally
         {
@@ -186,24 +188,7 @@ public partial class SettingsViewModel : ObservableObject
 
     public bool IsAnonymousSession
     {
-        get => Settings?.Network?.AnonymousSession ?? true;
-        set
-        {
-            if (Settings?.Network == null)
-            {
-                return;
-            }
-
-            Settings.Network.AnonymousSession = value;
-            if (value)
-            {
-                Settings.Network.UserId = null;
-            }
-
-            OnPropertyChanged(nameof(IsAnonymousSession));
-            OnPropertyChanged(nameof(CanSyncAcrossDevices));
-            OnPropertyChanged(nameof(IsLoggedIn));
-        }
+        get => DeriveIsAnonymousSession(Settings?.Network);
     }
 
     public bool CanSyncAcrossDevices => !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings?.Network?.UserId);
@@ -226,8 +211,15 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnSettingsChanged(AppSettings value)
     {
+        UpdateNetworkSubscription(_networkOptions, value.Network);
         OnPropertyChanged(nameof(UsePomodoro));
         OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+    }
+
+    partial void OnSettingsChanging(AppSettings value)
+    {
+        _ = value;
+        UpdateNetworkSubscription(_networkOptions, null);
     }
 
     private void OnNetworkChanged(object? sender, PropertyChangedEventArgs e)
@@ -237,6 +229,31 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAnonymousSession));
         OnPropertyChanged(nameof(CanSyncAcrossDevices));
         OnPropertyChanged(nameof(IsLoggedIn));
+    }
+
+    private void UpdateNetworkSubscription(NetworkOptions? oldNetwork, NetworkOptions? newNetwork)
+    {
+        if (oldNetwork != null)
+        {
+            oldNetwork.PropertyChanged -= OnNetworkChanged;
+        }
+
+        _networkOptions = newNetwork;
+
+        if (newNetwork != null)
+        {
+            newNetwork.PropertyChanged += OnNetworkChanged;
+        }
+    }
+
+    private static bool DeriveIsAnonymousSession(NetworkOptions? network)
+    {
+        if (network is null)
+        {
+            return true;
+        }
+
+        return network.AnonymousSession || string.IsNullOrWhiteSpace(network.UserId);
     }
 
     private Task<bool> PromptMigrateDeviceTasksAsync()
