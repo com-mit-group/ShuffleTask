@@ -29,7 +29,7 @@ public partial class TasksViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public async Task LoadAsync()
+    public async Task LoadAsync(string? userId = null, string? deviceId = null)
     {
         if (IsBusy)
         {
@@ -41,8 +41,8 @@ public partial class TasksViewModel : ObservableObject
         {
             await _storage.InitializeAsync();
             List<TaskItem> items = await _storage.GetTasksAsync(
-                _settings.Network?.UserId,
-                _settings.Network?.DeviceId ?? string.Empty);
+                userId ?? _settings.Network?.UserId,
+                deviceId ?? _settings.Network?.DeviceId ?? string.Empty);
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 

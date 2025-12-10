@@ -140,7 +140,7 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
 
-        var query = Db.Table<TaskItemRecord>().AsQueryable();
+        AsyncTableQuery<TaskItemRecord> query = Db.Table<TaskItemRecord>();
 
         if (!string.IsNullOrWhiteSpace(userId))
         {
