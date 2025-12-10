@@ -62,26 +62,28 @@ public partial class NetworkOptions : ObservableObject
     public void Normalize()
     {
         ResolveLocalHost();
-        NormalizeDeviceId();
-        NormalizeUserSession();
-        NormalizePeerHost();
+        DeviceId = NormalizeDeviceId(DeviceId);
+        (AnonymousSession, UserId) = NormalizeUserSession(AnonymousSession, UserId);
+        PeerHost = NormalizePeerHost(PeerHost);
         ListeningPort = NormalizePort(ListeningPort, DeviceId);
     }
 
-    private void NormalizeDeviceId()
+    private static string NormalizeDeviceId(string? deviceId)
     {
-        DeviceId = NormalizeValue(DeviceId, Environment.MachineName);
+        return NormalizeValue(deviceId, Environment.MachineName);
     }
 
-    private void NormalizeUserSession()
+    private static (bool AnonymousSession, string? UserId) NormalizeUserSession(bool anonymousSession, string? userId)
     {
-        AnonymousSession = ShouldRemainAnonymous(AnonymousSession, UserId);
-        UserId = NormalizeUserId(AnonymousSession, UserId);
+        bool enforcedAnonymous = ShouldRemainAnonymous(anonymousSession, userId);
+        string? normalizedUserId = NormalizeUserId(enforcedAnonymous, userId);
+
+        return (enforcedAnonymous, normalizedUserId);
     }
 
-    private void NormalizePeerHost()
+    private static string NormalizePeerHost(string? peerHost)
     {
-        PeerHost = NormalizeValue(PeerHost, LocalHostString);
+        return NormalizeValue(peerHost, LocalHostString);
     }
 
     private static string NormalizeValue(string? value, string fallback)

@@ -207,19 +207,19 @@ public partial class SettingsViewModel : ObservableObject
             return Task.CompletedTask;
         }
 
-        return RunBusyGuardAsync(operation);
+        return RunBusyGuardAsync(this, operation);
     }
 
-    private async Task RunBusyGuardAsync(Func<Task> operation)
+    private static async Task RunBusyGuardAsync(SettingsViewModel viewModel, Func<Task> operation)
     {
-        IsBusy = true;
+        viewModel.IsBusy = true;
         try
         {
             await operation();
         }
         finally
         {
-            IsBusy = false;
+            viewModel.IsBusy = false;
         }
     }
 
