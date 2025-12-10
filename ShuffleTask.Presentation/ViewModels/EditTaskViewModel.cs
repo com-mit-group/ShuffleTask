@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.ViewModels;
@@ -110,10 +111,11 @@ public partial class EditTaskViewModel : ObservableObject
         private set => SetProperty(ref _isNew, value);
     }
 
-    public EditTaskViewModel(IStorageService storage, TimeProvider clock)
+    public EditTaskViewModel(IStorageService storage, TimeProvider clock, AppSettings appSettings)
     {
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        AppSettings = appSettings;
         DeadlineDate = GetTodayUtcDate();
     }
 
@@ -184,6 +186,7 @@ public partial class EditTaskViewModel : ObservableObject
         get => GetWeekday(Weekdays.Sat);
         set => SetWeekday(Weekdays.Sat, value);
     }
+    public AppSettings AppSettings { get; }
 
     public event EventHandler? Saved;
 
@@ -305,6 +308,18 @@ public partial class EditTaskViewModel : ObservableObject
             if (string.IsNullOrWhiteSpace(_workingCopy.Id))
             {
                 _workingCopy.Id = Guid.NewGuid().ToString("n");
+            }
+
+            if (!string.IsNullOrWhiteSpace(AppSettings.Network.UserId))
+            {
+                _workingCopy.UserId = AppSettings.Network.UserId;
+                _workingCopy.DeviceId = string.Empty;
+            }
+            else
+            {
+                
+                _workingCopy.UserId =  string.Empty;
+                _workingCopy.DeviceId = AppSettings.Network.DeviceId;
             }
 
             if (IsNew)
