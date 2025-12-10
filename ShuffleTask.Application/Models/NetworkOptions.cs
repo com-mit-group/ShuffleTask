@@ -41,28 +41,72 @@ public partial class NetworkOptions : ObservableObject
 
     private void ResolveLocalHost()
     {
+        Host = GetLocalHostName() ?? LocalHostString;
+    }
 
+    private static string? GetLocalHostName()
+    {
         try
         {
             string hostName = Dns.GetHostName();
             var entry = Dns.GetHostEntry(hostName);
             var address = entry.AddressList.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
-            Host = address?.ToString() ?? hostName;
+            return address?.ToString() ?? hostName;
         }
         catch
         {
-            Host = LocalHostString;
+            return null;
         }
     }
 
     public void Normalize()
     {
         ResolveLocalHost();
-        DeviceId = string.IsNullOrWhiteSpace(DeviceId) ? Environment.MachineName : DeviceId.Trim();
-        AnonymousSession = AnonymousSession || string.IsNullOrWhiteSpace(UserId);
-        UserId = AnonymousSession ? null : string.IsNullOrWhiteSpace(UserId) ? null : UserId.Trim();
-        PeerHost = string.IsNullOrWhiteSpace(PeerHost) ? LocalHostString : PeerHost.Trim();
+        NormalizeDeviceId();
+        NormalizeUserSession();
+        NormalizePeerHost();
         ListeningPort = NormalizePort(ListeningPort, DeviceId);
+    }
+
+    private void NormalizeDeviceId()
+    {
+        DeviceId = NormalizeValue(DeviceId, Environment.MachineName);
+    }
+
+    private void NormalizeUserSession()
+    {
+        AnonymousSession = ShouldRemainAnonymous(AnonymousSession, UserId);
+        UserId = NormalizeUserId(AnonymousSession, UserId);
+    }
+
+    private void NormalizePeerHost()
+    {
+        PeerHost = NormalizeValue(PeerHost, LocalHostString);
+    }
+
+    private static string NormalizeValue(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private static bool ShouldRemainAnonymous(bool anonymousSession, string? userId)
+    {
+        return anonymousSession || string.IsNullOrWhiteSpace(userId);
+    }
+
+    private static string? NormalizeUserId(bool anonymousSession, string? userId)
+    {
+        if (anonymousSession)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return null;
+        }
+
+        return userId.Trim();
     }
 
     public string ResolveAuthenticationSecret()

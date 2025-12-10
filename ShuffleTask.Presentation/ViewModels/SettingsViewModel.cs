@@ -41,8 +41,7 @@ public partial class SettingsViewModel : ObservableObject
         _tasksViewModel = tasksViewModel ?? throw new ArgumentNullException(nameof(tasksViewModel));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         UpdateNetworkSubscription(null, settings.Network);
-        _lastUserId = settings.Network?.UserId;
-        _lastAnonymousMode = IsAnonymousSession;
+        CacheSessionState();
     }
 
     public bool UsePomodoro
@@ -60,39 +59,22 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task LoadAsync()
+    private Task LoadAsync()
     {
-        if (IsBusy)
-        {
-            return;
-        }
-
-        IsBusy = true;
-        try
+        return ExecuteIfNotBusyAsync(async () =>
         {
             await _storage.InitializeAsync();
             Settings.NormalizeWeights();
             Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
-            _lastUserId = Settings.Network?.UserId;
-            _lastAnonymousMode = IsAnonymousSession;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            CacheSessionState();
+        });
     }
 
     [RelayCommand]
-    private async Task SaveAsync()
+    private Task SaveAsync()
     {
-        if (IsBusy)
-        {
-            return;
-        }
-
-        IsBusy = true;
-        try
+        return ExecuteIfNotBusyAsync(async () =>
         {
             bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
@@ -107,25 +89,14 @@ public partial class SettingsViewModel : ObservableObject
                 await _coordinator.RefreshAsync();
             }
 
-            _lastUserId = Settings.Network.UserId;
-            _lastAnonymousMode = IsAnonymousSession;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            CacheSessionState();
+        });
     }
 
     [RelayCommand]
-    private async Task ShufflePreviewAsync()
+    private Task ShufflePreviewAsync()
     {
-        if (IsBusy)
-        {
-            return;
-        }
-
-        IsBusy = true;
-        try
+        return ExecuteIfNotBusyAsync(async () =>
         {
             await _storage.InitializeAsync();
             var network = Settings.Network;
@@ -136,54 +107,37 @@ public partial class SettingsViewModel : ObservableObject
             {
                 await _notifications.NotifyTaskAsync(next, Settings.ReminderMinutes, Settings);
             }
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        });
     }
 
     [RelayCommand]
-    private async Task ConnectPeerAsync()
+    private Task ConnectPeerAsync()
     {
-        if (IsBusy)
+        return ExecuteIfNotBusyAsync(async () =>
         {
-            return;
-        }
-
-        IsBusy = true;
-        try
-        {
-            ApplyValidation();
-            await _storage.SetSettingsAsync(Settings);
-            await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
-        }
-        catch (TcpConnectionDisconnectedException ex)
-        {
-            // Handle connection errors (log, notify user, etc.)
-            System.Diagnostics.Debug.WriteLine($"Error connecting to peer: {ex.Message}");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            try
+            {
+                ApplyValidation();
+                await _storage.SetSettingsAsync(Settings);
+                await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+            }
+            catch (TcpConnectionDisconnectedException ex)
+            {
+                // Handle connection errors (log, notify user, etc.)
+                System.Diagnostics.Debug.WriteLine($"Error connecting to peer: {ex.Message}");
+            }
+        });
     }
 
     [RelayCommand]
-    private async Task LoginAsync(string? username)
+    private Task LoginAsync(string? username)
     {
-        if (IsBusy)
-        {
-            return;
-        }
-
         if (Settings?.Network is null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        IsBusy = true;
-        try
+        return ExecuteIfNotBusyAsync(async () =>
         {
             string? trimmedUsername = await GetUsernameAsync(username);
             if (string.IsNullOrWhiteSpace(trimmedUsername))
@@ -199,25 +153,19 @@ public partial class SettingsViewModel : ObservableObject
             OnNetworkChanged(this, new PropertyChangedEventArgs(nameof(Settings.Network.UserId)));
             await HandleSessionTransitionAsync(wasAnonymous);
 
-            _lastUserId = Settings.Network.UserId;
-            _lastAnonymousMode = IsAnonymousSession;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            CacheSessionState();
+        });
     }
 
     [RelayCommand]
-    private async Task LogoutAsync()
+    private Task LogoutAsync()
     {
-        if (IsBusy || Settings?.Network == null)
+        if (Settings?.Network == null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        IsBusy = true;
-        try
+        return ExecuteIfNotBusyAsync(async () =>
         {
             bool wasAnonymous = _lastAnonymousMode;
             await _networkSync.RequestGracefulFlushAsync();
@@ -228,13 +176,8 @@ public partial class SettingsViewModel : ObservableObject
             OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await HandleSessionTransitionAsync(wasAnonymous);
 
-            _lastUserId = Settings.Network.UserId;
-            _lastAnonymousMode = IsAnonymousSession;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            CacheSessionState();
+        });
     }
 
     public string LocalConnectionSummary =>
@@ -256,6 +199,35 @@ public partial class SettingsViewModel : ObservableObject
     public string UserDisplayLabel => string.IsNullOrWhiteSpace(Settings?.Network?.UserId)
         ? "Not logged in"
         : Settings.Network.UserId;
+
+    private Task ExecuteIfNotBusyAsync(Func<Task> operation)
+    {
+        if (IsBusy)
+        {
+            return Task.CompletedTask;
+        }
+
+        return RunBusyGuardAsync(operation);
+    }
+
+    private async Task RunBusyGuardAsync(Func<Task> operation)
+    {
+        IsBusy = true;
+        try
+        {
+            await operation();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void CacheSessionState()
+    {
+        _lastUserId = Settings.Network?.UserId;
+        _lastAnonymousMode = IsAnonymousSession;
+    }
 
     private void ApplyValidation()
     {
