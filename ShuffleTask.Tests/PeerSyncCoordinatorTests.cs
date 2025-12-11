@@ -3,6 +3,8 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Tests.TestDoubles;
+using System;
+using System.Linq;
 
 public class PeerSyncCoordinatorTests
 {
@@ -23,8 +25,8 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(remoteManifest);
 
         Assert.That(result.Missing.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "remote-only" }));
-        Assert.That(result.TasksToRequest, Is.EquivalentTo(new[] { "remote-only" }));
-        Assert.That(result.TasksToAdvertise, Is.Empty);
+        Assert.That(result.GetTasksToRequest(), Is.EquivalentTo(new[] { "remote-only" }));
+        Assert.That(result.GetTasksToAdvertise(), Is.Empty);
     }
 
     [Test]
@@ -40,8 +42,8 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(Array.Empty<TaskManifestEntry>());
 
         Assert.That(result.LocalNewer.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "local-only" }));
-        Assert.That(result.TasksToRequest, Is.Empty);
-        Assert.That(result.TasksToAdvertise, Is.EquivalentTo(new[] { "local-only" }));
+        Assert.That(result.GetTasksToRequest(), Is.Empty);
+        Assert.That(result.GetTasksToAdvertise(), Is.EquivalentTo(new[] { "local-only" }));
     }
 
     [Test]
@@ -62,8 +64,8 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(remoteManifest);
 
         Assert.That(result.RemoteNewer.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "shared" }));
-        Assert.That(result.TasksToRequest, Is.EquivalentTo(new[] { "shared" }));
-        Assert.That(result.TasksToAdvertise, Is.Empty);
+        Assert.That(result.GetTasksToRequest(), Is.EquivalentTo(new[] { "shared" }));
+        Assert.That(result.GetTasksToAdvertise(), Is.Empty);
     }
 
     [Test]
@@ -84,8 +86,8 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(remoteManifest);
 
         Assert.That(result.LocalNewer.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "shared" }));
-        Assert.That(result.TasksToRequest, Is.Empty);
-        Assert.That(result.TasksToAdvertise, Is.EquivalentTo(new[] { "shared" }));
+        Assert.That(result.GetTasksToRequest(), Is.Empty);
+        Assert.That(result.GetTasksToAdvertise(), Is.EquivalentTo(new[] { "shared" }));
     }
 
     [Test]
@@ -106,7 +108,7 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(remoteManifest);
 
         Assert.That(result.RemoteNewer.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "shared" }));
-        Assert.That(result.TasksToRequest, Is.EquivalentTo(new[] { "shared" }));
+        Assert.That(result.GetTasksToRequest(), Is.EquivalentTo(new[] { "shared" }));
     }
 
     [Test]
@@ -127,8 +129,30 @@ public class PeerSyncCoordinatorTests
         var result = await coordinator.CompareManifestAsync(remoteManifest);
 
         Assert.That(result.Equal.Select(entry => entry.TaskId), Is.EquivalentTo(new[] { "shared" }));
-        Assert.That(result.TasksToRequest, Is.Empty);
-        Assert.That(result.TasksToAdvertise, Is.Empty);
+        Assert.That(result.GetTasksToRequest(), Is.Empty);
+        Assert.That(result.GetTasksToAdvertise(), Is.Empty);
+
+    }
+
+    [Test]
+    public async Task CompareManifestAsync_ReusesComparisonForSameManifest()
+    {
+        var storage = new StorageServiceStub();
+        await storage.InitializeAsync();
+
+        var remoteManifest = new[]
+        {
+            new TaskManifestEntry("remote-only", 2, BaseTimeUtc.AddMinutes(5))
+        };
+
+        var coordinator = new PeerSyncCoordinator(storage);
+
+        var requestIds = await coordinator.GetTasksToRequestAsync(remoteManifest);
+        var advertiseIds = await coordinator.GetTasksToAdvertiseAsync(remoteManifest);
+
+        Assert.That(requestIds, Is.EquivalentTo(new[] { "remote-only" }));
+        Assert.That(advertiseIds, Is.Empty);
+        Assert.That(storage.GetTasksCallCount, Is.EqualTo(1));
     }
 
     private static TaskItem CreateTask(string id, int version, DateTime updatedAt)

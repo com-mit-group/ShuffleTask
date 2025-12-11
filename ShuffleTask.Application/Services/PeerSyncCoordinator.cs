@@ -1,11 +1,19 @@
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace ShuffleTask.Application.Services;
 
 public class PeerSyncCoordinator
 {
     private readonly IStorageService _storageService;
+    private readonly SemaphoreSlim _comparisonLock = new(1, 1);
+
+    private ManifestComparisonResult? _comparison;
+    private ManifestComparisonCacheKey? _comparisonKey;
 
     public PeerSyncCoordinator(IStorageService storageService)
     {
@@ -19,6 +27,54 @@ public class PeerSyncCoordinator
     {
         ArgumentNullException.ThrowIfNull(remoteManifest);
 
+        var remoteEntries = remoteManifest.ToList();
+        var cacheKey = ManifestComparisonCacheKey.From(remoteEntries, userId, deviceId);
+
+        await _comparisonLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_comparison is not null && cacheKey.Equals(_comparisonKey))
+            {
+                return _comparison;
+            }
+
+            var comparison = await CompareManifestInternalAsync(remoteEntries, userId, deviceId)
+                .ConfigureAwait(false);
+
+            _comparisonKey = cacheKey;
+            _comparison = comparison;
+
+            return comparison;
+        }
+        finally
+        {
+            _comparisonLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetTasksToRequestAsync(
+        IEnumerable<TaskManifestEntry> remoteManifest,
+        string? userId = "",
+        string deviceId = "")
+    {
+        var comparison = await CompareManifestAsync(remoteManifest, userId, deviceId).ConfigureAwait(false);
+        return comparison.GetTasksToRequest();
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetTasksToAdvertiseAsync(
+        IEnumerable<TaskManifestEntry> remoteManifest,
+        string? userId = "",
+        string deviceId = "")
+    {
+        var comparison = await CompareManifestAsync(remoteManifest, userId, deviceId).ConfigureAwait(false);
+        return comparison.GetTasksToAdvertise();
+    }
+
+    private async Task<ManifestComparisonResult> CompareManifestInternalAsync(
+        IReadOnlyCollection<TaskManifestEntry> remoteManifest,
+        string? userId,
+        string deviceId)
+    {
         var remoteEntries = remoteManifest
             .GroupBy(entry => entry.TaskId)
             .ToDictionary(group => group.Key, group => group.First());
@@ -58,24 +114,6 @@ public class PeerSyncCoordinator
         missing.AddRange(remoteEntries.Values);
 
         return new ManifestComparisonResult(missing, remoteNewer, localNewer, equal);
-    }
-
-    public async Task<IReadOnlyCollection<string>> GetTasksToRequestAsync(
-        IEnumerable<TaskManifestEntry> remoteManifest,
-        string? userId = "",
-        string deviceId = "")
-    {
-        var comparison = await CompareManifestAsync(remoteManifest, userId, deviceId).ConfigureAwait(false);
-        return comparison.TasksToRequest;
-    }
-
-    public async Task<IReadOnlyCollection<string>> GetTasksToAdvertiseAsync(
-        IEnumerable<TaskManifestEntry> remoteManifest,
-        string? userId = "",
-        string deviceId = "")
-    {
-        var comparison = await CompareManifestAsync(remoteManifest, userId, deviceId).ConfigureAwait(false);
-        return comparison.TasksToAdvertise;
     }
 
     private static ManifestComparison CompareEntries(TaskManifestEntry local, TaskManifestEntry remote)
@@ -141,6 +179,9 @@ public class ManifestComparisonResult
         RemoteNewer = remoteNewer ?? throw new ArgumentNullException(nameof(remoteNewer));
         LocalNewer = localNewer ?? throw new ArgumentNullException(nameof(localNewer));
         Equal = equal ?? throw new ArgumentNullException(nameof(equal));
+
+        _tasksToRequest = BuildDistinctTaskIds(Missing.Concat(RemoteNewer));
+        _tasksToAdvertise = BuildDistinctTaskIds(LocalNewer);
     }
 
     public IReadOnlyCollection<TaskManifestEntry> Missing { get; }
@@ -151,14 +192,82 @@ public class ManifestComparisonResult
 
     public IReadOnlyCollection<TaskManifestEntry> Equal { get; }
 
-    public IReadOnlyCollection<string> TasksToRequest => Missing
-        .Concat(RemoteNewer)
-        .Select(entry => entry.TaskId)
-        .Distinct()
-        .ToList();
+    public IReadOnlyCollection<string> GetTasksToRequest() => _tasksToRequest;
 
-    public IReadOnlyCollection<string> TasksToAdvertise => LocalNewer
-        .Select(entry => entry.TaskId)
-        .Distinct()
-        .ToList();
+    public IReadOnlyCollection<string> GetTasksToAdvertise() => _tasksToAdvertise;
+
+    private static IReadOnlyCollection<string> BuildDistinctTaskIds(IEnumerable<TaskManifestEntry> entries)
+    {
+        return entries
+            .Select(entry => entry.TaskId)
+            .Distinct()
+            .ToArray();
+    }
+
+    private readonly IReadOnlyCollection<string> _tasksToRequest;
+    private readonly IReadOnlyCollection<string> _tasksToAdvertise;
 }
+
+internal sealed class ManifestComparisonCacheKey : IEquatable<ManifestComparisonCacheKey>
+{
+    public ManifestComparisonCacheKey(string? userId, string deviceId, IReadOnlyList<ManifestEntryKey> remoteEntries)
+    {
+        UserId = userId;
+        DeviceId = deviceId;
+        RemoteEntries = remoteEntries;
+    }
+
+    public string? UserId { get; }
+    public string DeviceId { get; }
+    public IReadOnlyList<ManifestEntryKey> RemoteEntries { get; }
+
+    public bool Equals(ManifestComparisonCacheKey? other)
+    {
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        if (other is null)
+        {
+            return false;
+        }
+
+        return string.Equals(UserId, other.UserId, StringComparison.Ordinal)
+            && string.Equals(DeviceId, other.DeviceId, StringComparison.Ordinal)
+            && RemoteEntries.SequenceEqual(other.RemoteEntries);
+    }
+
+    public override bool Equals(object? obj) => Equals(obj as ManifestComparisonCacheKey);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(UserId, StringComparer.Ordinal);
+        hash.Add(DeviceId, StringComparer.Ordinal);
+
+        foreach (var entry in RemoteEntries)
+        {
+            hash.Add(entry);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static ManifestComparisonCacheKey From(
+        IEnumerable<TaskManifestEntry> remoteManifest,
+        string? userId,
+        string deviceId)
+    {
+        var entries = remoteManifest
+            .Select(entry => new ManifestEntryKey(entry.TaskId, entry.EventVersion, entry.UpdatedAt))
+            .OrderBy(entry => entry.TaskId)
+            .ThenBy(entry => entry.EventVersion)
+            .ThenBy(entry => entry.UpdatedAt)
+            .ToArray();
+
+        return new ManifestComparisonCacheKey(userId, deviceId, entries);
+    }
+}
+
+internal sealed record ManifestEntryKey(string TaskId, int EventVersion, DateTime UpdatedAt);
