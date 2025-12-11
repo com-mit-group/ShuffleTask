@@ -1,3 +1,6 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 
@@ -104,7 +107,7 @@ internal static class UtilityMethods
         {
             unchecked
             {
-                daySeed *= 31 + task.Id.GetHashCode();
+                daySeed *= 31 + ComputeStableHash(task.Id);
             }
         }
         else
@@ -120,6 +123,13 @@ internal static class UtilityMethods
         return scored
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Task.Id, StringComparer.Ordinal);
+    }
+
+    private static int ComputeStableHash(string value)
+    {
+        ReadOnlySpan<byte> buffer = Encoding.UTF8.GetBytes(value);
+        ReadOnlySpan<byte> hash = SHA256.HashData(buffer);
+        return BinaryPrimitives.ReadInt32BigEndian(hash[..4]);
     }
 
     private static DateTime EnsureUtc(DateTime value)
