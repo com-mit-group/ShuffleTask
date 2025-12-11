@@ -1,3 +1,4 @@
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Services;
@@ -62,10 +63,13 @@ public static class TaskStateValidator
     private static bool ValidateSnoozedState(TaskItem task, DateTimeOffset now)
     {
         // Snoozed tasks should have a snooze timestamp and NextEligibleAt
-        return task.SnoozedUntil.HasValue
-               && task.NextEligibleAt.HasValue
-               && task.CompletedAt == null
-               && EnsureUtc(task.NextEligibleAt.Value) > now.UtcDateTime;
+        if (!task.SnoozedUntil.HasValue || !task.NextEligibleAt.HasValue || task.CompletedAt != null)
+        {
+            return false;
+        }
+
+        DateTime? nextEligibleUtc = UtilityMethods.EnsureUtc(task.NextEligibleAt)?.UtcDateTime;
+        return nextEligibleUtc.HasValue && nextEligibleUtc > now.UtcDateTime;
     }
 
     private static bool ValidateCompletedState(TaskItem task, DateTimeOffset now)
@@ -81,16 +85,7 @@ public static class TaskStateValidator
             return true;
         }
 
-        return EnsureUtc(task.NextEligibleAt.Value) > now.UtcDateTime;
-    }
-
-    private static DateTime EnsureUtc(DateTime value)
-    {
-        return value.Kind switch
-        {
-            DateTimeKind.Utc => value,
-            DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-        };
+        DateTime? nextEligibleUtc = UtilityMethods.EnsureUtc(task.NextEligibleAt)?.UtcDateTime;
+        return nextEligibleUtc.HasValue && nextEligibleUtc > now.UtcDateTime;
     }
 }
