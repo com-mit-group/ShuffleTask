@@ -81,15 +81,11 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
+        await RunWithGateAsync(() =>
         {
             _isPaused = false;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
 
         await ScheduleNextShuffleAsync().ConfigureAwait(false);
     }
@@ -98,16 +94,12 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
+        await RunWithGateAsync(() =>
         {
             _isPaused = true;
             CancelTimerInternal();
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
     }
 
     public void SuspendInProcessTimer()
@@ -149,6 +141,28 @@ public class ShuffleCoordinatorService : IDisposable
         }
     }
 
+    private Task RunWithGateAsync(Func<Task> action)
+    {
+        return RunWithGateAsync(async () =>
+        {
+            await action().ConfigureAwait(false);
+            return true;
+        });
+    }
+
+    private async Task<T> RunWithGateAsync<T>(Func<Task<T>> action)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task InitializeAsync()
     {
         await _storage.InitializeAsync().ConfigureAwait(false);
@@ -165,20 +179,7 @@ public class ShuffleCoordinatorService : IDisposable
 
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (_isPaused)
-            {
-                return;
-            }
-
-            await ScheduleNextShuffleUnsafeAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        await RunWithGateAsync(() => ScheduleNextShuffleUnsafeAsync()).ConfigureAwait(false);
     }
 
     private async Task ScheduleNextShuffleUnsafeAsync()
@@ -186,9 +187,8 @@ public class ShuffleCoordinatorService : IDisposable
         CancelTimerInternal();
 
         var settings = _settings;
-        if (!ShouldAutoShuffle(settings))
+        if (HandleAutoShuffleDisabled(settings))
         {
-            ClearPendingShuffle();
             return;
         }
 
@@ -206,6 +206,17 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
+    }
+
+    private bool HandleAutoShuffleDisabled(AppSettings settings)
+    {
+        if (ShouldAutoShuffle(settings))
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+        return true;
     }
 
     private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTimeOffset now)
@@ -228,50 +239,85 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        DateTimeOffset nextAt = pending.NextAt.Value;
-        if (nextAt <= now)
+        DateTimeOffset target = NormalizePendingTarget(pending.NextAt.Value, now);
+        if (await TryRestorePendingTaskAsync(pending.TaskId, target, settings).ConfigureAwait(false))
         {
-            nextAt = now;
-        }
-
-        if (string.IsNullOrEmpty(pending.TaskId))
-        {
-            StartTimer(nextAt, null);
             return true;
         }
 
-        var pendingTask = await _storage.GetTaskAsync(pending.TaskId).ConfigureAwait(false);
-        if (pendingTask != null && IsTaskValid(pendingTask, settings, nextAt))
+        StartTimer(target, null);
+        return true;
+    }
+
+    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
+    {
+        var tasks = await LoadAvailableTasksAsync(settings).ConfigureAwait(false);
+        if (HandleEmptyTaskList(tasks, settings, now))
         {
-            StartTimer(nextAt, pending.TaskId);
+            return;
+        }
+
+        DateTimeOffset target = ComputeNextTarget(now, settings);
+        if (TryScheduleCandidate(tasks, settings, target))
+        {
+            return;
+        }
+
+        DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
+        StartTimer(retryAt, null);
+    }
+
+    private static DateTimeOffset NormalizePendingTarget(DateTimeOffset nextAt, DateTimeOffset now)
+    {
+        return nextAt <= now ? now : nextAt;
+    }
+
+    private async Task<bool> TryRestorePendingTaskAsync(string taskId, DateTimeOffset target, AppSettings settings)
+    {
+        if (string.IsNullOrEmpty(taskId))
+        {
+            return false;
+        }
+
+        var pendingTask = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (pendingTask != null && IsTaskValid(pendingTask, settings, target))
+        {
+            StartTimer(target, taskId);
             return true;
         }
 
         return false;
     }
 
-    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
+    private async Task<IReadOnlyList<TaskItem>> LoadAvailableTasksAsync(AppSettings settings)
     {
         var network = settings.Network;
-        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
-        if (tasks.Count == 0)
+        return await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
+    }
+
+    private bool HandleEmptyTaskList(IReadOnlyCollection<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
+    {
+        if (tasks.Count > 0)
         {
-            ClearPendingShuffle();
-            var retryAtEmpty = EnsureAllowed(now.AddMinutes(30), settings);
-            StartTimer(retryAtEmpty, null);
-            return;
+            return false;
         }
 
-        DateTimeOffset target = ComputeNextTarget(now, settings);
+        ClearPendingShuffle();
+        var retryAtEmpty = EnsureAllowed(now.AddMinutes(30), settings);
+        StartTimer(retryAtEmpty, null);
+        return true;
+    }
+
+    private bool TryScheduleCandidate(IReadOnlyList<TaskItem> tasks, AppSettings settings, DateTimeOffset target)
+    {
         var candidate = _scheduler.PickNextTask(tasks, settings, target);
         if (candidate == null)
         {
-            DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
-            StartTimer(retryAt, null);
-            return;
+            return false;
         }
 
         StartTimer(target, candidate.Id);
+        return true;
     }
 
     private DateTimeOffset ComputeNextTarget(DateTimeOffset now, AppSettings settings)
@@ -296,7 +342,12 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelTimerInternal();
         PersistPendingShuffle(taskId, scheduledAt);
+        SchedulePersistentTimer(scheduledAt, taskId);
+        ScheduleInProcessTimer(scheduledAt, taskId);
+    }
 
+    private void SchedulePersistentTimer(DateTimeOffset scheduledAt, string? taskId)
+    {
         try
         {
             _backgroundService.Schedule(scheduledAt, taskId);
@@ -305,7 +356,10 @@ public class ShuffleCoordinatorService : IDisposable
         {
             Debug.WriteLine($"ShuffleCoordinatorService persistent schedule error: {ex}");
         }
+    }
 
+    private void ScheduleInProcessTimer(DateTimeOffset scheduledAt, string? taskId)
+    {
         var cts = new CancellationTokenSource();
         _timerCts = cts;
 
@@ -338,18 +392,11 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelPersistentSchedule();
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
+        await RunWithGateAsync(() =>
         {
-            if (ReferenceEquals(_timerCts, cts))
-            {
-                _timerCts = null;
-            }
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            ClearTimerReferenceIfCurrent(cts);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
 
         if (_isPaused)
         {
@@ -365,19 +412,22 @@ public class ShuffleCoordinatorService : IDisposable
 
         bool executed = false;
 
-        await _gate.WaitAsync().ConfigureAwait(false);
-        try
+        await RunWithGateAsync(async () =>
         {
             executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        }).ConfigureAwait(false);
 
         if (executed && !_isPaused)
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void ClearTimerReferenceIfCurrent(CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_timerCts, cts))
+        {
+            _timerCts = null;
         }
     }
 

@@ -1,3 +1,4 @@
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Services;
@@ -17,8 +18,8 @@ public static class TaskStateValidator
         return task.Status switch
         {
             TaskLifecycleStatus.Active => ValidateActiveState(task),
-            TaskLifecycleStatus.Snoozed => ValidateSnoozedState(task),
-            TaskLifecycleStatus.Completed => ValidateCompletedState(task),
+            TaskLifecycleStatus.Snoozed => ValidateSnoozedState(task, now),
+            TaskLifecycleStatus.Completed => ValidateCompletedState(task, now),
             _ => false
         };
     }
@@ -59,17 +60,32 @@ public static class TaskStateValidator
         return task.SnoozedUntil == null && task.CompletedAt == null;
     }
 
-    private static bool ValidateSnoozedState(TaskItem task)
+    private static bool ValidateSnoozedState(TaskItem task, DateTimeOffset now)
     {
         // Snoozed tasks should have a snooze timestamp and NextEligibleAt
-        return task.SnoozedUntil.HasValue 
-               && task.NextEligibleAt.HasValue 
-               && task.CompletedAt == null;
+        if (!task.SnoozedUntil.HasValue || !task.NextEligibleAt.HasValue || task.CompletedAt != null)
+        {
+            return false;
+        }
+
+        DateTime? nextEligibleUtc = UtilityMethods.EnsureUtc(task.NextEligibleAt)?.UtcDateTime;
+        return nextEligibleUtc.HasValue && nextEligibleUtc > now.UtcDateTime;
     }
 
-    private static bool ValidateCompletedState(TaskItem task)
+    private static bool ValidateCompletedState(TaskItem task, DateTimeOffset now)
     {
         // Completed tasks should have a completion timestamp
-        return task.CompletedAt.HasValue && task.SnoozedUntil == null;
+        if (!task.CompletedAt.HasValue || task.SnoozedUntil != null)
+        {
+            return false;
+        }
+
+        if (!task.NextEligibleAt.HasValue)
+        {
+            return true;
+        }
+
+        DateTime? nextEligibleUtc = UtilityMethods.EnsureUtc(task.NextEligibleAt)?.UtcDateTime;
+        return nextEligibleUtc.HasValue && nextEligibleUtc > now.UtcDateTime;
     }
 }
