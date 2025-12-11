@@ -5,6 +5,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
@@ -18,6 +19,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly IStorageService _storage;
     private readonly AppSettings _appSettings;
     private readonly ILogger<NetworkSyncService>? _logger;
+    private readonly PeerSyncCoordinator _coordinator;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly NetworkedEventAggregator _aggregator;
@@ -28,6 +30,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private List<Task> _inFlightPublishes = new();
     private bool _disposed;
     private bool _initialized;
+
+    private const int TaskBatchSize = 10;
 
     public NetworkSyncService(
         IStorageService storage,
@@ -41,6 +45,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _transport = (transport as TCPEventTransport) ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger;
+        _coordinator = new PeerSyncCoordinator(_storage);
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
     }
@@ -111,6 +116,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
         await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+
+        await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
@@ -223,9 +230,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         _aggregator.SubscribeToEventType(new TaskUpsertedAsyncHandler(_logger, _storage));
         _aggregator.SubscribeToEventType(new TaskDeletedAsyncHandler(_logger, _storage));
-        _aggregator.SubscribeToEventType(new TaskManifestAnnouncedAsyncHandler(_logger));
-        _aggregator.SubscribeToEventType(new TaskManifestRequestAsyncHandler(_logger));
-        _aggregator.SubscribeToEventType(new TaskBatchResponseAsyncHandler(_logger));
+        _aggregator.SubscribeToEventType(new TaskManifestAnnouncedAsyncHandler(_logger, this));
+        _aggregator.SubscribeToEventType(new TaskManifestRequestAsyncHandler(_logger, this));
+        _aggregator.SubscribeToEventType(new TaskBatchResponseAsyncHandler(_logger, this));
     }
 
     private void RegisterTrackedEventTypes()
@@ -294,5 +301,190 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
                 _inFlightPublishes.Remove(publishTask);
             }
         }
+    }
+
+    internal async Task HandleManifestAnnouncementAsync(TaskManifestAnnounced domainEvent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        if (domainEvent.Manifest is null)
+        {
+            return;
+        }
+
+        var manifest = domainEvent.Manifest.ToList();
+        using var linkedCts = LinkToConnection(cancellationToken);
+
+        var comparison = await _coordinator
+            .CompareManifestAsync(manifest, UserId, DeviceId)
+            .WaitAsync(linkedCts.Token)
+            .ConfigureAwait(false);
+
+        var tasksToRequest = comparison.GetTasksToRequest();
+        if (tasksToRequest.Count > 0)
+        {
+            await PublishManifestRequestAsync(manifest, tasksToRequest, linkedCts.Token).ConfigureAwait(false);
+        }
+
+        var tasksToAdvertise = comparison.GetTasksToAdvertise();
+        if (tasksToAdvertise.Count > 0)
+        {
+            await PublishTaskBatchesAsync(tasksToAdvertise, linkedCts.Token).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task HandleManifestRequestAsync(TaskManifestRequest domainEvent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        if (domainEvent.Manifest is null)
+        {
+            return;
+        }
+
+        using var linkedCts = LinkToConnection(cancellationToken);
+
+        var requestedTaskIds = domainEvent.Manifest
+            .Select(entry => entry.TaskId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var tasksToAdvertise = (await _coordinator
+            .GetTasksToAdvertiseAsync(domainEvent.Manifest, UserId, DeviceId)
+            .WaitAsync(linkedCts.Token)
+            .ConfigureAwait(false))
+            .Where(requestedTaskIds.Contains)
+            .ToArray();
+
+        if (tasksToAdvertise.Count == 0)
+        {
+            return;
+        }
+
+        await PublishTaskBatchesAsync(tasksToAdvertise, linkedCts.Token).ConfigureAwait(false);
+    }
+
+    internal async Task HandleTaskBatchResponseAsync(TaskBatchResponse domainEvent, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(domainEvent);
+        if (domainEvent.Tasks is null)
+        {
+            return;
+        }
+
+        using var linkedCts = LinkToConnection(cancellationToken);
+        await RunWithoutBroadcastAsync(async () =>
+        {
+            foreach (var task in domainEvent.Tasks)
+            {
+                var upsertedEvent = new TaskUpsertedEvent(task, domainEvent.DeviceId, domainEvent.UserId);
+                await _aggregator.PublishEventAsync(upsertedEvent, linkedCts.Token).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    private async Task PublishManifestAnnouncementAsync(CancellationToken cancellationToken)
+    {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        var manifest = await BuildLocalManifestAsync(cancellationToken).ConfigureAwait(false);
+        var announcement = new TaskManifestAnnounced(manifest, DeviceId, UserId);
+
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(announcement, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task PublishManifestRequestAsync(
+        IReadOnlyCollection<TaskManifestEntry> remoteManifest,
+        IReadOnlyCollection<string> tasksToRequest,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        var requestEntries = remoteManifest
+            .Where(entry => tasksToRequest.Contains(entry.TaskId))
+            .ToArray();
+
+        if (requestEntries.Length == 0)
+        {
+            return;
+        }
+
+        var request = new TaskManifestRequest(requestEntries, DeviceId, UserId);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(request, cancellationToken), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task PublishTaskBatchesAsync(IEnumerable<string> taskIds, CancellationToken cancellationToken)
+    {
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        foreach (var batch in taskIds.Chunk(TaskBatchSize))
+        {
+            var tasks = await LoadTasksAsync(batch, cancellationToken).ConfigureAwait(false);
+            foreach (var task in tasks)
+            {
+                await PublishTaskUpsertAsync(task, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyCollection<TaskManifestEntry>> BuildLocalManifestAsync(CancellationToken cancellationToken)
+    {
+        var tasks = await _storage.GetTasksAsync(UserId, DeviceId).WaitAsync(cancellationToken).ConfigureAwait(false);
+        return tasks.Select(task => new TaskManifestEntry
+        {
+            TaskId = task.Id,
+            EventVersion = task.EventVersion,
+            UpdatedAt = task.UpdatedAt,
+            DeviceId = task.DeviceId,
+            UserId = task.UserId,
+        }).ToArray();
+    }
+
+    private async Task<IReadOnlyCollection<TaskItem>> LoadTasksAsync(IEnumerable<string> taskIds, CancellationToken cancellationToken)
+    {
+        var tasks = new List<TaskItem>();
+
+        foreach (var taskId in taskIds)
+        {
+            if (string.IsNullOrWhiteSpace(taskId))
+            {
+                continue;
+            }
+
+            var task = await _storage.GetTaskAsync(taskId).WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (task is not null)
+            {
+                tasks.Add(task);
+            }
+        }
+
+        return tasks;
+    }
+
+    private async Task RunWithoutBroadcastAsync(Func<Task> action)
+    {
+        var previous = _suppressBroadcast.Value;
+        _suppressBroadcast.Value = true;
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _suppressBroadcast.Value = previous;
+        }
+    }
+
+    private CancellationTokenSource LinkToConnection(CancellationToken cancellationToken)
+    {
+        return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
     }
 }
