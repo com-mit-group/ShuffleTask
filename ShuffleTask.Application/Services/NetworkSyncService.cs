@@ -341,10 +341,17 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         }
 
         using var linkedCts = LinkToConnection(cancellationToken);
-        var tasksToAdvertise = await _coordinator
+
+        var requestedTaskIds = domainEvent.Manifest
+            .Select(entry => entry.TaskId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var tasksToAdvertise = (await _coordinator
             .GetTasksToAdvertiseAsync(domainEvent.Manifest, UserId, DeviceId)
             .WaitAsync(linkedCts.Token)
-            .ConfigureAwait(false);
+            .ConfigureAwait(false))
+            .Where(requestedTaskIds.Contains)
+            .ToArray();
 
         if (tasksToAdvertise.Count == 0)
         {
