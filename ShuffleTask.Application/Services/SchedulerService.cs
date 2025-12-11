@@ -50,6 +50,24 @@ public class SchedulerService : ISchedulerService
             return null;
         }
 
+        var candidates = FilterCandidates(tasks, settings, now, logger);
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        TaskItem? cutInSelection = TrySelectCutInLineTask(candidates, settings, now, logger);
+        if (cutInSelection != null)
+        {
+            return cutInSelection;
+        }
+
+        List<ScoredTask> scored = ScoreCandidates(settings, now, deterministic, candidates);
+        return SelectBestTask(settings, now, deterministic, scored, candidates.Count, logger);
+    }
+
+    private static List<TaskItem> FilterCandidates(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now, IShuffleLogger? logger)
+    {
         var candidates = tasks
             .Where(task => task is not null)
             .Where(task => UtilityMethods.LifecycleEligible(task, now.UtcDateTime))
@@ -60,34 +78,29 @@ public class SchedulerService : ISchedulerService
         if (candidates.Count == 0)
         {
             logger?.LogTaskSelection("", "", "No eligible candidates", 0, TimeSpan.Zero);
-            return null;
         }
 
-        // Check for cut-in-line tasks first
+        return candidates;
+    }
+
+    private static TaskItem? TrySelectCutInLineTask(List<TaskItem> candidates, AppSettings settings, DateTimeOffset now, IShuffleLogger? logger)
+    {
         var cutInLineCandidates = candidates
             .Where(task => task.CutInLineMode != CutInLineMode.None)
             .ToList();
 
-        if (cutInLineCandidates.Count > 0)
+        if (cutInLineCandidates.Count == 0)
         {
-            List<ScoredTask> scoredCutInLine = ComputeScores(settings, now, deterministic: true, candidates: cutInLineCandidates);
-            var prioritizedTask = UtilityMethods.DeterministicMaxScoredTask(scoredCutInLine);
-            logger?.LogTaskSelection(prioritizedTask.Id, prioritizedTask.Title, "Task selected via cut-in-line priority", candidates.Count, TimeSpan.Zero);
-            return prioritizedTask;
+            return null;
         }
 
-        List<ScoredTask> scored = ComputeScores(settings, now, deterministic, candidates);
-        var selected = GetBestScoredTask(settings, now, deterministic, scored);
-        
-        if (selected != null)
-        {
-            logger?.LogTaskSelection(selected.Id, selected.Title, "Task selected by scoring", candidates.Count, TimeSpan.Zero);
-        }
-        
-        return selected;
+        List<ScoredTask> scoredCutInLine = ScoreCandidates(settings, now, deterministic: true, candidates: cutInLineCandidates);
+        var prioritizedTask = UtilityMethods.DeterministicMaxScoredTask(scoredCutInLine);
+        logger?.LogTaskSelection(prioritizedTask.Id, prioritizedTask.Title, "Task selected via cut-in-line priority", candidates.Count, TimeSpan.Zero);
+        return prioritizedTask;
     }
 
-    private static List<ScoredTask> ComputeScores(AppSettings settings, DateTimeOffset now, bool deterministic, List<TaskItem> candidates)
+    private static List<ScoredTask> ScoreCandidates(AppSettings settings, DateTimeOffset now, bool deterministic, List<TaskItem> candidates)
     {
         List<ScoredTask> scored = [];
 
@@ -107,6 +120,15 @@ public class SchedulerService : ISchedulerService
         }
 
         return scored;
+    }
+
+    private static TaskItem? SelectBestTask(AppSettings settings, DateTimeOffset now, bool deterministic, List<ScoredTask> scored, int candidateCount, IShuffleLogger? logger)
+    {
+        TaskItem selected = GetBestScoredTask(settings, now, deterministic, scored);
+
+        logger?.LogTaskSelection(selected.Id, selected.Title, "Task selected by scoring", candidateCount, TimeSpan.Zero);
+
+        return selected;
     }
 
     private static TaskItem GetBestScoredTask(AppSettings settings, DateTimeOffset now, bool deterministic, List<ScoredTask> scored)
