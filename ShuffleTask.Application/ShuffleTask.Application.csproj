@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ShuffleTask.Tests" />
+    <InternalsVisibleTo Include="ShuffleTask.Application.Tests" />
   </ItemGroup>
 
 </Project>
