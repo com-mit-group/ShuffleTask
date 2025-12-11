@@ -223,6 +223,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         _aggregator.SubscribeToEventType(new TaskUpsertedAsyncHandler(_logger, _storage));
         _aggregator.SubscribeToEventType(new TaskDeletedAsyncHandler(_logger, _storage));
+        _aggregator.SubscribeToEventType(new TaskManifestAnnouncedAsyncHandler(_logger));
+        _aggregator.SubscribeToEventType(new TaskManifestRequestAsyncHandler(_logger));
+        _aggregator.SubscribeToEventType(new TaskBatchResponseAsyncHandler(_logger));
     }
 
     private void RegisterTrackedEventTypes()
@@ -236,6 +239,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.RegisterEventType<TaskDeletedEvent>();
         _aggregator.RegisterEventType<TaskStarted>();
         _aggregator.RegisterEventType<TimeUpNotificationEvent>();
+        _aggregator.RegisterEventType<TaskManifestAnnounced>();
+        _aggregator.RegisterEventType<TaskManifestRequest>();
+        _aggregator.RegisterEventType<TaskBatchResponse>();
     }
 
     private CancellationTokenSource EnsureConnectionCts()
