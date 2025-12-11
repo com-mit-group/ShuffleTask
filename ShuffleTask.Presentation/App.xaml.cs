@@ -1,5 +1,7 @@
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Views;
 
@@ -10,14 +12,16 @@ public partial class App : Microsoft.Maui.Controls.Application
     private readonly IStorageService _storage;
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
+    private readonly AppSettings _settings;
 
-    public App(MainPage mainPage, IStorageService storage, ShuffleCoordinatorService coordinator, TimeProvider clock)
+    public App(MainPage mainPage, IStorageService storage, ShuffleCoordinatorService coordinator, TimeProvider clock, AppSettings settings)
     {
         InitializeComponent();
         MainPage = mainPage;
         _storage = storage;
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         RequestedThemeChanged += (_, __) => { };
     }
 
@@ -43,7 +47,6 @@ public partial class App : Microsoft.Maui.Controls.Application
     private async Task EnsureSeedDataAsync()
     {
         await _storage.InitializeAsync();
-        var settings = await _storage.GetSettingsAsync();
         var existing = await _storage.GetTasksAsync();
         if (existing.Count > 0)
         {
@@ -65,19 +68,19 @@ public partial class App : Microsoft.Maui.Controls.Application
             await _storage.AddTaskAsync(task);
         }
 
-        settings.WorkStart = new TimeSpan(9, 0, 0);
-        settings.WorkEnd = new TimeSpan(17, 0, 0);
-        settings.EnableNotifications = true;
-        settings.SoundOn = true;
-        settings.Active = true;
-        settings.AutoShuffleEnabled = true;
-        settings.ReminderMinutes = 60;
-        settings.MaxDailyShuffles = 6;
-        settings.QuietHoursStart = new TimeSpan(22, 0, 0);
-        settings.QuietHoursEnd = new TimeSpan(7, 0, 0);
-        settings.StreakBias = 0.3;
-        settings.StableRandomnessPerDay = true;
-        await _storage.SetSettingsAsync(settings);
+        _settings.WorkStart = new TimeSpan(9, 0, 0);
+        _settings.WorkEnd = new TimeSpan(17, 0, 0);
+        _settings.EnableNotifications = true;
+        _settings.SoundOn = true;
+        _settings.Active = true;
+        _settings.AutoShuffleEnabled = true;
+        _settings.ReminderMinutes = 60;
+        _settings.MaxDailyShuffles = 6;
+        _settings.QuietHoursStart = new TimeSpan(22, 0, 0);
+        _settings.QuietHoursEnd = new TimeSpan(7, 0, 0);
+        _settings.StreakBias = 0.3;
+        _settings.StableRandomnessPerDay = true;
+        await _storage.SetSettingsAsync(_settings);
 
         Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
         Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);

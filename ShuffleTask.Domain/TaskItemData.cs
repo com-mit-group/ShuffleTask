@@ -4,6 +4,10 @@ public abstract class TaskItemData
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("n");
 
+    public string? DeviceId { get; set; }
+
+    public string? UserId { get; set; }
+
     public string Title { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;
@@ -34,6 +38,8 @@ public abstract class TaskItemData
 
     public DateTime CreatedAt { get; set; }
 
+    public DateTime UpdatedAt { get; set; }
+
     public TaskLifecycleStatus Status { get; set; } = TaskLifecycleStatus.Active;
 
     public DateTime? SnoozedUntil { get; set; }
@@ -55,11 +61,18 @@ public abstract class TaskItemData
 
     public CutInLineMode CutInLineMode { get; set; }
 
-    protected void CopyFrom(TaskItemData source)
+    /// <summary>
+    /// Monotonic event version used for idempotency when applying remote updates.
+    /// </summary>
+    public int EventVersion { get; set; }
+
+    public void CopyFrom(TaskItemData source)
     {
         ArgumentNullException.ThrowIfNull(source);
 
         Id = source.Id;
+        DeviceId = source.DeviceId;
+        UserId = source.UserId;
         Title = source.Title;
         Description = source.Description;
         Importance = source.Importance;
@@ -85,5 +98,8 @@ public abstract class TaskItemData
         CustomBreakMinutes = source.CustomBreakMinutes;
         CustomPomodoroCycles = source.CustomPomodoroCycles;
         CutInLineMode = source.CutInLineMode;
+
+        UpdatedAt = source.UpdatedAt;
+        EventVersion = source.EventVersion;
     }
 }

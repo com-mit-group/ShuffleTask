@@ -207,7 +207,7 @@ internal partial class PersistentBackgroundService
         private Notification BuildNotification()
         {
             var context = Android.App.Application.Context;
-            var intent = new Intent(context, typeof(global::ShuffleTask.MainActivity));
+            var intent = new Intent(context, typeof(global::ShuffleTask.Presentation.MainActivity));
             intent.SetFlags(ActivityFlags.ClearTop | ActivityFlags.SingleTop);
 
             var flags = PendingIntentFlags.UpdateCurrent;

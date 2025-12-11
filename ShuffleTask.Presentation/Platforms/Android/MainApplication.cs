@@ -1,7 +1,7 @@
 ﻿using Android.App;
 using Android.Runtime;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 [Application]
 public class MainApplication : MauiApplication

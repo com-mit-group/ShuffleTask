@@ -1,4 +1,3 @@
-using System.Globalization;
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Application.Abstractions;
@@ -76,6 +75,7 @@ public class StorageService : IStorageService
             await AddCol("CustomEndTime", "TEXT", "NULL");
             await AddCol("Paused", IntegerSqlType, "0");
             await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
+            await AddCol("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP");
             await AddCol("Description", "TEXT", "''");
             await AddCol("Status", IntegerSqlType, "0");
             await AddCol("SnoozedUntil", "TEXT", "NULL");
@@ -87,6 +87,9 @@ public class StorageService : IStorageService
             await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
             await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
             await AddCol("CutInLineMode", IntegerSqlType, "0");
+            await AddCol("EventVersion", IntegerSqlType, "0");
+            await AddCol("DeviceId", "TEXT", "''");
+            await AddCol("UserId", "TEXT", "NULL");
         }
         catch
         {
@@ -96,14 +99,61 @@ public class StorageService : IStorageService
 
     private SQLiteAsyncConnection Db => _db ?? throw new InvalidOperationException("StorageService not initialized. Call InitializeAsync() first.");
 
+    private void EnsureMetadata(TaskItemData item, TaskItemRecord? existing, bool bumpVersion)
+    {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+
+        EnsureOwnership(item, existing);
+        item.CreatedAt = item.CreatedAt == default ? nowUtc : EnsureUtc(item.CreatedAt);
+        item.UpdatedAt = item.UpdatedAt == default ? nowUtc : EnsureUtc(item.UpdatedAt);
+
+        if (existing == null)
+        {
+            item.EventVersion = Math.Max(1, item.EventVersion);
+            return;
+        }
+
+        int baseVersion = Math.Max(item.EventVersion, existing.EventVersion);
+        item.EventVersion = bumpVersion ? Math.Max(baseVersion, existing.EventVersion + 1) : baseVersion;
+    }
+
+    private static void EnsureOwnership(TaskItemData item, TaskItemRecord? existing)
+    {
+        string? preferredUser = string.IsNullOrWhiteSpace(item.UserId) ? existing?.UserId : item.UserId;
+        string? preferredDevice = string.IsNullOrWhiteSpace(item.DeviceId) ? existing?.DeviceId : item.DeviceId;
+
+        if (!string.IsNullOrWhiteSpace(preferredUser))
+        {
+            item.UserId = preferredUser;
+            item.DeviceId = null;
+            return;
+        }
+
+        item.UserId = null;
+        item.DeviceId = string.IsNullOrWhiteSpace(preferredDevice)
+            ? Environment.MachineName
+            : preferredDevice.Trim();
+    }
+
     // Tasks CRUD
-    public async Task<List<TaskItem>> GetTasksAsync()
+    public async Task<List<TaskItem>> GetTasksAsync(string? userId = "", string deviceId = "")
     {
         await AutoResumeDueTasksAsync();
 
-        var records = await Db.Table<TaskItemRecord>()
-                              .OrderByDescending(t => t.CreatedAt)
-                              .ToListAsync();
+        AsyncTableQuery<TaskItemRecord> query = Db.Table<TaskItemRecord>();
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(t => t.UserId == userId);
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            query = query.Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId);
+        }
+
+        var records = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
         return records.Select(r => r.ToDomain()).ToList();
     }
 
@@ -123,10 +173,6 @@ public class StorageService : IStorageService
         {
             item.Id = Guid.NewGuid().ToString("n");
         }
-        if (item.CreatedAt == default)
-        {
-            item.CreatedAt = _clock.GetUtcNow().UtcDateTime;
-        }
         if (item.Status != TaskLifecycleStatus.Active &&
             item.Status != TaskLifecycleStatus.Snoozed &&
             item.Status != TaskLifecycleStatus.Completed)
@@ -134,13 +180,35 @@ public class StorageService : IStorageService
             item.Status = TaskLifecycleStatus.Active;
         }
 
+        EnsureMetadata(item, null, bumpVersion: true);
+
         var record = TaskItemRecord.FromDomain(item);
         await Db.InsertAsync(record);
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
+        var existing = await Db.FindAsync<TaskItemRecord>(item.Id);
+
+        if (existing != null)
+        {
+            item.CreatedAt = existing.CreatedAt;
+        }
+
+        if (item.UpdatedAt == default)
+        {
+            item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+        }
+
+        EnsureMetadata(item, existing, bumpVersion: true);
+
         var record = TaskItemRecord.FromDomain(item);
+        if (existing == null)
+        {
+            await Db.InsertAsync(record);
+            return;
+        }
+
         await Db.UpdateAsync(record);
     }
 
@@ -148,6 +216,35 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
         await Db.DeleteAsync<TaskItemRecord>(id);
+    }
+
+    public async Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(userId))
+        {
+            return 0;
+        }
+
+        int updated = 0;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var matches = conn.Table<TaskItemRecord>()
+                .Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId)
+                .ToList();
+
+            foreach (var task in matches)
+            {
+                task.UserId = userId;
+                task.DeviceId = null;
+                task.UpdatedAt = EnsureUtc(nowUtc);
+                task.EventVersion = Math.Max(task.EventVersion + 1, 1);
+                conn.Update(task);
+                updated++;
+            }
+        });
+
+        return updated;
     }
 
     // Lifecycle helpers
@@ -165,6 +262,9 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             DateTime doneAt = EnsureUtc(nowUtc);
             existing.LastDoneAt = doneAt;
@@ -173,6 +273,9 @@ public class StorageService : IStorageService
             existing.SnoozedUntil = null;
             existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
             existing.CutInLineMode = CutInLineMode.None;
+
+            existing.UpdatedAt = EnsureUtc(nowUtc);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
 
             conn.Update(existing);
             updated = existing.ToDomain();
@@ -205,12 +308,18 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             DateTime until = EnsureUtc(nowUtc.Add(duration));
             existing.Status = TaskLifecycleStatus.Snoozed;
             existing.SnoozedUntil = until;
             existing.NextEligibleAt = until;
             existing.CompletedAt = null;
+
+            existing.UpdatedAt = EnsureUtc(nowUtc);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
 
             conn.Update(existing);
             updated = existing.ToDomain();
@@ -237,8 +346,13 @@ public class StorageService : IStorageService
                 return;
             }
 
+            var baseline = new TaskItemRecord();
+            baseline.CopyFrom(existing);
+
             originalStatus = existing.Status.ToString();
             ApplyResume(existing);
+            existing.UpdatedAt = EnsureUtc(_clock.GetUtcNow().UtcDateTime);
+            EnsureMetadata(existing, baseline, bumpVersion: true);
             conn.Update(existing);
             updated = existing.ToDomain();
         });
@@ -271,7 +385,11 @@ public class StorageService : IStorageService
             if (nextUtc <= nowUtc)
             {
                 string originalStatus = task.Status.ToString();
+                var baseline = new TaskItemRecord();
+                baseline.CopyFrom(task);
                 ApplyResume(task);
+                task.UpdatedAt = EnsureUtc(nowUtc);
+                EnsureMetadata(task, baseline, bumpVersion: true);
                 toUpdate.Add(task);
                 _logger?.LogStateTransition(task.Id, originalStatus, "Active", "Auto-resumed due to schedule");
             }
@@ -410,6 +528,8 @@ public class StorageService : IStorageService
         settings.RepeatUrgencyPenalty = Math.Clamp(settings.RepeatUrgencyPenalty, 0.0, 2.0);
         settings.SizeBiasStrength = Math.Clamp(settings.SizeBiasStrength, 0.0, 1.0);
         settings.UrgencyDeadlineShare = Math.Clamp(settings.UrgencyDeadlineShare, 0.0, 100.0);
+        settings.Network ??= NetworkOptions.CreateDefault();
+        settings.Network.Normalize();
         return settings;
     }
 

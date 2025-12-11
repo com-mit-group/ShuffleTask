@@ -15,12 +15,13 @@ public partial class DashboardViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
+    private readonly INetworkSyncService _networkSyncService;
     private readonly INotificationService _notifications;
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
+    private readonly AppSettings _settings;
 
     private TaskItem? _activeTask;
-    private AppSettings? _settings;
     private PomodoroSession? _pomodoroSession;
     private TimerRequest? _currentTimer;
     private bool _isInitialized;
@@ -29,13 +30,14 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
         _storage = storage;
         _scheduler = scheduler;
         _notifications = notifications;
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
         Title = DefaultTitle;
         Description = DefaultDescription;
@@ -43,6 +45,7 @@ public partial class DashboardViewModel : ObservableObject
         TimerText = "--:--";
         CycleStatus = string.Empty;
         PhaseBadge = string.Empty;
+        _networkSyncService = networkSyncService;
     }
 
     public event EventHandler<TimerRequest>? CountdownRequested;
@@ -122,24 +125,6 @@ public partial class DashboardViewModel : ObservableObject
             _coordinator.RegisterDashboard(this);
             _isInitialized = true;
         }
-
-        await LoadSettingsAsync();
-    }
-
-    private async Task EnsureSettingsAsync()
-    {
-        if (!_isInitialized)
-        {
-            await InitializeAsync();
-            return;
-        }
-
-        await LoadSettingsAsync();
-    }
-
-    private async Task LoadSettingsAsync()
-    {
-        _settings = await _storage.GetSettingsAsync();
     }
 
     [RelayCommand]
@@ -157,8 +142,8 @@ public partial class DashboardViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            await EnsureSettingsAsync();
-            var settings = _settings ?? throw new InvalidOperationException("Settings unavailable.");
+            await InitializeAsync();
+            var settings = _settings;
 
             if (!settings.Active)
             {
@@ -166,7 +151,8 @@ public partial class DashboardViewModel : ObservableObject
                 return;
             }
 
-            var tasks = await _storage.GetTasksAsync();
+            var network = _settings.Network;
+            var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty);
             DateTimeOffset now = _clock.GetUtcNow();
             string? previousId = _activeTask?.Id;
 
@@ -254,16 +240,18 @@ public partial class DashboardViewModel : ObservableObject
             return;
         }
 
-        await EnsureSettingsAsync();
-        var settings = _settings ?? new AppSettings();
+        await InitializeAsync();
+        var settings = _settings;
 
         int snoozeMinutes = Math.Max(15, settings.MinGapMinutes);
         var duration = TimeSpan.FromMinutes(snoozeMinutes);
 
         var updated = await _storage.SnoozeTaskAsync(_activeTask.Id, duration);
-        if (updated != null)
+
+        if (updated is not null)
         {
             _activeTask = updated;
+            await _networkSyncService.PublishTaskUpsertAsync(_activeTask);
         }
 
         var snapshot = _activeTask;
@@ -279,7 +267,7 @@ public partial class DashboardViewModel : ObservableObject
             return false;
         }
 
-        await EnsureSettingsAsync();
+        await InitializeAsync();
         var task = await _storage.GetTaskAsync(taskId);
         if (task == null)
         {
@@ -321,11 +309,7 @@ public partial class DashboardViewModel : ObservableObject
 
     public async Task HandleCountdownCompletedAsync()
     {
-        await EnsureSettingsAsync();
-        if (_settings == null)
-        {
-            return;
-        }
+        await InitializeAsync();
 
         if (_currentTimer?.Mode == TimerMode.Pomodoro && _pomodoroSession != null && _activeTask != null)
         {
@@ -351,7 +335,7 @@ public partial class DashboardViewModel : ObservableObject
 
     private Task CompletePomodoroAsync()
     {
-        int cycles = _pomodoroSession?.CycleCount ?? _settings?.PomodoroCycles ?? 0;
+        int cycles = _pomodoroSession?.CycleCount ?? _settings.PomodoroCycles;
         TimerText = "--:--";
         ShowPomodoroCompletion(cycles);
         _pomodoroSession = null;
@@ -360,9 +344,8 @@ public partial class DashboardViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    public Task ApplyAutoShuffleAsync(TaskItem task, AppSettings settings)
+    public Task ApplyAutoOrCrossDeviceShuffleAsync(TaskItem task, AppSettings settings)
     {
-        _settings = settings;
         BindTask(task);
 
         var effectiveSettings = TaskTimerSettings.Resolve(task, settings);

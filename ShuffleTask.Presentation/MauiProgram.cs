@@ -1,11 +1,19 @@
-﻿using ShuffleTask.Application.Abstractions;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Persistence;
+using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
+using Yaref92.Events;
+using Yaref92.Events.Abstractions;
+using Yaref92.Events.Serialization;
+using Yaref92.Events.Transports;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {
@@ -56,11 +64,25 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
-        builder.Services.AddSingleton<ISchedulerService>(_ => new SchedulerService(deterministic: false));
+        SetupEventAggregation(builder);
+        builder.Services.AddSingleton<ISchedulerService>(sp => new SchedulerService(deterministic: false));
         builder.Services.AddSingleton<ShuffleCoordinatorService>();
 
         // ViewModels
-        builder.Services.AddSingleton<DashboardViewModel>();
+        builder.Services.AddSingleton<DashboardViewModel>(sp =>
+        {
+            var storage = sp.GetRequiredService<IStorageService>();
+            var scheduler = sp.GetRequiredService<ISchedulerService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var shuffleCoordinator = sp.GetRequiredService<ShuffleCoordinatorService>();
+            var timeProvider = sp.GetRequiredService<TimeProvider>();
+            var networkSync = sp.GetRequiredService<INetworkSyncService>();
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings);
+            var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
+            taskStartedHandler.RegisterDashboard(dashboardViewModel);
+            return dashboardViewModel;
+        });
         builder.Services.AddSingleton<TasksViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
@@ -82,6 +104,71 @@ public static partial class MauiProgram
 
         return app;
     }
+
+    private static void SetupEventAggregation(MauiAppBuilder builder)
+    {
+        // Register AppSettings as singleton, loaded from storage
+        builder.Services.AddSingleton<AppSettings>(sp =>
+        {
+            var storage = sp.GetRequiredService<IStorageService>();
+            // Load synchronously during DI setup
+            AppSettings settings = null;
+            Task.Run(async () =>
+            {
+                await storage.InitializeAsync().ConfigureAwait(false);
+                settings = await storage.GetSettingsAsync().ConfigureAwait(false);
+                settings.Network ??= NetworkOptions.CreateDefault();
+                settings.Network.Normalize();
+            }).Wait();
+            return settings;
+        });
+        
+        builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+        
+        // TCPEventTransport gets NetworkOptions from AppSettings
+        builder.Services.AddSingleton<IEventTransport, TCPEventTransport>(sp =>
+        {
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var options = appSettings.Network ?? NetworkOptions.CreateDefault();
+            string authSecret = options.ResolveAuthenticationSecret();
+            return new TCPEventTransport(
+                options.ListeningPort,
+                new JsonEventSerializer(),
+                TimeSpan.FromSeconds(20),
+                authSecret);
+        });
+        builder.Services.AddSingleton<NetworkedEventAggregator>();
+        builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
+        builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var taskStartedAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications, appSettings);
+            return taskStartedAsyncHandler;
+        });
+        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
+        {
+            var logger = sp.GetService<ILogger<NetworkSyncService>>();
+            var storage = sp.GetRequiredService<StorageService>();
+            var notifications = sp.GetRequiredService<INotificationService>();
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications, appSettings);
+
+            var ns = sp.GetRequiredService<INetworkSyncService>();
+            Task initTask = Task.Run(() => ns.InitAsync());
+            initTask.ContinueWith((t, o) =>
+            {
+                var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
+                var taskStartedAsyncHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
+                aggregator.SubscribeToEventType(taskStartedAsyncHandler);
+                aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
+            }, TaskScheduler.Default);
+            return timeUpNotificationAsyncHandler;
+        });
+    }
+
     static partial void ConfigurePlatform(MauiAppBuilder builder);
     static partial void ResolvePlatformServiceProvider(ref IServiceProvider? services);
 }

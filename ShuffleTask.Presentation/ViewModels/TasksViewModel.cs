@@ -11,13 +11,17 @@ namespace ShuffleTask.ViewModels;
 public partial class TasksViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
+    private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
+    private readonly AppSettings _settings;
 
-    public TasksViewModel(IStorageService storage, TimeProvider clock)
+    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _networkSyncService = networkSyncService;
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -25,7 +29,7 @@ public partial class TasksViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public async Task LoadAsync()
+    public async Task LoadAsync(string? userId = null, string? deviceId = null)
     {
         if (IsBusy)
         {
@@ -36,8 +40,10 @@ public partial class TasksViewModel : ObservableObject
         try
         {
             await _storage.InitializeAsync();
-            List<TaskItem> items = await _storage.GetTasksAsync();
-            AppSettings settings = await _storage.GetSettingsAsync();
+            List<TaskItem> items = await _storage.GetTasksAsync(
+                userId ?? _settings.Network?.UserId,
+                deviceId ?? _settings.Network?.DeviceId ?? string.Empty);
+            AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
             Tasks.Clear();
@@ -58,6 +64,7 @@ public partial class TasksViewModel : ObservableObject
     {
         task.Paused = !task.Paused;
         await _storage.UpdateTaskAsync(task);
+        await _networkSyncService.PublishTaskUpsertAsync(task);
         await LoadAsync();
     }
 
@@ -72,6 +79,7 @@ public partial class TasksViewModel : ObservableObject
         {
             task.CutInLineMode = mode;
             await _storage.UpdateTaskAsync(task);
+            await _networkSyncService.PublishTaskUpsertAsync(task);
         }
 
         await LoadAsync();
@@ -84,13 +92,20 @@ public partial class TasksViewModel : ObservableObject
             return;
         }
 
-        await _storage.ResumeTaskAsync(task.Id);
+        TaskItem? updated = await _storage.ResumeTaskAsync(task.Id);
+
+        if (updated is not null)
+        {
+            await _networkSyncService.PublishTaskUpsertAsync(updated); 
+        }
+
         await LoadAsync();
     }
 
     public async Task DeleteAsync(TaskItem task)
     {
         await _storage.DeleteTaskAsync(task.Id);
+        await _networkSyncService.PublishTaskDeletedAsync(task.Id);
         await LoadAsync();
     }
 
@@ -101,7 +116,13 @@ public partial class TasksViewModel : ObservableObject
             return;
         }
 
-        await _storage.MarkTaskDoneAsync(task.Id);
+        TaskItem? updated = await _storage.MarkTaskDoneAsync(task.Id);
+
+        if (updated is not null)
+        {
+            await _networkSyncService.PublishTaskUpsertAsync(updated); 
+        }
+
         await LoadAsync();
     }
 

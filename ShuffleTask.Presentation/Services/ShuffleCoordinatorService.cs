@@ -15,6 +15,8 @@ public class ShuffleCoordinatorService : IDisposable
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
     private readonly INotificationService _notifications;
+    private readonly AppSettings _settings;
+    private readonly INetworkSyncService? _networkSync;
     private readonly TimeProvider _clock;
     private readonly IPersistentBackgroundService _backgroundService;
 
@@ -30,14 +32,18 @@ public class ShuffleCoordinatorService : IDisposable
         IStorageService storage,
         ISchedulerService scheduler,
         INotificationService notifications,
+        AppSettings settings,
         TimeProvider clock,
-        IPersistentBackgroundService backgroundService)
+        IPersistentBackgroundService backgroundService,
+        INetworkSyncService? networkSync = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
+        _networkSync = networkSync;
     }
 
     public void Dispose()
@@ -179,7 +185,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelTimerInternal();
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        var settings = _settings;
         if (!ShouldAutoShuffle(settings))
         {
             ClearPendingShuffle();
@@ -246,7 +252,8 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
     {
-        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
         if (tasks.Count == 0)
         {
             ClearPendingShuffle();
@@ -451,8 +458,14 @@ public class ShuffleCoordinatorService : IDisposable
             return;
         }
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
-        await _notifications.ShowToastAsync("Time's up", "Shuffling a new task...", settings).ConfigureAwait(false);
+        var settings = _settings;
+        const string TimeUpTitle = "Time's up";
+        const string TimeUpMessage = "Shuffling a new task...";
+        await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishTimeUpNotificationAsync().ConfigureAwait(false);
+        }
         PersistedTimerState.Clear();
     }
 
@@ -468,7 +481,7 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        var settings = await _storage.GetSettingsAsync().ConfigureAwait(false);
+        var settings = _settings;
         if (!ShouldAutoShuffle(settings))
         {
             ClearPendingShuffle();
@@ -503,7 +516,8 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         ClearPendingShuffle();
-        var effectiveSettings = TaskTimerSettings.Resolve(task, settings);
+
+        EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
         await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
@@ -538,7 +552,8 @@ public class ShuffleCoordinatorService : IDisposable
             return task;
         }
 
-        var tasks = await _storage.GetTasksAsync().ConfigureAwait(false);
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
         TaskItem? candidate = _scheduler.PickNextTask(tasks, settings, now);
         if (candidate != null)
         {
@@ -555,12 +570,16 @@ public class ShuffleCoordinatorService : IDisposable
     {
         if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
         {
-            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoShuffleAsync(task, settings));
+            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoOrCrossDeviceShuffleAsync(task, settings));
             await applyTask.ConfigureAwait(false);
         }
 
         int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishTaskStartedAsync(task.Id, minutes).ConfigureAwait(false);
+        }
     }
 
     private async Task HandleCutInLineModeAsync(TaskItem task)

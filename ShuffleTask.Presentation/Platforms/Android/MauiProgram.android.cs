@@ -3,7 +3,7 @@ using System;
 using Android.App;
 using Microsoft.Maui;
 
-namespace ShuffleTask;
+namespace ShuffleTask.Presentation;
 
 public static partial class MauiProgram
 {

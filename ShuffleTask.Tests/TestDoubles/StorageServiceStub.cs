@@ -1,9 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace ShuffleTask.Tests.TestDoubles;
 
@@ -12,7 +13,7 @@ public class StorageServiceStub : IStorageService
     private readonly Dictionary<string, TaskItem> _tasks = new();
     private readonly TimeProvider _clock;
     private bool _initialized;
-    private AppSettings _settings = new();
+    private readonly AppSettings _settings;
 
     public int InitializeCallCount { get; private set; }
     public int GetTasksCallCount { get; private set; }
@@ -24,9 +25,10 @@ public class StorageServiceStub : IStorageService
     public int GetSettingsCallCount { get; private set; }
     public int SetSettingsCallCount { get; private set; }
 
-    public StorageServiceStub(TimeProvider? clock = null)
+    public StorageServiceStub(TimeProvider? clock = null, AppSettings? settings = null)
     {
         _clock = clock ?? TimeProvider.System;
+        _settings = settings ?? new AppSettings();
     }
 
     public Task InitializeAsync()
@@ -36,12 +38,23 @@ public class StorageServiceStub : IStorageService
         return Task.CompletedTask;
     }
 
-    public Task<List<TaskItem>> GetTasksAsync()
+    public Task<List<TaskItem>> GetTasksAsync(string? userId = "", string deviceId = "")
     {
         EnsureInitialized();
         AutoResumeDueTasks();
         GetTasksCallCount++;
-        var snapshot = _tasks.Values
+        var query = _tasks.Values.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(t => t.UserId == userId);
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            query = query.Where(t => (t.UserId == null || t.UserId == "") && t.DeviceId == deviceId);
+        }
+
+        var snapshot = query
             .OrderByDescending(t => t.CreatedAt)
             .Select(Clone)
             .ToList();
@@ -58,6 +71,7 @@ public class StorageServiceStub : IStorageService
     public Task AddTaskAsync(TaskItem item)
     {
         EnsureInitialized();
+        EnsureMetadata(item, null, bumpVersion: true);
         _tasks[item.Id] = Clone(item);
         return Task.CompletedTask;
     }
@@ -66,6 +80,8 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         UpdateTaskCallCount++;
+        item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+        EnsureMetadata(item, _tasks.TryGetValue(item.Id, out var existing) ? existing : null, bumpVersion: true);
         _tasks[item.Id] = Clone(item);
         return Task.CompletedTask;
     }
@@ -76,6 +92,27 @@ public class StorageServiceStub : IStorageService
         DeleteTaskCallCount++;
         _tasks.Remove(id);
         return Task.CompletedTask;
+    }
+
+    public Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
+    {
+        EnsureInitialized();
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(userId))
+        {
+            return Task.FromResult(0);
+        }
+
+        int updated = 0;
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        foreach (var task in _tasks.Values.Where(t => string.IsNullOrWhiteSpace(t.UserId) && t.DeviceId == deviceId))
+        {
+            task.UserId = userId;
+            task.DeviceId = null;
+            EnsureMetadata(task, task, bumpVersion: true, updatedAtOverride: nowUtc);
+            updated++;
+        }
+
+        return Task.FromResult(updated);
     }
 
     public Task<TaskItem?> MarkTaskDoneAsync(string id)
@@ -96,6 +133,8 @@ public class StorageServiceStub : IStorageService
         existing.Status = TaskLifecycleStatus.Completed;
         existing.SnoozedUntil = null;
         existing.NextEligibleAt = ComputeNextEligibleUtc(existing, nowUtc);
+
+        EnsureMetadata(existing, existing, bumpVersion: true, updatedAtOverride: doneAt);
 
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
@@ -124,6 +163,8 @@ public class StorageServiceStub : IStorageService
         existing.NextEligibleAt = until;
         existing.CompletedAt = null;
 
+        EnsureMetadata(existing, existing, bumpVersion: true, updatedAtOverride: nowUtc);
+
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
     }
@@ -139,6 +180,8 @@ public class StorageServiceStub : IStorageService
         }
 
         ApplyResume(existing);
+        existing.UpdatedAt = EnsureUtc(_clock.GetUtcNow().UtcDateTime);
+        EnsureMetadata(existing, existing, bumpVersion: true);
         _tasks[id] = Clone(existing);
         return Task.FromResult<TaskItem?>(Clone(existing));
     }
@@ -147,14 +190,15 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         GetSettingsCallCount++;
-        return Task.FromResult(Clone(_settings));
+        return Task.FromResult(_settings);
     }
 
     public Task SetSettingsAsync(AppSettings settings)
     {
         EnsureInitialized();
         SetSettingsCallCount++;
-        _settings = Clone(settings);
+        _settings.CopyFrom(settings);
+        _settings.NormalizeWeights();
         return Task.CompletedTask;
     }
 
@@ -178,6 +222,8 @@ public class StorageServiceStub : IStorageService
             if (nextUtc <= nowUtc)
             {
                 ApplyResume(task);
+                task.UpdatedAt = EnsureUtc(nowUtc);
+                EnsureMetadata(task, task, bumpVersion: true, updatedAtOverride: nowUtc);
             }
         }
     }
@@ -248,29 +294,54 @@ public class StorageServiceStub : IStorageService
         }
     }
 
-    private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
-
-    private static AppSettings Clone(AppSettings settings)
+    private void EnsureMetadata(TaskItem task, TaskItem? existing, bool bumpVersion, DateTime? updatedAtOverride = null)
     {
-        return new AppSettings
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+
+        EnsureOwnership(task, existing);
+        task.CreatedAt = task.CreatedAt == default
+            ? nowUtc
+            : EnsureUtc(task.CreatedAt);
+
+        task.UpdatedAt = updatedAtOverride.HasValue
+            ? EnsureUtc(updatedAtOverride.Value)
+            : task.UpdatedAt == default
+                ? nowUtc
+                : EnsureUtc(task.UpdatedAt);
+
+        int existingVersion = existing?.EventVersion ?? 0;
+        int baseVersion = Math.Max(task.EventVersion, existingVersion);
+
+        if (existing == null)
         {
-            WorkStart = settings.WorkStart,
-            WorkEnd = settings.WorkEnd,
-            MinGapMinutes = settings.MinGapMinutes,
-            MaxGapMinutes = settings.MaxGapMinutes,
-            ReminderMinutes = settings.ReminderMinutes,
-            EnableNotifications = settings.EnableNotifications,
-            SoundOn = settings.SoundOn,
-            Active = settings.Active,
-            StreakBias = settings.StreakBias,
-            StableRandomnessPerDay = settings.StableRandomnessPerDay,
-            ImportanceWeight = settings.ImportanceWeight,
-            UrgencyWeight = settings.UrgencyWeight,
-            UrgencyDeadlineShare = settings.UrgencyDeadlineShare,
-            RepeatUrgencyPenalty = settings.RepeatUrgencyPenalty,
-            SizeBiasStrength = settings.SizeBiasStrength
-        };
+            task.EventVersion = Math.Max(1, baseVersion);
+            return;
+        }
+
+        task.EventVersion = bumpVersion
+            ? Math.Max(baseVersion, existingVersion + 1)
+            : Math.Max(1, baseVersion);
     }
+
+    private static void EnsureOwnership(TaskItemData task, TaskItem? existing)
+    {
+        string? preferredUser = string.IsNullOrWhiteSpace(task.UserId) ? existing?.UserId : task.UserId;
+        string? preferredDevice = string.IsNullOrWhiteSpace(task.DeviceId) ? existing?.DeviceId : task.DeviceId;
+
+        if (!string.IsNullOrWhiteSpace(preferredUser))
+        {
+            task.UserId = preferredUser;
+            task.DeviceId = null;
+            return;
+        }
+
+        task.UserId = null;
+        task.DeviceId = string.IsNullOrWhiteSpace(preferredDevice)
+            ? Environment.MachineName
+            : preferredDevice.Trim();
+    }
+
+    private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
 
     private static DateTime EnsureUtc(DateTime value)
     {

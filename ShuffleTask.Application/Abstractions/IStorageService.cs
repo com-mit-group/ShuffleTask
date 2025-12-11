@@ -6,7 +6,7 @@ namespace ShuffleTask.Application.Abstractions;
 public interface IStorageService
 {
     Task InitializeAsync();
-    Task<List<TaskItem>> GetTasksAsync();
+    Task<List<TaskItem>> GetTasksAsync(string? userId = "", string deviceId = "");
     Task<TaskItem?> GetTaskAsync(string id);
     Task AddTaskAsync(TaskItem item);
     Task UpdateTaskAsync(TaskItem item);
@@ -16,4 +16,5 @@ public interface IStorageService
     Task<TaskItem?> ResumeTaskAsync(string id);
     Task<AppSettings> GetSettingsAsync();
     Task SetSettingsAsync(AppSettings settings);
+    Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId);
 }
