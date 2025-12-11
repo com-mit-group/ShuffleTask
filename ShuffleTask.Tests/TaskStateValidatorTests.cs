@@ -40,15 +40,16 @@ public class TaskStateValidatorTests
     [Test]
     public void IsValidState_ReturnsTrueForSnoozedTasksWithRequiredFields()
     {
+        var now = DateTimeOffset.UtcNow;
         var task = new TaskItem
         {
             Status = TaskLifecycleStatus.Snoozed,
-            SnoozedUntil = DateTime.UtcNow.AddMinutes(30),
-            NextEligibleAt = DateTime.UtcNow.AddMinutes(30),
+            SnoozedUntil = now.AddMinutes(30).UtcDateTime,
+            NextEligibleAt = now.AddMinutes(30).UtcDateTime,
             CompletedAt = null
         };
 
-        var result = TaskStateValidator.IsValidState(task, DateTimeOffset.UtcNow);
+        var result = TaskStateValidator.IsValidState(task, now);
 
         Assert.That(result, Is.True);
     }
@@ -56,14 +57,32 @@ public class TaskStateValidatorTests
     [Test]
     public void IsValidState_ReturnsFalseForSnoozedTaskWithoutNextEligible()
     {
+        var now = DateTimeOffset.UtcNow;
         var task = new TaskItem
         {
             Status = TaskLifecycleStatus.Snoozed,
-            SnoozedUntil = DateTime.UtcNow.AddMinutes(15),
+            SnoozedUntil = now.AddMinutes(15).UtcDateTime,
             NextEligibleAt = null
         };
 
-        var result = TaskStateValidator.IsValidState(task, DateTimeOffset.UtcNow);
+        var result = TaskStateValidator.IsValidState(task, now);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void IsValidState_ReturnsFalseWhenSnoozeHasExpired()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var task = new TaskItem
+        {
+            Status = TaskLifecycleStatus.Snoozed,
+            SnoozedUntil = now.AddMinutes(-10).UtcDateTime,
+            NextEligibleAt = now.AddMinutes(-5).UtcDateTime,
+            CompletedAt = null
+        };
+
+        var result = TaskStateValidator.IsValidState(task, now);
 
         Assert.That(result, Is.False);
     }
@@ -71,14 +90,32 @@ public class TaskStateValidatorTests
     [Test]
     public void IsValidState_ReturnsTrueForCompletedTasksWithCompletionTimestamp()
     {
+        var now = DateTimeOffset.UtcNow;
         var task = new TaskItem
         {
             Status = TaskLifecycleStatus.Completed,
-            CompletedAt = DateTime.UtcNow,
+            CompletedAt = now.UtcDateTime,
             SnoozedUntil = null
         };
 
-        var result = TaskStateValidator.IsValidState(task, DateTimeOffset.UtcNow);
+        var result = TaskStateValidator.IsValidState(task, now);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void IsValidState_AllowsCompletedTasksWithoutNextEligibleTimestamp()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var task = new TaskItem
+        {
+            Status = TaskLifecycleStatus.Completed,
+            CompletedAt = now.UtcDateTime,
+            NextEligibleAt = null,
+            SnoozedUntil = null
+        };
+
+        var result = TaskStateValidator.IsValidState(task, now);
 
         Assert.That(result, Is.True);
     }
@@ -126,3 +163,4 @@ public class TaskStateValidatorTests
         Assert.That(description, Is.EqualTo(expected));
     }
 }
+
