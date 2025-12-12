@@ -119,7 +119,7 @@ public class ShuffleCoordinatorServiceTests
         public TaskItem? NextCandidate { get; set; }
         public TimeSpan NextGapResult { get; set; } = TimeSpan.FromMinutes(5);
 
-        public TaskItem? PickNextTask(IReadOnlyList<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
+        public TaskItem? PickNextTask(IEnumerable<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
         {
             return NextCandidate;
         }
@@ -133,7 +133,19 @@ public class ShuffleCoordinatorServiceTests
     private sealed class NotificationStub : INotificationService
     {
         public Task InitializeAsync() => Task.CompletedTask;
+
+        public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
+        {
+            throw new NotImplementedException();
+        }
+
         public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings) => Task.CompletedTask;
+
+        public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings, TimeSpan delay)
+        {
+            throw new NotImplementedException();
+        }
+
         public Task ShowToastAsync(string title, string message, AppSettings settings) => Task.CompletedTask;
     }
 

@@ -22,4 +22,16 @@ public class TaskManifestEntry
     public string? DeviceId { get; set; }
 
     public string? UserId { get; set; }
+
+    public static TaskManifestEntry From(ShuffleTask.Domain.Entities.TaskItem task)
+    {
+        return new TaskManifestEntry
+        {
+            TaskId = task.Id,
+            EventVersion = task.EventVersion,
+            UpdatedAt = task.UpdatedAt,
+            DeviceId = task.DeviceId,
+            UserId = task.UserId,
+        };
+    }
 }

@@ -346,14 +346,14 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             .Select(entry => entry.TaskId)
             .ToHashSet(StringComparer.Ordinal);
 
-        var tasksToAdvertise = (await _coordinator
+        string[] tasksToAdvertise = (await _coordinator
             .GetTasksToAdvertiseAsync(domainEvent.Manifest, UserId, DeviceId)
             .WaitAsync(linkedCts.Token)
             .ConfigureAwait(false))
             .Where(requestedTaskIds.Contains)
             .ToArray();
 
-        if (tasksToAdvertise.Count == 0)
+        if (tasksToAdvertise.Length == 0)
         {
             return;
         }

@@ -75,7 +75,17 @@ public class PeerSyncCoordinator
         string? userId,
         string deviceId)
     {
+        Func<TaskManifestEntry, bool> idFilterPredicate = entry => true;
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            idFilterPredicate = entry => string.Equals(entry.UserId, userId, StringComparison.Ordinal);
+        }
+        else if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            idFilterPredicate = entry => string.Equals(entry.DeviceId, deviceId, StringComparison.Ordinal);
+        }
         var remoteEntries = remoteManifest
+            .Where(idFilterPredicate)
             .GroupBy(entry => entry.TaskId)
             .ToDictionary(group => group.Key, group => group.First());
 
@@ -144,19 +154,7 @@ public class PeerSyncCoordinator
     private async Task<IReadOnlyCollection<TaskManifestEntry>> LoadLocalManifestAsync(string? userId, string deviceId)
     {
         var tasks = await _storageService.GetTasksAsync(userId, deviceId).ConfigureAwait(false);
-        return tasks.Select(ToManifestEntry).ToList();
-    }
-
-    private static TaskManifestEntry ToManifestEntry(ShuffleTask.Domain.Entities.TaskItem task)
-    {
-        return new TaskManifestEntry
-        {
-            TaskId = task.Id,
-            EventVersion = task.EventVersion,
-            UpdatedAt = task.UpdatedAt,
-            DeviceId = task.DeviceId,
-            UserId = task.UserId,
-        };
+        return tasks.Select(TaskManifestEntry.From).ToList();
     }
 }
 

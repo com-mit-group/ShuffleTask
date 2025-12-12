@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;

@@ -7,6 +7,8 @@ using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 
 namespace ShuffleTask.Presentation.Services;
 
