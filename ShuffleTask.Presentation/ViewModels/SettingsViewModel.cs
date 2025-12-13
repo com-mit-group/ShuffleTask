@@ -332,7 +332,8 @@ public partial class SettingsViewModel : ObservableObject
 
     private async Task HandleSessionTransitionAsync(bool wasAnonymous)
     {
-        if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+        if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId)
+            && ShouldPromptForMigration())
         {
             bool migrate = await PromptMigrateDeviceTasksAsync();
             if (migrate)
@@ -345,6 +346,11 @@ public partial class SettingsViewModel : ObservableObject
 
         await _coordinator.RefreshAsync();
         await RefreshBoundCollectionsAsync(userScope, deviceScope);
+    }
+
+    private bool ShouldPromptForMigration()
+    {
+        return _tasksViewModel.Tasks.Count > 0;
     }
 
     private (string? UserId, string DeviceId) ResolveTaskScopes()

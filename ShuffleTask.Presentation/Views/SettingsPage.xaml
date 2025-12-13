@@ -50,7 +50,6 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -309,94 +308,72 @@
                                      IsVisible="{Binding UsePomodoro}" />
 
             <Label Grid.Row="23"
-                   Text="Local host"
+                   Text="Local connection"
                    VerticalOptions="Center" />
             <Entry Grid.Row="23"
                    Grid.Column="1"
-                   Text="{Binding Settings.Network.Host}" IsReadOnly="True" />
+                   Text="{Binding LocalConnectionSummary}" IsReadOnly="True" />
 
             <Label Grid.Row="24"
-                   Text="Listening port"
-                   VerticalOptions="Center" />
-            <Entry Grid.Row="24"
-                   Grid.Column="1"
-                   Keyboard="Numeric"
-                   Text="{Binding Settings.Network.ListeningPort}" IsReadOnly="True" />
+                    Text="Auth token"
+                    VerticalOptions="Center" />
+            <Label Grid.Row="24"
+                    Grid.Column="1"
+                    LineBreakMode="CharacterWrap"
+                    Text="{Binding AuthTokenPreview}" />
 
             <Label Grid.Row="25"
-                   Text="Device id"
-                   VerticalOptions="Center" />
-            <Entry Grid.Row="25"
-                   Grid.Column="1"
-                   Text="{Binding Settings.Network.DeviceId}" />
-
-            <Label Grid.Row="26"
                    Text="Anonymous session"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="26"
+            <Switch Grid.Row="25"
                     Grid.Column="1"
                     IsToggled="{Binding IsAnonymousSession}"
                     IsEnabled="False" />
 
-            <Label Grid.Row="27"
+            <Label Grid.Row="26"
                    Text="User id"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="27" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="26" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <Label Grid.Column="0"
                        Text="{Binding UserDisplayLabel}" />
                 <Button Grid.Column="1"
                         Text="Login"
-                        Command="{Binding LoginCommand}" />
+                        Command="{Binding LoginCommand}"
+                        IsEnabled="{Binding IsAnonymousSession}"
+                        IsVisible="{Binding IsAnonymousSession}" />
+                <Button Grid.Column="1"
+                        Text="Logout"
+                        Command="{Binding LogoutCommand}"
+                        IsEnabled="{Binding IsLoggedIn}"
+                        IsVisible="{Binding IsLoggedIn}" />
             </Grid>
 
-            <Label Grid.Row="28"
+            <Label Grid.Row="27"
                    Text="Peer host"
                    VerticalOptions="Center"
                    IsEnabled="{Binding CanSyncAcrossDevices}" />
-            <Entry Grid.Row="28"
+            <Entry Grid.Row="27"
                    Grid.Column="1"
                    Text="{Binding Settings.Network.PeerHost}"
                    IsEnabled="{Binding CanSyncAcrossDevices}" />
 
-            <Label Grid.Row="29"
+            <Label Grid.Row="28"
                    Text="Peer port"
                    VerticalOptions="Center"
                    IsEnabled="{Binding CanSyncAcrossDevices}" />
-            <Entry Grid.Row="29"
+            <Entry Grid.Row="28"
                    Grid.Column="1"
                    Keyboard="Numeric"
                    Text="{Binding Settings.Network.PeerPort}"
                    IsEnabled="{Binding CanSyncAcrossDevices}" />
 
-            <Button Grid.Row="30"
+            <Button Grid.Row="29"
                     Grid.ColumnSpan="2"
-                    Text="Logout"
-                    Command="{Binding LogoutCommand}"
-                    IsEnabled="{Binding IsLoggedIn}" />
+                    Text="Connect to peer"
+                    Command="{Binding ConnectPeerCommand}"
+                    IsEnabled="{Binding CanSyncAcrossDevices}" />
 
-            <Label Grid.Row="31"
-                    Text="Auth token"
-                    VerticalOptions="Center" />
-            <Label Grid.Row="31"
-                    Grid.Column="1"
-                    LineBreakMode="CharacterWrap"
-                    Text="{Binding AuthTokenPreview}" />
-
-            <Grid Grid.Row="32"
-                   Grid.ColumnSpan="2"
-                   ColumnDefinitions="*,*"
-                   ColumnSpacing="16">
-                <Button Grid.Column="0"
-                        Text="Connect to peer"
-                        Command="{Binding ConnectPeerCommand}"
-                        IsEnabled="{Binding CanSyncAcrossDevices}" />
-                <Label Grid.Column="1"
-                       Text="{Binding LocalConnectionSummary}"
-                       HorizontalTextAlignment="End"
-                       VerticalOptions="Center" />
-            </Grid>
-
-            <Grid Grid.Row="33"
+            <Grid Grid.Row="30"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -408,7 +385,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="34"
+            <ActivityIndicator Grid.Row="31"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
