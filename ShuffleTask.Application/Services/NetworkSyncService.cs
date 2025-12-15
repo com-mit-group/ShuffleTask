@@ -19,6 +19,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly IStorageService _storage;
     private readonly AppSettings _appSettings;
     private readonly ILogger<NetworkSyncService>? _logger;
+    private readonly INotificationService? _notifications;
     private readonly PeerSyncCoordinator _coordinator;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -38,13 +39,15 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         AppSettings appSettings,
         NetworkedEventAggregator aggregator,
         IEventTransport transport,
-        ILogger<NetworkSyncService>? logger = null)
+        ILogger<NetworkSyncService>? logger = null,
+        INotificationService? notifications = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _transport = (transport as TCPEventTransport) ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger;
+        _notifications = notifications;
         _coordinator = new PeerSyncCoordinator(_storage);
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
@@ -109,15 +112,46 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-        if (_transport is null || string.IsNullOrWhiteSpace(host) || port <= 0 || IsAnonymous)
+        if (_transport is null)
         {
             return;
         }
 
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
-        await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            await DebugToastAsync("Peer connect", "Peer host is empty; cannot connect.").ConfigureAwait(false);
+            return;
+        }
 
-        await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
+        if (port <= 0)
+        {
+            await DebugToastAsync("Peer connect", "Peer port is invalid; cannot connect.").ConfigureAwait(false);
+            return;
+        }
+
+        if (IsAnonymous)
+        {
+            await DebugToastAsync("Peer connect", "Anonymous session cannot connect to peers.").ConfigureAwait(false);
+            return;
+        }
+
+        await DebugToastAsync("Peer connect", $"Connecting to {host}:{port}...").ConfigureAwait(false);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
+        try
+        {
+            await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+
+            await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
+
+            await DebugToastAsync("Peer connect", $"Connected to {host}:{port}.").ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
+            await DebugToastAsync("Peer connect", $"Failed to connect to {host}:{port}.").ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
@@ -126,11 +160,13 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         try
         {
+            await DebugToastAsync("Peer disconnect", "Disconnecting from peers...").ConfigureAwait(false);
             CancelConnections();
         }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Error disconnecting from peers.");
+            await DebugToastAsync("Peer disconnect", "Error while disconnecting from peers.").ConfigureAwait(false);
         }
     }
 
@@ -209,6 +245,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         SubscribeToInboundEvents();
 
         await _transport.StartListeningAsync(cancellationToken).ConfigureAwait(false);
+        await DebugToastAsync("Transport", $"Listening on port {NetworkOptions.ListeningPort}.").ConfigureAwait(false);
     }
 
     private async Task DisposeAsyncCore()
@@ -249,6 +286,20 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.RegisterEventType<TaskManifestAnnounced>();
         _aggregator.RegisterEventType<TaskManifestRequest>();
         _aggregator.RegisterEventType<TaskBatchResponse>();
+    }
+
+    private Task DebugToastAsync(string title, string message)
+    {
+#if DEBUG
+        if (_notifications is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _notifications.ShowToastAsync(title, message, _appSettings);
+#else
+        return Task.CompletedTask;
+#endif
     }
 
     private CancellationTokenSource EnsureConnectionCts()
