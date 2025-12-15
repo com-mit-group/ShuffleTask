@@ -13,10 +13,10 @@ public partial class MainPage : TabbedPage
         TryInitializeFromServices();
     }
 
-    public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
+    public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, PeersPage peersPage, SettingsPage settingsPage)
     {
         InitializeComponent();
-        ConfigureTabs(dashboardPage, tasksPage, settingsPage);
+        ConfigureTabs(dashboardPage, tasksPage, peersPage, settingsPage);
     }
 
     private void TryInitializeFromServices()
@@ -34,14 +34,15 @@ public partial class MainPage : TabbedPage
 
         var dashboardPage = services.GetService<DashboardPage>();
         var tasksPage = services.GetService<TasksPage>();
+        var peersPage = services.GetService<PeersPage>();
         var settingsPage = services.GetService<SettingsPage>();
 
-        if (dashboardPage == null || tasksPage == null || settingsPage == null)
+        if (dashboardPage == null || tasksPage == null || peersPage == null || settingsPage == null)
         {
             return;
         }
 
-        ConfigureTabs(dashboardPage, tasksPage, settingsPage);
+        ConfigureTabs(dashboardPage, tasksPage, peersPage, settingsPage);
     }
 
     protected override void OnHandlerChanged()
@@ -66,7 +67,7 @@ public partial class MainPage : TabbedPage
         return MauiProgram.TryGetServiceProvider();
     }
 
-    private void ConfigureTabs(DashboardPage dashboardPage, TasksPage tasksPage, SettingsPage settingsPage)
+    private void ConfigureTabs(DashboardPage dashboardPage, TasksPage tasksPage, PeersPage peersPage, SettingsPage settingsPage)
     {
         if (_tabsInitialized)
         {
@@ -81,10 +82,12 @@ public partial class MainPage : TabbedPage
 
         var dashboardTab = CreateTab(dashboardPage);
         var tasksTab = CreateTab(tasksPage);
+        var peersTab = CreateTab(peersPage);
         var settingsTab = CreateTab(settingsPage);
 
         Children.Add(dashboardTab);
         Children.Add(tasksTab);
+        Children.Add(peersTab);
         Children.Add(settingsTab);
 
         CurrentPage = dashboardTab;

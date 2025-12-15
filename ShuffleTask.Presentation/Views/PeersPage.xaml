@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
+             x:Class="ShuffleTask.Views.PeersPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="Peers">
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16">
+            <VerticalStackLayout Spacing="8">
+                <Label Text="Local connection"
+                       FontAttributes="Bold"
+                       FontSize="Medium" />
+                <Entry Text="{Binding LocalConnectionSummary}"
+                       IsReadOnly="True"
+                       HorizontalOptions="Fill"
+                       HorizontalTextAlignment="Start" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="8">
+                <Label Text="Auth token"
+                       FontAttributes="Bold"
+                       FontSize="Medium" />
+                <Label Text="{Binding AuthTokenPreview}"
+                       LineBreakMode="WordWrap" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="12">
+                <Label Text="Peer host"
+                       FontAttributes="Bold" />
+                <Entry Text="{Binding Settings.Network.PeerHost}"
+                       IsEnabled="{Binding CanSyncAcrossDevices}"
+                       Placeholder="Host name or IP address"
+                       HorizontalOptions="Fill" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="12">
+                <Label Text="Peer port"
+                       FontAttributes="Bold" />
+                <Entry Text="{Binding Settings.Network.PeerPort}"
+                       Keyboard="Numeric"
+                       IsEnabled="{Binding CanSyncAcrossDevices}"
+                       Placeholder="Port"
+                       HorizontalOptions="Fill" />
+            </VerticalStackLayout>
+
+            <Button Text="Connect to peer"
+                    Command="{Binding ConnectPeerCommand}"
+                    IsEnabled="{Binding CanSyncAcrossDevices}"
+                    HorizontalOptions="Fill" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

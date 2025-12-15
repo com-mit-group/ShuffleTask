@@ -89,6 +89,7 @@ public static partial class MauiProgram
 
         // Views
         builder.Services.AddSingleton<DashboardPage>();
+        builder.Services.AddSingleton<PeersPage>();
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();
