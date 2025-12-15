@@ -7,48 +7,69 @@
              x:DataType="vm:SettingsViewModel"
              Title="Peers">
     <ScrollView>
-        <VerticalStackLayout Padding="20" Spacing="16">
-            <VerticalStackLayout Spacing="8">
-                <Label Text="Local connection"
-                       FontAttributes="Bold"
-                       FontSize="Medium" />
-                <Entry Text="{Binding LocalConnectionSummary}"
-                       IsReadOnly="True"
-                       HorizontalOptions="Fill"
-                       HorizontalTextAlignment="Start" />
-            </VerticalStackLayout>
+        <Grid Padding="20"
+              ColumnDefinitions="Auto,*"
+              RowSpacing="16"
+              ColumnSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <VerticalStackLayout Spacing="8">
-                <Label Text="Auth token"
-                       FontAttributes="Bold"
-                       FontSize="Medium" />
-                <Label Text="{Binding AuthTokenPreview}"
-                       LineBreakMode="WordWrap" />
-            </VerticalStackLayout>
+            <Label Grid.Row="0"
+                   Text="Local connection"
+                   FontAttributes="Bold"
+                   FontSize="Medium"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="0"
+                   Grid.Column="1"
+                   Text="{Binding LocalConnectionSummary}"
+                   IsReadOnly="True"
+                   HorizontalOptions="Fill"
+                   HorizontalTextAlignment="Start" />
 
-            <VerticalStackLayout Spacing="12">
-                <Label Text="Peer host"
-                       FontAttributes="Bold" />
-                <Entry Text="{Binding Settings.Network.PeerHost}"
-                       IsEnabled="{Binding CanSyncAcrossDevices}"
-                       Placeholder="Host name or IP address"
-                       HorizontalOptions="Fill" />
-            </VerticalStackLayout>
+            <Label Grid.Row="1"
+                   Text="Auth token"
+                   FontAttributes="Bold"
+                   FontSize="Medium"
+                   VerticalOptions="Start" />
+            <Label Grid.Row="1"
+                   Grid.Column="1"
+                   Text="{Binding AuthTokenPreview}"
+                   LineBreakMode="WordWrap" />
 
-            <VerticalStackLayout Spacing="12">
-                <Label Text="Peer port"
-                       FontAttributes="Bold" />
-                <Entry Text="{Binding Settings.Network.PeerPort}"
-                       Keyboard="Numeric"
-                       IsEnabled="{Binding CanSyncAcrossDevices}"
-                       Placeholder="Port"
-                       HorizontalOptions="Fill" />
-            </VerticalStackLayout>
+            <Label Grid.Row="2"
+                   Text="Peer host"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="2"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.PeerHost}"
+                   IsEnabled="{Binding CanSyncAcrossDevices}"
+                   Placeholder="Host name or IP address"
+                   HorizontalOptions="Fill" />
 
-            <Button Text="Connect to peer"
+            <Label Grid.Row="3"
+                   Text="Peer port"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="3"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.PeerPort}"
+                   Keyboard="Numeric"
+                   IsEnabled="{Binding CanSyncAcrossDevices}"
+                   Placeholder="Port"
+                   HorizontalOptions="Fill" />
+
+            <Button Grid.Row="4"
+                    Grid.ColumnSpan="2"
+                    Text="Connect to peer"
                     Command="{Binding ConnectPeerCommand}"
                     IsEnabled="{Binding CanSyncAcrossDevices}"
                     HorizontalOptions="Fill" />
-        </VerticalStackLayout>
+        </Grid>
     </ScrollView>
 </ContentPage>
