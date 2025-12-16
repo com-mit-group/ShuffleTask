@@ -33,6 +33,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private bool _initialized;
 
     private const int TaskBatchSize = 10;
+    private const string PeerConnect = "Peer connect";
 
     public NetworkSyncService(
         IStorageService storage,
@@ -89,7 +90,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public NetworkOptions NetworkOptions => _appSettings.Network ?? NetworkOptions.CreateDefault();
 
-    private bool IsAnonymous => NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
+    private bool IsAnonymous => string.IsNullOrWhiteSpace(UserId);//NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
 
     public async Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default)
     {
@@ -119,23 +120,23 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            await DebugToastAsync("Peer connect", "Peer host is empty; cannot connect.").ConfigureAwait(false);
+            await DebugToastAsync(PeerConnect, "Peer host is empty; cannot connect.").ConfigureAwait(false);
             return;
         }
 
         if (port <= 0)
         {
-            await DebugToastAsync("Peer connect", "Peer port is invalid; cannot connect.").ConfigureAwait(false);
+            await DebugToastAsync(PeerConnect, "Peer port is invalid; cannot connect.").ConfigureAwait(false);
             return;
         }
 
         if (IsAnonymous)
         {
-            await DebugToastAsync("Peer connect", "Anonymous session cannot connect to peers.").ConfigureAwait(false);
+            await DebugToastAsync(PeerConnect, "Anonymous session cannot connect to peers.").ConfigureAwait(false);
             return;
         }
 
-        await DebugToastAsync("Peer connect", $"Connecting to {host}:{port}...").ConfigureAwait(false);
+        await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
         try
@@ -144,12 +145,12 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
             await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
 
-            await DebugToastAsync("Peer connect", $"Connected to {host}:{port}.").ConfigureAwait(false);
+            await DebugToastAsync(PeerConnect, $"Connected to {host}:{port}.").ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
-            await DebugToastAsync("Peer connect", $"Failed to connect to {host}:{port}.").ConfigureAwait(false);
+            await DebugToastAsync(PeerConnect, $"Failed to connect to {host}:{port}.").ConfigureAwait(false);
             throw;
         }
     }
@@ -362,6 +363,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
+        await DebugToastAsync("Manifest announced", $"Received manifest announcement from {domainEvent.DeviceId}.").ConfigureAwait(false);
+
         var manifest = domainEvent.Manifest.ToList();
         using var linkedCts = LinkToConnection(cancellationToken);
 
@@ -391,6 +394,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
             return;
         }
 
+        await DebugToastAsync("Manifest request", $"Received manifest request from {domainEvent.DeviceId}.").ConfigureAwait(false);
+
         using var linkedCts = LinkToConnection(cancellationToken);
 
         var requestedTaskIds = domainEvent.Manifest
@@ -419,6 +424,8 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         {
             return;
         }
+
+        await DebugToastAsync("Task batch response", $"Received task batch response from {domainEvent.DeviceId}.").ConfigureAwait(false);
 
         using var linkedCts = LinkToConnection(cancellationToken);
         await RunWithoutBroadcastAsync(async () =>

@@ -6,7 +6,7 @@ using Yaref92.Events.Abstractions;
 
 namespace ShuffleTask.Application.Services;
 
-internal class TaskManifestAnnouncedAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskManifestAnnounced>
+public class TaskManifestAnnouncedAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskManifestAnnounced>
 {
     private readonly ILogger<NetworkSyncService>? _logger = logger;
     private readonly NetworkSyncService _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
@@ -19,7 +19,7 @@ internal class TaskManifestAnnouncedAsyncHandler(ILogger<NetworkSyncService>? lo
     }
 }
 
-internal class TaskManifestRequestAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskManifestRequest>
+public class TaskManifestRequestAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskManifestRequest>
 {
     private readonly ILogger<NetworkSyncService>? _logger = logger;
     private readonly NetworkSyncService _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
@@ -32,7 +32,7 @@ internal class TaskManifestRequestAsyncHandler(ILogger<NetworkSyncService>? logg
     }
 }
 
-internal class TaskBatchResponseAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskBatchResponse>
+public class TaskBatchResponseAsyncHandler(ILogger<NetworkSyncService>? logger, NetworkSyncService syncService) : IAsyncEventHandler<TaskBatchResponse>
 {
     private readonly ILogger<NetworkSyncService>? _logger = logger;
     private readonly NetworkSyncService _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
