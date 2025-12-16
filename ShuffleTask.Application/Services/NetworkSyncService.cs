@@ -58,16 +58,12 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            RefreshCachedIdentity();
+
             if (_initialized)
             {
                 return;
             }
-            
-            // Get NetworkOptions from AppSettings
-            var options = NetworkOptions;
-            options.Normalize();
-            DeviceId = options.DeviceId;
-            UserId = options.UserId;
 
             await InitEventAggregationAsync(cancellationToken).ConfigureAwait(false);
 
@@ -172,48 +168,52 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public async Task PublishTaskUpsertAsync(TaskItem task, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskUpsertedEvent(task, DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskDeletedAsync(string taskId, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskDeletedEvent(taskId, DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskStarted(DeviceId, UserId, taskId, minutes);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
@@ -222,12 +222,13 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var payload = new AppSettings();
         payload.CopyFrom(settings);
         var evt = new SettingsUpdatedEvent(payload, DeviceId, UserId);
@@ -247,11 +248,15 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        if (_initialized)
-        {
-            return;
-        }
         await InitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private void RefreshCachedIdentity()
+    {
+        var options = NetworkOptions;
+        options.Normalize();
+        DeviceId = options.DeviceId;
+        UserId = options.UserId;
     }
 
     private async Task InitEventAggregationAsync(CancellationToken cancellationToken)
