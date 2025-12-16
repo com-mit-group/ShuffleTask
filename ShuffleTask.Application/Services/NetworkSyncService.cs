@@ -59,16 +59,12 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            RefreshCachedIdentity();
+
             if (_initialized)
             {
                 return;
             }
-            
-            // Get NetworkOptions from AppSettings
-            var options = NetworkOptions;
-            options.Normalize();
-            DeviceId = options.DeviceId;
-            UserId = options.UserId;
 
             await InitEventAggregationAsync(cancellationToken).ConfigureAwait(false);
 
@@ -173,49 +169,70 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public async Task PublishTaskUpsertAsync(TaskItem task, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskUpsertedEvent(task, DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskDeletedAsync(string taskId, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskDeletedEvent(taskId, DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TaskStarted(DeviceId, UserId, taskId, minutes);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
     {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task PublishSettingsUpdatedAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        var payload = new AppSettings();
+        payload.CopyFrom(settings);
+        var evt = new SettingsUpdatedEvent(payload, DeviceId, UserId);
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
@@ -232,11 +249,15 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        if (_initialized)
-        {
-            return;
-        }
         await InitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private void RefreshCachedIdentity()
+    {
+        var options = NetworkOptions;
+        options.Normalize();
+        DeviceId = options.DeviceId;
+        UserId = options.UserId;
     }
 
     private async Task InitEventAggregationAsync(CancellationToken cancellationToken)
@@ -271,6 +292,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.SubscribeToEventType(new TaskManifestAnnouncedAsyncHandler(_logger, this));
         _aggregator.SubscribeToEventType(new TaskManifestRequestAsyncHandler(_logger, this));
         _aggregator.SubscribeToEventType(new TaskBatchResponseAsyncHandler(_logger, this));
+        _aggregator.SubscribeToEventType(new SettingsUpdatedAsyncHandler(_logger, _storage, _appSettings));
     }
 
     private void RegisterTrackedEventTypes()
@@ -287,6 +309,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.RegisterEventType<TaskManifestAnnounced>();
         _aggregator.RegisterEventType<TaskManifestRequest>();
         _aggregator.RegisterEventType<TaskBatchResponse>();
+        _aggregator.RegisterEventType<SettingsUpdatedEvent>();
     }
 
     private Task DebugToastAsync(string title, string message)
