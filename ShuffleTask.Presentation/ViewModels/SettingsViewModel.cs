@@ -78,7 +78,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             bool sessionChanged = wasAnonymous != IsAnonymousSession || !string.Equals(_lastUserId, Settings.Network.UserId, StringComparison.Ordinal);
             if (sessionChanged)
             {
@@ -118,7 +118,7 @@ public partial class SettingsViewModel : ObservableObject
             try
             {
                 ApplyValidation();
-                await _storage.SetSettingsAsync(Settings);
+                await PersistSettingsAsync();
                 await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
             }
             catch (TcpConnectionDisconnectedException ex)
@@ -149,7 +149,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network.UserId = trimmedUsername;
             Settings.Network.AnonymousSession = false;
             ApplyValidation();
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             OnNetworkChanged(this, new PropertyChangedEventArgs(nameof(Settings.Network.UserId)));
             await HandleSessionTransitionAsync(wasAnonymous);
 
@@ -172,7 +172,7 @@ public partial class SettingsViewModel : ObservableObject
             await _networkSync.DisconnectAsync();
             Settings.Network.AnonymousSession = true;
             Settings.Network.UserId = null;
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await HandleSessionTransitionAsync(wasAnonymous);
 
@@ -370,6 +370,17 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         return MainThread.InvokeOnMainThreadAsync(() => _tasksViewModel.LoadAsync(userScope, deviceScope));
+    }
+
+    private async Task PersistSettingsAsync(bool broadcast = true)
+    {
+        Settings.Touch(_clock);
+        await _storage.SetSettingsAsync(Settings);
+
+        if (broadcast)
+        {
+            await _networkSync.PublishSettingsUpdatedAsync(Settings);
+        }
     }
 
 }

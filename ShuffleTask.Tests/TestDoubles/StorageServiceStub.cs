@@ -197,6 +197,7 @@ public class StorageServiceStub : IStorageService
     {
         EnsureInitialized();
         SetSettingsCallCount++;
+        StampSettings(settings);
         _settings.CopyFrom(settings);
         _settings.NormalizeWeights();
         return Task.CompletedTask;
@@ -339,6 +340,13 @@ public class StorageServiceStub : IStorageService
         task.DeviceId = string.IsNullOrWhiteSpace(preferredDevice)
             ? Environment.MachineName
             : preferredDevice.Trim();
+    }
+
+    private void StampSettings(AppSettings settings)
+    {
+        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
+        settings.UpdatedAt = settings.UpdatedAt == default ? nowUtc : settings.UpdatedAt;
+        settings.EventVersion = settings.EventVersion <= 0 ? _settings.EventVersion + 1 : settings.EventVersion;
     }
 
     private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);

@@ -218,6 +218,22 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task PublishSettingsUpdatedAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (!ShouldBroadcast)
+        {
+            return;
+        }
+
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        var payload = new AppSettings();
+        payload.CopyFrom(settings);
+        var evt = new SettingsUpdatedEvent(payload, DeviceId, UserId);
+        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -270,6 +286,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.SubscribeToEventType(new TaskManifestAnnouncedAsyncHandler(_logger, this));
         _aggregator.SubscribeToEventType(new TaskManifestRequestAsyncHandler(_logger, this));
         _aggregator.SubscribeToEventType(new TaskBatchResponseAsyncHandler(_logger, this));
+        _aggregator.SubscribeToEventType(new SettingsUpdatedAsyncHandler(_logger, _storage, _appSettings));
     }
 
     private void RegisterTrackedEventTypes()
@@ -286,6 +303,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator.RegisterEventType<TaskManifestAnnounced>();
         _aggregator.RegisterEventType<TaskManifestRequest>();
         _aggregator.RegisterEventType<TaskBatchResponse>();
+        _aggregator.RegisterEventType<SettingsUpdatedEvent>();
     }
 
     private Task DebugToastAsync(string title, string message)

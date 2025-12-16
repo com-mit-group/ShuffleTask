@@ -26,5 +26,6 @@ public interface INetworkSyncService
 
     Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default);
     Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default);
+    Task PublishSettingsUpdatedAsync(AppSettings settings, CancellationToken cancellationToken = default);
     Task InitAsync(CancellationToken cancellationToken = default);
 }

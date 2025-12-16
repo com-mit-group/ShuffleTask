@@ -82,6 +82,7 @@ internal sealed class InMemoryStorageService : IStorageService
     public Task SetSettingsAsync(AppSettings settings)
     {
         EnsureInitialized();
+        StampSettings(settings);
         _settings.CopyFrom(settings);
         return Task.CompletedTask;
     }
@@ -94,6 +95,13 @@ internal sealed class InMemoryStorageService : IStorageService
         {
             throw new InvalidOperationException("Storage not initialized");
         }
+    }
+
+    private void StampSettings(AppSettings settings)
+    {
+        var now = _clock.GetUtcNow().UtcDateTime;
+        settings.UpdatedAt = settings.UpdatedAt == default ? now : settings.UpdatedAt;
+        settings.EventVersion = settings.EventVersion <= 0 ? _settings.EventVersion + 1 : settings.EventVersion;
     }
 
     private void NormalizeMetadata(TaskItem target, TaskItem? existing, bool bumpVersion)

@@ -80,6 +80,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         _settings.QuietHoursEnd = new TimeSpan(7, 0, 0);
         _settings.StreakBias = 0.3;
         _settings.StableRandomnessPerDay = true;
+        _settings.Touch(_clock);
         await _storage.SetSettingsAsync(_settings);
 
         Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
