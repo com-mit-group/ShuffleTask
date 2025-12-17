@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
@@ -147,8 +148,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
-            await DebugToastAsync(PeerConnect, $"Failed to connect to {host}:{port}.").ConfigureAwait(false);
-            throw;
+            string message = $"Failed to connect to {host}:{port}. {ex.Message}";
+            await DebugToastAsync(PeerConnect, message).ConfigureAwait(false);
+            throw new NetworkConnectionException(message, ex);
         }
     }
 
