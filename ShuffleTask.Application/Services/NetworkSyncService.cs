@@ -136,10 +136,19 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
 
+        var sessionUserId = SessionUserGuid;
+        await DebugToastAsync(PeerConnect, $"Using UserId '{UserId}' with SessionUserId '{sessionUserId}'.").ConfigureAwait(false);
+        _logger?.LogDebug(
+            "Using UserId {UserId} with SessionUserId {SessionUserId} before connecting to {Host}:{Port}.",
+            UserId,
+            sessionUserId,
+            host,
+            port);
+
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
         try
         {
-            await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+            await _transport.ConnectToPeerAsync(sessionUserId, host, port, linkedCts.Token).ConfigureAwait(false);
 
             await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
 
