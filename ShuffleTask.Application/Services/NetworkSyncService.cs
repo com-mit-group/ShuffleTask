@@ -128,8 +128,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         if (IsAnonymous)
         {
-            await DebugToastAsync(PeerConnect, "Anonymous session cannot connect to peers.").ConfigureAwait(false);
-            return;
+            const string loginToSync = "Log in to sync.";
+            await DebugToastAsync(PeerConnect, loginToSync).ConfigureAwait(false);
+            throw new InvalidOperationException(loginToSync);
         }
 
         await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
