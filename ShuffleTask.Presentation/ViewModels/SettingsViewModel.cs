@@ -115,11 +115,21 @@ public partial class SettingsViewModel : ObservableObject
     {
         return ExecuteIfNotBusyAsync(async () =>
         {
+            if (!CanSyncAcrossDevices)
+            {
+                await ShowLoginRequiredAlertAsync();
+                return;
+            }
+
             try
             {
                 ApplyValidation();
                 await PersistSettingsAsync();
                 await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+            }
+            catch (InvalidOperationException)
+            {
+                await ShowLoginRequiredAlertAsync();
             }
             catch (TcpConnectionDisconnectedException ex)
             {
@@ -370,6 +380,16 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         return MainThread.InvokeOnMainThreadAsync(() => _tasksViewModel.LoadAsync(userScope, deviceScope));
+    }
+
+    private static Task ShowLoginRequiredAlertAsync()
+    {
+        const string title = "Sync unavailable";
+        const string message = "Log in to sync";
+
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK")
+            ?? Task.CompletedTask);
     }
 
     private async Task PersistSettingsAsync(bool broadcast = true)
