@@ -4,6 +4,7 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
 using System.ComponentModel;
 using Yaref92.Events.Connections;
@@ -115,16 +116,33 @@ public partial class SettingsViewModel : ObservableObject
     {
         return ExecuteIfNotBusyAsync(async () =>
         {
+            if (!CanSyncAcrossDevices)
+            {
+                await ShowLoginRequiredAlertAsync();
+                return;
+            }
+
             try
             {
                 ApplyValidation();
                 await PersistSettingsAsync();
                 await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
             }
+            catch (InvalidOperationException)
+            {
+                await ShowLoginRequiredAlertAsync();
+            }
+            catch (NetworkConnectionException ex)
+            {
+                await ShowConnectionErrorAsync(ex.Message);
+            }
             catch (TcpConnectionDisconnectedException ex)
             {
-                // Handle connection errors (log, notify user, etc.)
-                System.Diagnostics.Debug.WriteLine($"Error connecting to peer: {ex.Message}");
+                await ShowConnectionErrorAsync(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                await ShowConnectionErrorAsync(ex.Message);
             }
         });
     }
@@ -372,6 +390,16 @@ public partial class SettingsViewModel : ObservableObject
         return MainThread.InvokeOnMainThreadAsync(() => _tasksViewModel.LoadAsync(userScope, deviceScope));
     }
 
+    private static Task ShowLoginRequiredAlertAsync()
+    {
+        const string title = "Sync unavailable";
+        const string message = "Log in to sync";
+
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK")
+            ?? Task.CompletedTask);
+    }
+
     private async Task PersistSettingsAsync(bool broadcast = true)
     {
         Settings.Touch(_clock);
@@ -380,6 +408,24 @@ public partial class SettingsViewModel : ObservableObject
         if (broadcast)
         {
             await _networkSync.PublishSettingsUpdatedAsync(Settings);
+        }
+    }
+
+    private async Task ShowConnectionErrorAsync(string message)
+    {
+        const string title = "Peer connection failed";
+
+        try
+        {
+            Task toast = _notifications.ShowToastAsync(title, message, Settings);
+            Task alert = MainThread.InvokeOnMainThreadAsync(() =>
+                Application.Current?.MainPage?.DisplayAlert(title, message, "OK") ?? Task.CompletedTask);
+
+            await Task.WhenAll(toast, alert);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error showing connection error toast: {ex.Message}");
         }
     }
 

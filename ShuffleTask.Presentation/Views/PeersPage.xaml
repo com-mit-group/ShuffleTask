@@ -17,46 +17,54 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
+                   Grid.ColumnSpan="2"
+                   Text="Log in to sync"
+                   TextColor="DarkRed"
+                   FontAttributes="Bold"
+                   IsVisible="{Binding IsAnonymousSession}" />
+
+            <Label Grid.Row="1"
                    Text="Local connection"
                    FontAttributes="Bold"
                    FontSize="Medium"
                    VerticalOptions="Center" />
-            <Entry Grid.Row="0"
+            <Entry Grid.Row="1"
                    Grid.Column="1"
                    Text="{Binding LocalConnectionSummary}"
                    IsReadOnly="True"
                    HorizontalOptions="Fill"
                    HorizontalTextAlignment="Start" />
 
-            <Label Grid.Row="1"
+            <Label Grid.Row="2"
                    Text="Auth token"
                    FontAttributes="Bold"
                    FontSize="Medium"
                    VerticalOptions="Start" />
-            <Label Grid.Row="1"
+            <Label Grid.Row="2"
                    Grid.Column="1"
                    Text="{Binding AuthTokenPreview}"
                    LineBreakMode="WordWrap" />
 
-            <Label Grid.Row="2"
+            <Label Grid.Row="3"
                    Text="Peer host"
                    FontAttributes="Bold"
                    VerticalOptions="Center" />
-            <Entry Grid.Row="2"
+            <Entry Grid.Row="3"
                    Grid.Column="1"
                    Text="{Binding Settings.Network.PeerHost}"
                    IsEnabled="{Binding CanSyncAcrossDevices}"
                    Placeholder="Host name or IP address"
                    HorizontalOptions="Fill" />
 
-            <Label Grid.Row="3"
+            <Label Grid.Row="4"
                    Text="Peer port"
                    FontAttributes="Bold"
                    VerticalOptions="Center" />
-            <Entry Grid.Row="3"
+            <Entry Grid.Row="4"
                    Grid.Column="1"
                    Text="{Binding Settings.Network.PeerPort}"
                    Keyboard="Numeric"
@@ -64,7 +72,7 @@
                    Placeholder="Port"
                    HorizontalOptions="Fill" />
 
-            <Button Grid.Row="4"
+            <Button Grid.Row="5"
                     Grid.ColumnSpan="2"
                     Text="Connect to peer"
                     Command="{Binding ConnectPeerCommand}"

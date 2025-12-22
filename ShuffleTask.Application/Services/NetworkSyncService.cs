@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
@@ -123,16 +124,26 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         if (IsAnonymous)
         {
-            await DebugToastAsync(PeerConnect, "Anonymous session cannot connect to peers.").ConfigureAwait(false);
-            return;
+            const string loginToSync = "Log in to sync.";
+            await DebugToastAsync(PeerConnect, loginToSync).ConfigureAwait(false);
+            throw new InvalidOperationException(loginToSync);
         }
 
         await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
 
+        var sessionUserId = SessionUserGuid;
+        await DebugToastAsync(PeerConnect, $"Using UserId '{UserId}' with SessionUserId '{sessionUserId}'.").ConfigureAwait(false);
+        _logger?.LogDebug(
+            "Using UserId {UserId} with SessionUserId {SessionUserId} before connecting to {Host}:{Port}.",
+            UserId,
+            sessionUserId,
+            host,
+            port);
+
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
         try
         {
-            await _transport.ConnectToPeerAsync(SessionUserGuid, host, port, linkedCts.Token).ConfigureAwait(false);
+            await _transport.ConnectToPeerAsync(sessionUserId, host, port, linkedCts.Token).ConfigureAwait(false);
 
             await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
 
@@ -141,8 +152,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
-            await DebugToastAsync(PeerConnect, $"Failed to connect to {host}:{port}.").ConfigureAwait(false);
-            throw;
+            string message = $"Failed to connect to {host}:{port}. {ex.Message}";
+            await DebugToastAsync(PeerConnect, message).ConfigureAwait(false);
+            throw new NetworkConnectionException(message, ex);
         }
     }
 
