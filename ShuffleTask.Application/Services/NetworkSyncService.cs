@@ -3,13 +3,8 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
-using Yaref92.Events.Serialization;
 using Yaref92.Events.Transports;
 
 namespace ShuffleTask.Application.Services;
@@ -24,7 +19,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly NetworkedEventAggregator _aggregator;
-    private readonly TCPEventTransport _transport;
+    private readonly IEventTransport _transport;
     private readonly object _connectionLock = new();
     private readonly object _publishLock = new();
     private CancellationTokenSource _peerConnectionCts = new();
@@ -46,7 +41,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
-        _transport = (transport as TCPEventTransport) ?? throw new ArgumentNullException(nameof(transport));
+        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger;
         _notifications = notifications;
         _coordinator = new PeerSyncCoordinator(_storage);
@@ -266,7 +261,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         SubscribeToInboundEvents();
 
-        await _transport.StartListeningAsync(cancellationToken).ConfigureAwait(false);
+        await (_transport as GrpcEventTransport).StartListeningAsync(cancellationToken).ConfigureAwait(false);
         await DebugToastAsync("Transport", $"Listening on port {NetworkOptions.ListeningPort}.").ConfigureAwait(false);
     }
 
@@ -275,7 +270,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator?.Dispose();
         if (_transport is not null)
         {
-            await _transport.DisposeAsync().ConfigureAwait(false);
+            await (_transport as GrpcEventTransport).DisposeAsync().ConfigureAwait(false);
         }
         CancelConnections();
     }

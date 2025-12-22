@@ -126,18 +126,27 @@ public static partial class MauiProgram
         });
 
         builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
+        builder.Services.AddSingleton<ISessionManager, SessionManager>(sp =>
+        {
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var options = appSettings.Network ?? NetworkOptions.CreateDefault();
+            return new SessionManager(
+                options.ListeningPort,
+                new Yaref92.Events.Sessions.ResilientSessionOptions());
+        });
 
         // TCPEventTransport gets NetworkOptions from AppSettings
-        builder.Services.AddSingleton<IEventTransport, TCPEventTransport>(sp =>
+        builder.Services.AddSingleton<IEventTransport, GrpcEventTransport>(sp =>
         {
             var appSettings = sp.GetRequiredService<AppSettings>();
             var options = appSettings.Network ?? NetworkOptions.CreateDefault();
             string authSecret = options.ResolveAuthenticationSecret();
-            return new TCPEventTransport(
+            return new GrpcEventTransport(
                 options.ListeningPort,
-                new JsonEventSerializer(),
+                sp.GetRequiredService<ISessionManager>(),
+                new JsonEventSerializer());/*,
                 TimeSpan.FromSeconds(20),
-                authSecret);
+                authSecret);*/
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
