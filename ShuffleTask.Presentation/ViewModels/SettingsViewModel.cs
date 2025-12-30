@@ -6,7 +6,11 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
+using System.Threading;
 using Yaref92.Events.Connections;
 
 namespace ShuffleTask.ViewModels;
@@ -20,6 +24,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
     private readonly TasksViewModel _tasksViewModel;
+    private readonly CancellationTokenSource _peerRefreshCts = new();
     private const int MaxUsernameLength = 64;
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
@@ -43,7 +48,10 @@ public partial class SettingsViewModel : ObservableObject
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         UpdateNetworkSubscription(null, settings.Network);
         CacheSessionState();
+        StartPeerRefreshLoop();
     }
+
+    public ObservableCollection<PeerInfoViewModel> ConnectedPeers { get; } = [];
 
     public bool UsePomodoro
     {
@@ -69,6 +77,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
             CacheSessionState();
+            await RefreshPeersAsync();
         });
     }
 
@@ -127,6 +136,7 @@ public partial class SettingsViewModel : ObservableObject
                 ApplyValidation();
                 await PersistSettingsAsync();
                 await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+                await RefreshPeersAsync();
             }
             catch (InvalidOperationException)
             {
@@ -191,6 +201,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network.AnonymousSession = true;
             Settings.Network.UserId = null;
             await PersistSettingsAsync();
+            await RefreshPeersAsync();
             OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await HandleSessionTransitionAsync(wasAnonymous);
 
@@ -364,6 +375,7 @@ public partial class SettingsViewModel : ObservableObject
 
         await _coordinator.RefreshAsync();
         await RefreshBoundCollectionsAsync(userScope, deviceScope);
+        await RefreshPeersAsync();
     }
 
     private bool ShouldPromptForMigration()
@@ -427,6 +439,52 @@ public partial class SettingsViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Error showing connection error toast: {ex.Message}");
         }
+    }
+
+    private void StartPeerRefreshLoop()
+    {
+        _ = Task.Run(() => RunPeerRefreshLoopAsync(_peerRefreshCts.Token));
+    }
+
+    private async Task RunPeerRefreshLoopAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+        {
+            try
+            {
+                await RefreshPeersAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error refreshing peers: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task RefreshPeersAsync()
+    {
+        IReadOnlyList<PeerInfo> peers;
+        try
+        {
+            peers = _networkSync.GetConnectedPeers();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error reading peers: {ex.Message}");
+            peers = Array.Empty<PeerInfo>();
+        }
+
+        var now = _clock.GetUtcNow();
+        var entries = peers.Select(peer => new PeerInfoViewModel(peer, now)).ToList();
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            ConnectedPeers.Clear();
+            foreach (var entry in entries)
+            {
+                ConnectedPeers.Add(entry);
+            }
+        });
     }
 
 }

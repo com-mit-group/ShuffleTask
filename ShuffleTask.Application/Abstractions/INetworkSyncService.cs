@@ -1,5 +1,6 @@
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace ShuffleTask.Application.Abstractions;
@@ -13,6 +14,8 @@ public interface INetworkSyncService
     bool ShouldBroadcast { get; }
 
     NetworkOptions NetworkOptions { get; }
+
+    IReadOnlyList<PeerInfo> GetConnectedPeers();
 
     Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default);
 

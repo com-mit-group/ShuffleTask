@@ -4,8 +4,11 @@ using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Application.Events;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using System.Collections;
+using System.Collections.Generic;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
+using Yaref92.Events.Connections;
 using Yaref92.Events.Transports;
 
 namespace ShuffleTask.Application.Services;
@@ -21,6 +24,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly NetworkedEventAggregator _aggregator;
     private readonly IEventTransport _transport;
+    private readonly ISessionManager? _sessionManager;
     private readonly object _connectionLock = new();
     private readonly object _publishLock = new();
     private CancellationTokenSource _peerConnectionCts = new();
@@ -36,6 +40,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         AppSettings appSettings,
         NetworkedEventAggregator aggregator,
         IEventTransport transport,
+        ISessionManager? sessionManager = null,
         ILogger<NetworkSyncService>? logger = null,
         INotificationService? notifications = null)
     {
@@ -43,6 +48,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        _sessionManager = sessionManager;
         _logger = logger;
         _notifications = notifications;
         _coordinator = new PeerSyncCoordinator(_storage);
@@ -83,6 +89,28 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     public NetworkOptions NetworkOptions => _appSettings.Network ?? NetworkOptions.CreateDefault();
 
     private bool IsAnonymous => string.IsNullOrWhiteSpace(UserId);//NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
+
+    public IReadOnlyList<PeerInfo> GetConnectedPeers()
+    {
+        if (_sessionManager is null)
+        {
+            return Array.Empty<PeerInfo>();
+        }
+
+        var sessions = ExtractSessions(_sessionManager).ToArray();
+        if (sessions.Length == 0)
+        {
+            return Array.Empty<PeerInfo>();
+        }
+
+        var peers = new List<PeerInfo>(sessions.Length);
+        foreach (var session in sessions)
+        {
+            peers.Add(BuildPeerInfo(session));
+        }
+
+        return peers;
+    }
 
     public async Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default)
     {
@@ -575,4 +603,125 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     {
         return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
     }
+
+    private static IEnumerable<IPeerSession> ExtractSessions(ISessionManager sessionManager)
+    {
+        if (sessionManager is IEnumerable enumerable)
+        {
+            foreach (var entry in enumerable)
+            {
+                if (entry is IPeerSession session)
+                {
+                    yield return session;
+                }
+            }
+
+            yield break;
+        }
+
+        foreach (var propertyName in SessionCollectionPropertyNames)
+        {
+            var property = sessionManager.GetType().GetProperty(propertyName);
+            if (property?.GetValue(sessionManager) is IEnumerable entries)
+            {
+                foreach (var entry in entries)
+                {
+                    if (entry is IPeerSession session)
+                    {
+                        yield return session;
+                    }
+                }
+
+                yield break;
+            }
+        }
+    }
+
+    private static PeerInfo BuildPeerInfo(IPeerSession session)
+    {
+        string deviceId = GetStringProperty(session, "DeviceId", "Device") ?? "Unknown";
+        string? userId = GetStringProperty(session, "UserId", "User");
+        string? sessionId = GetStringProperty(session, "SessionId", "Id");
+        DateTimeOffset? lastSeen = GetDateTimeOffsetProperty(session, "LastSeenUtc", "LastSeen", "UpdatedAt");
+        string? state = GetStringProperty(session, "ConnectionState", "State", "Status");
+
+        return new PeerInfo(deviceId, userId, sessionId, lastSeen, state);
+    }
+
+    private static string? GetStringProperty(object source, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            object? value = GetPropertyValue(source, name);
+            if (value is null)
+            {
+                continue;
+            }
+
+            return value switch
+            {
+                string text => text,
+                Guid guid => guid.ToString(),
+                _ => value.ToString()
+            };
+        }
+
+        return null;
+    }
+
+    private static DateTimeOffset? GetDateTimeOffsetProperty(object source, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            object? value = GetPropertyValue(source, name);
+            if (value is null)
+            {
+                continue;
+            }
+
+            if (value is DateTimeOffset offset)
+            {
+                return offset;
+            }
+
+            if (value is DateTime dateTime)
+            {
+                var kind = dateTime.Kind == DateTimeKind.Unspecified ? DateTimeKind.Utc : dateTime.Kind;
+                return new DateTimeOffset(DateTime.SpecifyKind(dateTime, kind));
+            }
+
+            if (value is string text && DateTimeOffset.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static object? GetPropertyValue(object source, string name)
+    {
+        var property = source.GetType().GetProperty(name);
+        if (property is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return property.GetValue(source);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static readonly string[] SessionCollectionPropertyNames =
+    [
+        "Sessions",
+        "ConnectedSessions",
+        "Connections",
+        "Peers"
+    ];
 }
