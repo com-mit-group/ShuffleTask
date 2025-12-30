@@ -7,6 +7,7 @@ using ShuffleTask.Domain.Entities;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
 using Yaref92.Events.Transports;
+using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.Application.Services;
 

@@ -11,6 +11,7 @@ using ShuffleTask.Views;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
 using Yaref92.Events.Serialization;
+using Yaref92.Events.Transport.Grpc;
 using Yaref92.Events.Transports;
 
 namespace ShuffleTask.Presentation;

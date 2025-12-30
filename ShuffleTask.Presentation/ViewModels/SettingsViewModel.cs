@@ -7,7 +7,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
 using System.ComponentModel;
-using Yaref92.Events.Connections;
+using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.ViewModels;
 
@@ -133,10 +133,6 @@ public partial class SettingsViewModel : ObservableObject
                 await ShowLoginRequiredAlertAsync();
             }
             catch (NetworkConnectionException ex)
-            {
-                await ShowConnectionErrorAsync(ex.Message);
-            }
-            catch (TcpConnectionDisconnectedException ex)
             {
                 await ShowConnectionErrorAsync(ex.Message);
             }
@@ -419,7 +415,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             Task toast = _notifications.ShowToastAsync(title, message, Settings);
             Task alert = MainThread.InvokeOnMainThreadAsync(() =>
-                Application.Current?.MainPage?.DisplayAlert(title, message, "OK") ?? Task.CompletedTask);
+                Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK") ?? Task.CompletedTask);
 
             await Task.WhenAll(toast, alert);
         }
