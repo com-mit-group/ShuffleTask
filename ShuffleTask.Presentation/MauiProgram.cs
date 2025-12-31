@@ -144,9 +144,9 @@ public static partial class MauiProgram
             return new GrpcEventTransport(
                 options.ListeningPort,
                 sp.GetRequiredService<ISessionManager>(),
-                new JsonEventSerializer());/*,
+                new JsonEventSerializer(),
                 TimeSpan.FromSeconds(20),
-                authSecret);*/
+                authSecret);
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
