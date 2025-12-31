@@ -35,8 +35,8 @@
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
-        <PackageReference Include="Yaref92.Events" Version="2.0.3-rc.20251229132303" />
-        <PackageReference Include="Yaref92.Events.Transport.Grpc" Version="2.0.3-rc.20251229132303" />
+        <PackageReference Include="Yaref92.Events" Version="2.0.3-rc.20251231141536" />
+        <PackageReference Include="Yaref92.Events.Transport.Grpc" Version="2.0.3-rc.20251231141536" />
     </ItemGroup>
 
     <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">

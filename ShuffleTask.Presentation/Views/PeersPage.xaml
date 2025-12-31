@@ -18,6 +18,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -72,7 +73,10 @@
                    Placeholder="Port"
                    HorizontalOptions="Fill" />
 
-            <Button Grid.Row="5"
+            <Label Grid.Row="5" Text="Peer Platform" />
+            <Picker Grid.Row="5" Grid.Column="1" ItemsSource="{Binding PeerPlatforms}" SelectedItem="{Binding SelectedPeerPlatform}" />
+
+            <Button Grid.Row="6"
                     Grid.ColumnSpan="2"
                     Text="Connect to peer"
                     Command="{Binding ConnectPeerCommand}"

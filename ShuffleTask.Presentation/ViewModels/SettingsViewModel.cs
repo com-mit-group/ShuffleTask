@@ -21,15 +21,26 @@ public partial class SettingsViewModel : ObservableObject
     private readonly INetworkSyncService _networkSync;
     private readonly TasksViewModel _tasksViewModel;
     private const int MaxUsernameLength = 64;
+    private const string Windows = "Windows";
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
+
+    private string _selectedPeerPlatform = Windows;
 
     [ObservableProperty]
     private AppSettings _settings;
 
     [ObservableProperty]
     private bool isBusy;
+
+    public IReadOnlyList<string> PeerPlatforms { get; } = new[] { "Android", Windows };
+
+    public string SelectedPeerPlatform
+    {
+        get => _selectedPeerPlatform;
+        set => SetProperty(ref _selectedPeerPlatform, value);
+    }
 
     public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings, TasksViewModel tasksViewModel)
     {
@@ -126,7 +137,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 ApplyValidation();
                 await PersistSettingsAsync();
-                await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+                await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort, SelectedPeerPlatform);
             }
             catch (InvalidOperationException)
             {

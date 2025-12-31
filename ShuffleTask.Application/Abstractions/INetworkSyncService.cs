@@ -16,7 +16,7 @@ public interface INetworkSyncService
 
     Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default);
 
-    Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
+    Task ConnectToPeerAsync(string host, int port, string selectedPeerPlatform, CancellationToken cancellationToken = default);
 
     Task DisconnectAsync(CancellationToken cancellationToken = default);
 

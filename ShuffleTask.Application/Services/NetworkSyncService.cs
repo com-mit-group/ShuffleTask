@@ -103,13 +103,14 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         await Task.WhenAll(pendingPublishes).WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default)
+    public async Task ConnectToPeerAsync(string host, int port, string selectedPeerPlatform, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         if (_transport is null)
         {
             return;
         }
+        (_transport as GrpcEventTransport).TargetPlatform = selectedPeerPlatform;
 
         if (string.IsNullOrWhiteSpace(host))
         {
