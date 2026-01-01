@@ -112,52 +112,12 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         }
         (_transport as GrpcEventTransport).TargetPlatform = selectedPeerPlatform;
 
-        if (string.IsNullOrWhiteSpace(host))
+        if (!await ValidatePeerConnectionAsync(host, port).ConfigureAwait(false))
         {
-            await DebugToastAsync(PeerConnect, "Peer host is empty; cannot connect.").ConfigureAwait(false);
             return;
         }
 
-        if (port <= 0)
-        {
-            await DebugToastAsync(PeerConnect, "Peer port is invalid; cannot connect.").ConfigureAwait(false);
-            return;
-        }
-
-        if (IsAnonymous)
-        {
-            const string loginToSync = "Log in to sync.";
-            await DebugToastAsync(PeerConnect, loginToSync).ConfigureAwait(false);
-            throw new InvalidOperationException(loginToSync);
-        }
-
-        await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
-
-        var sessionUserId = SessionUserGuid;
-        await DebugToastAsync(PeerConnect, $"Using UserId '{UserId}' with SessionUserId '{sessionUserId}'.").ConfigureAwait(false);
-        _logger?.LogDebug(
-            "Using UserId {UserId} with SessionUserId {SessionUserId} before connecting to {Host}:{Port}.",
-            UserId,
-            sessionUserId,
-            host,
-            port);
-
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
-        try
-        {
-            await _transport.ConnectToPeerAsync(sessionUserId, host, port, linkedCts.Token).ConfigureAwait(false);
-
-            await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
-
-            await DebugToastAsync(PeerConnect, $"Connected to {host}:{port}.").ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
-            string message = $"Failed to connect to {host}:{port}. {ex.Message}";
-            await DebugToastAsync(PeerConnect, message).ConfigureAwait(false);
-            throw new NetworkConnectionException(message, ex);
-        }
+        await ConnectToPeerInternalAsync(host, port, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
@@ -259,6 +219,66 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
         await InitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ValidatePeerConnectionAsync(string host, int port)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            await DebugToastAsync(PeerConnect, "Peer host is empty; cannot connect.").ConfigureAwait(false);
+            return false;
+        }
+
+        if (port <= 0)
+        {
+            await DebugToastAsync(PeerConnect, "Peer port is invalid; cannot connect.").ConfigureAwait(false);
+            return false;
+        }
+
+        if (IsAnonymous)
+        {
+            const string loginToSync = "Log in to sync.";
+            await DebugToastAsync(PeerConnect, loginToSync).ConfigureAwait(false);
+            throw new InvalidOperationException(loginToSync);
+        }
+
+        return true;
+    }
+
+    private async Task ConnectToPeerInternalAsync(string host, int port, CancellationToken cancellationToken)
+    {
+        await DebugToastAsync(PeerConnect, $"Connecting to {host}:{port}...").ConfigureAwait(false);
+
+        var sessionUserId = SessionUserGuid;
+        await LogConnectionAttemptAsync(sessionUserId, host, port).ConfigureAwait(false);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
+        try
+        {
+            await _transport.ConnectToPeerAsync(sessionUserId, host, port, linkedCts.Token).ConfigureAwait(false);
+
+            await PublishManifestAnnouncementAsync(linkedCts.Token).ConfigureAwait(false);
+
+            await DebugToastAsync(PeerConnect, $"Connected to {host}:{port}.").ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Error connecting to peer {Host}:{Port}.", host, port);
+            string message = $"Failed to connect to {host}:{port}. {ex.Message}";
+            await DebugToastAsync(PeerConnect, message).ConfigureAwait(false);
+            throw new NetworkConnectionException(message, ex);
+        }
+    }
+
+    private async Task LogConnectionAttemptAsync(Guid sessionUserId, string host, int port)
+    {
+        await DebugToastAsync(PeerConnect, $"Using UserId '{UserId}' with SessionUserId '{sessionUserId}'.").ConfigureAwait(false);
+        _logger?.LogDebug(
+            "Using UserId {UserId} with SessionUserId {SessionUserId} before connecting to {Host}:{Port}.",
+            UserId,
+            sessionUserId,
+            host,
+            port);
     }
 
     private void RefreshCachedIdentity()
