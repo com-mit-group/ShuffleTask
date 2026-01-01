@@ -6,12 +6,13 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
+using System;
 using System.ComponentModel;
 using Yaref92.Events.Connections;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class SettingsViewModel : ObservableObject
+public partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
@@ -24,6 +25,7 @@ public partial class SettingsViewModel : ObservableObject
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
+    private bool _disposed;
 
     [ObservableProperty]
     private AppSettings _settings;
@@ -427,6 +429,18 @@ public partial class SettingsViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Error showing connection error toast: {ex.Message}");
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        UpdateNetworkSubscription(_networkOptions, null);
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
 }
