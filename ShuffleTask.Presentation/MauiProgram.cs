@@ -149,7 +149,7 @@ public static partial class MauiProgram
                 new JsonEventSerializer(),
                 TimeSpan.FromSeconds(20),
                 authSecret);
-            ConfigureLocalPlatformMetadata(transport);
+            transport.LocalPlatform = CreateLocalPlatformMetadata();
             return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
@@ -178,64 +178,12 @@ public static partial class MauiProgram
         }, TaskScheduler.Default);
     }
 
-    private static void ConfigureLocalPlatformMetadata(GrpcEventTransport transport)
+    private static string CreateLocalPlatformMetadata()
     {
-        var localPlatformProperty = typeof(GrpcEventTransport).GetProperty("LocalPlatform");
-        if (localPlatformProperty?.CanWrite != true)
-        {
-            return;
-        }
-
         var platform = DeviceInfo.Platform.ToString();
         var idiom = DeviceInfo.Idiom.ToString();
         var version = DeviceInfo.VersionString;
-        var localPlatformValue = CreateLocalPlatformValue(localPlatformProperty.PropertyType, platform, idiom, version);
-        if (localPlatformValue != null)
-        {
-            localPlatformProperty.SetValue(transport, localPlatformValue);
-        }
-    }
-
-    private static object? CreateLocalPlatformValue(Type propertyType, string platform, string idiom, string version)
-    {
-        if (propertyType == typeof(string))
-        {
-            return $"{platform};{idiom};{version}";
-        }
-
-        if (typeof(IDictionary<string, string>).IsAssignableFrom(propertyType))
-        {
-            return new Dictionary<string, string>
-            {
-                ["Platform"] = platform,
-                ["Idiom"] = idiom,
-                ["Version"] = version,
-            };
-        }
-
-        object? value = Activator.CreateInstance(propertyType);
-        if (value is null)
-        {
-            return null;
-        }
-
-        SetStringPropertyIfExists(propertyType, value, "Platform", platform);
-        SetStringPropertyIfExists(propertyType, value, "DevicePlatform", platform);
-        SetStringPropertyIfExists(propertyType, value, "Idiom", idiom);
-        SetStringPropertyIfExists(propertyType, value, "Version", version);
-        SetStringPropertyIfExists(propertyType, value, "VersionString", version);
-        SetStringPropertyIfExists(propertyType, value, "PlatformVersion", version);
-
-        return value;
-    }
-
-    private static void SetStringPropertyIfExists(Type propertyType, object instance, string name, string value)
-    {
-        var property = propertyType.GetProperty(name);
-        if (property?.CanWrite == true && property.PropertyType == typeof(string))
-        {
-            property.SetValue(instance, value);
-        }
+        return $"Platform={platform};Idiom={idiom};Version={version}";
     }
 
     static partial void ConfigurePlatform(MauiAppBuilder builder);
