@@ -180,10 +180,7 @@ public static partial class MauiProgram
 
     private static string CreateLocalPlatformMetadata()
     {
-        var platform = DeviceInfo.Platform.ToString();
-        var idiom = DeviceInfo.Idiom.ToString();
-        var version = DeviceInfo.VersionString;
-        return $"Platform={platform};Idiom={idiom};Version={version}";
+        return DeviceInfo.Platform.ToString();
     }
 
     static partial void ConfigurePlatform(MauiAppBuilder builder);
