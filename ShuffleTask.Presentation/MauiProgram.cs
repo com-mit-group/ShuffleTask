@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Maui.Devices;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
@@ -142,12 +143,14 @@ public static partial class MauiProgram
             var appSettings = sp.GetRequiredService<AppSettings>();
             var options = appSettings.Network ?? NetworkOptions.CreateDefault();
             string authSecret = options.ResolveAuthenticationSecret();
-            return new GrpcEventTransport(
+            var transport = new GrpcEventTransport(
                 options.ListeningPort,
                 sp.GetRequiredService<ISessionManager>(),
                 new JsonEventSerializer(),
                 TimeSpan.FromSeconds(20),
                 authSecret);
+            transport.LocalPlatform = CreateLocalPlatformMetadata();
+            return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
@@ -173,6 +176,11 @@ public static partial class MauiProgram
             aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskManifestRequestAsyncHandler>());
             aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskBatchResponseAsyncHandler>());
         }, TaskScheduler.Default);
+    }
+
+    private static string CreateLocalPlatformMetadata()
+    {
+        return DeviceInfo.Platform.ToString();
     }
 
     static partial void ConfigurePlatform(MauiAppBuilder builder);
