@@ -1,9 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Microsoft.Maui.Devices;
-using ShuffleTask.Application.Abstractions;
+﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
@@ -147,9 +145,8 @@ public static partial class MauiProgram
                 options.ListeningPort,
                 sp.GetRequiredService<ISessionManager>(),
                 new JsonEventSerializer(),
-                TimeSpan.FromSeconds(20),
-                authSecret);
-            transport.LocalPlatform = CreateLocalPlatformMetadata();
+                authSecret,
+                localPlatform: UtilityMethods.ParsePlatform(CreateLocalPlatformMetadata()));
             return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();

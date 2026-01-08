@@ -10,8 +10,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.6" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
-    <PackageReference Include="Yaref92.Events" Version="2.0.3-rc.20251231141536" />
-    <PackageReference Include="Yaref92.Events.Transport.Grpc" Version="2.0.3-rc.20251231141536" />
+    <PackageReference Include="Yaref92.Events" Version="2.0.3-rc.20260108134815" />
+    <PackageReference Include="Yaref92.Events.Transport.Grpc" Version="2.0.3-rc.20260108134815" />
   </ItemGroup>
 
   <ItemGroup>

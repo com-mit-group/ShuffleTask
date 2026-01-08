@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
-using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Application.Events;
+using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
-using Yaref92.Events.Transports;
 using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.Application.Services;
@@ -25,7 +25,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly object _connectionLock = new();
     private readonly object _publishLock = new();
     private CancellationTokenSource _peerConnectionCts = new();
-    private List<Task> _inFlightPublishes = new();
+    private readonly List<Task> _inFlightPublishes = new();
     private bool _disposed;
     private bool _initialized;
 
@@ -110,7 +110,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         {
             return;
         }
-        (_transport as GrpcEventTransport).TargetPlatform = selectedPeerPlatform;
+        (_transport as GrpcEventTransport).TargetPlatform = UtilityMethods.ParsePlatform(selectedPeerPlatform);
 
         if (!await ValidatePeerConnectionAsync(host, port).ConfigureAwait(false))
         {
