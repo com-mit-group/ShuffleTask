@@ -495,6 +495,15 @@ public class StorageService : IStorageService
     public async Task SetSettingsAsync(AppSettings settings)
     {
         settings = NormalizeSettings(settings);
+        var existingSettings = await GetExistingSettingsAsync().ConfigureAwait(false);
+
+        if (IsStale(settings, existingSettings))
+        {
+            return;
+        }
+
+        settings.EventVersion = NormalizeVersion(settings.EventVersion, existingSettings?.EventVersion);
+        settings.UpdatedAt = NormalizeUpdatedAt(settings.UpdatedAt, existingSettings?.UpdatedAt);
         string json = JsonConvert.SerializeObject(settings);
         // Upsert
         KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey);
@@ -518,6 +527,8 @@ public class StorageService : IStorageService
     {
         settings ??= new AppSettings();
         settings.NormalizeWeights();
+        settings.UpdatedAt = EnsureUtc(settings.UpdatedAt == default ? DateTime.UtcNow : settings.UpdatedAt);
+        settings.EventVersion = Math.Max(1, settings.EventVersion);
         settings.MinGapMinutes = Math.Clamp(settings.MinGapMinutes, 1, 24 * 60);
         settings.MaxGapMinutes = Math.Max(settings.MinGapMinutes, settings.MaxGapMinutes);
         settings.ReminderMinutes = Math.Clamp(settings.ReminderMinutes, 1, 6 * 60);
@@ -531,6 +542,70 @@ public class StorageService : IStorageService
         settings.Network ??= NetworkOptions.CreateDefault();
         settings.Network.Normalize();
         return settings;
+    }
+
+    private async Task<AppSettings?> GetExistingSettingsAsync()
+    {
+        try
+        {
+            KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
+            if (kv == null || string.IsNullOrWhiteSpace(kv.Value))
+            {
+                return null;
+            }
+
+            AppSettings? parsed = JsonConvert.DeserializeObject<AppSettings>(kv.Value);
+            return parsed is null ? null : NormalizeSettings(parsed);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsStale(AppSettings candidate, AppSettings? existing)
+    {
+        if (existing is null)
+        {
+            return false;
+        }
+
+        if (candidate.EventVersion > 0 && candidate.EventVersion < existing.EventVersion)
+        {
+            return true;
+        }
+
+        return candidate.EventVersion <= existing.EventVersion && candidate.UpdatedAt <= existing.UpdatedAt;
+    }
+
+    private static int NormalizeVersion(int candidate, int? existing)
+    {
+        if (candidate > 0)
+        {
+            return candidate;
+        }
+
+        if (existing.HasValue && existing.Value > 0)
+        {
+            return existing.Value + 1;
+        }
+
+        return 1;
+    }
+
+    private static DateTime NormalizeUpdatedAt(DateTime candidate, DateTime? existing)
+    {
+        if (candidate != default)
+        {
+            return candidate;
+        }
+
+        if (existing.HasValue)
+        {
+            return existing.Value;
+        }
+
+        return DateTime.UtcNow;
     }
 
     private sealed class KeyValueEntity

@@ -6,7 +6,7 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Utilities;
 
-internal static class UtilityMethods
+public static class UtilityMethods
 {
     private static readonly object StableSampleLock = new();
     private static int stableSampleSeed = int.MinValue;
@@ -151,5 +151,15 @@ internal static class UtilityMethods
     private static DateTimeOffset LocalizeTime(DateTimeOffset now)
     {
         return TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+    }
+
+    public static Yaref92.Events.Sessions.Platform? ParsePlatform(string platformString)
+    {
+        return platformString.ToLowerInvariant() switch
+        {
+            "android" => (Yaref92.Events.Sessions.Platform?)Yaref92.Events.Sessions.Platform.Android,
+            "windows" or "winui" => (Yaref92.Events.Sessions.Platform?)Yaref92.Events.Sessions.Platform.Windows,
+            _ => null,
+        };
     }
 }

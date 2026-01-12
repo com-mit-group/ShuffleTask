@@ -16,7 +16,7 @@ public interface INetworkSyncService
 
     Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default);
 
-    Task ConnectToPeerAsync(string host, int port, CancellationToken cancellationToken = default);
+    Task ConnectToPeerAsync(string host, int port, string selectedPeerPlatform, CancellationToken cancellationToken = default);
 
     Task DisconnectAsync(CancellationToken cancellationToken = default);
 
@@ -26,5 +26,6 @@ public interface INetworkSyncService
 
     Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default);
     Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default);
+    Task PublishSettingsUpdatedAsync(AppSettings settings, CancellationToken cancellationToken = default);
     Task InitAsync(CancellationToken cancellationToken = default);
 }

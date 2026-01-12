@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
+             x:Class="ShuffleTask.Views.PeersPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="Peers">
+    <ScrollView>
+        <Grid Padding="20"
+              ColumnDefinitions="Auto,*"
+              RowSpacing="16"
+              ColumnSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0"
+                   Grid.ColumnSpan="2"
+                   Text="Log in to sync"
+                   TextColor="DarkRed"
+                   FontAttributes="Bold"
+                   IsVisible="{Binding IsAnonymousSession}" />
+
+            <Label Grid.Row="1"
+                   Text="Local connection"
+                   FontAttributes="Bold"
+                   FontSize="Medium"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="1"
+                   Grid.Column="1"
+                   Text="{Binding LocalConnectionSummary}"
+                   IsReadOnly="True"
+                   HorizontalOptions="Fill"
+                   HorizontalTextAlignment="Start" />
+
+            <Label Grid.Row="2"
+                   Text="Auth token"
+                   FontAttributes="Bold"
+                   FontSize="Medium"
+                   VerticalOptions="Start" />
+            <Label Grid.Row="2"
+                   Grid.Column="1"
+                   Text="{Binding AuthTokenPreview}"
+                   LineBreakMode="WordWrap" />
+
+            <Label Grid.Row="3"
+                   Text="Peer host"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="3"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.PeerHost}"
+                   IsEnabled="{Binding CanSyncAcrossDevices}"
+                   Placeholder="Host name or IP address"
+                   HorizontalOptions="Fill" />
+
+            <Label Grid.Row="4"
+                   Text="Peer port"
+                   FontAttributes="Bold"
+                   VerticalOptions="Center" />
+            <Entry Grid.Row="4"
+                   Grid.Column="1"
+                   Text="{Binding Settings.Network.PeerPort}"
+                   Keyboard="Numeric"
+                   IsEnabled="{Binding CanSyncAcrossDevices}"
+                   Placeholder="Port"
+                   HorizontalOptions="Fill" />
+
+            <Label Grid.Row="5" Text="Peer Platform" />
+            <Picker Grid.Row="5" Grid.Column="1" ItemsSource="{Binding PeerPlatforms}" SelectedItem="{Binding SelectedPeerPlatform}" />
+
+            <Button Grid.Row="6"
+                    Grid.ColumnSpan="2"
+                    Text="Connect to peer"
+                    Command="{Binding ConnectPeerCommand}"
+                    IsEnabled="{Binding CanSyncAcrossDevices}"
+                    HorizontalOptions="Fill" />
+        </Grid>
+    </ScrollView>
+</ContentPage>

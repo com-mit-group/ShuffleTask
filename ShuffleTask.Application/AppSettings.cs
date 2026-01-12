@@ -16,6 +16,10 @@ public partial class AppSettings : ObservableObject
     private const double DefaultImportanceWeight = 60.0;
     private const double DefaultUrgencyWeight = 40.0;
 
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public int EventVersion { get; set; }
+
     [ObservableProperty]
     private TimeSpan workStart = new(9, 0, 0); // default 09:00
 
@@ -135,6 +139,16 @@ public partial class AppSettings : ObservableObject
         RepeatUrgencyPenalty = source.RepeatUrgencyPenalty;
         SizeBiasStrength = source.SizeBiasStrength;
         Network = source.Network;
+        UpdatedAt = source.UpdatedAt;
+        EventVersion = source.EventVersion;
+    }
+
+    public void Touch(TimeProvider clock)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        UpdatedAt = clock.GetUtcNow().UtcDateTime;
+        EventVersion = Math.Max(1, EventVersion + 1);
     }
 
     public void NormalizeWeights()
@@ -187,5 +201,17 @@ public partial class AppSettings : ObservableObject
     private void OnDeserialized(StreamingContext context)
     {
         NormalizeWeights();
+        UpdatedAt = EnsureUtc(UpdatedAt == default ? DateTime.UtcNow : UpdatedAt);
+        EventVersion = Math.Max(1, EventVersion);
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 }

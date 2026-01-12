@@ -4,13 +4,15 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
+using System;
 using System.ComponentModel;
-using Yaref92.Events.Connections;
+using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class SettingsViewModel : ObservableObject
+public partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly IStorageService _storage;
     private readonly ISchedulerService _scheduler;
@@ -20,9 +22,13 @@ public partial class SettingsViewModel : ObservableObject
     private readonly INetworkSyncService _networkSync;
     private readonly TasksViewModel _tasksViewModel;
     private const int MaxUsernameLength = 64;
+    private const string Windows = "Windows";
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
+    private bool _disposed;
+
+    private string _selectedPeerPlatform = Windows;
 
     [ObservableProperty]
     private AppSettings _settings;
@@ -30,7 +36,17 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings, TasksViewModel tasksViewModel)
+    public IReadOnlyList<string> PeerPlatforms { get; } = new[] { "Android", Windows };
+
+    public string SelectedPeerPlatform
+    {
+        get => _selectedPeerPlatform;
+        set => SetProperty(ref _selectedPeerPlatform, value);
+    }
+
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications,
+                             ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync,
+                             AppSettings settings, TasksViewModel tasksViewModel)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -78,7 +94,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             bool sessionChanged = wasAnonymous != IsAnonymousSession || !string.Equals(_lastUserId, Settings.Network.UserId, StringComparison.Ordinal);
             if (sessionChanged)
             {
@@ -115,16 +131,29 @@ public partial class SettingsViewModel : ObservableObject
     {
         return ExecuteIfNotBusyAsync(async () =>
         {
+            if (!CanSyncAcrossDevices)
+            {
+                await ShowLoginRequiredAlertAsync();
+                return;
+            }
+
             try
             {
                 ApplyValidation();
-                await _storage.SetSettingsAsync(Settings);
-                await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort);
+                await PersistSettingsAsync();
+                await _networkSync.ConnectToPeerAsync(Settings.Network.PeerHost, Settings.Network.PeerPort, SelectedPeerPlatform);
             }
-            catch (TcpConnectionDisconnectedException ex)
+            catch (InvalidOperationException)
             {
-                // Handle connection errors (log, notify user, etc.)
-                System.Diagnostics.Debug.WriteLine($"Error connecting to peer: {ex.Message}");
+                await ShowLoginRequiredAlertAsync();
+            }
+            catch (NetworkConnectionException ex)
+            {
+                await ShowConnectionErrorAsync(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                await ShowConnectionErrorAsync(ex.Message);
             }
         });
     }
@@ -149,7 +178,7 @@ public partial class SettingsViewModel : ObservableObject
             Settings.Network.UserId = trimmedUsername;
             Settings.Network.AnonymousSession = false;
             ApplyValidation();
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             OnNetworkChanged(this, new PropertyChangedEventArgs(nameof(Settings.Network.UserId)));
             await HandleSessionTransitionAsync(wasAnonymous);
 
@@ -172,7 +201,7 @@ public partial class SettingsViewModel : ObservableObject
             await _networkSync.DisconnectAsync();
             Settings.Network.AnonymousSession = true;
             Settings.Network.UserId = null;
-            await _storage.SetSettingsAsync(Settings);
+            await PersistSettingsAsync();
             OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
             await HandleSessionTransitionAsync(wasAnonymous);
 
@@ -291,7 +320,7 @@ public partial class SettingsViewModel : ObservableObject
         return network.AnonymousSession || string.IsNullOrWhiteSpace(network.UserId);
     }
 
-    private Task<bool> PromptMigrateDeviceTasksAsync()
+    private static Task<bool> PromptMigrateDeviceTasksAsync()
     {
         const string title = "Sync device tasks?";
         const string message = "You just signed in. Do you want to attach tasks from this device to your account for cross-device sync?";
@@ -332,9 +361,10 @@ public partial class SettingsViewModel : ObservableObject
 
     private async Task HandleSessionTransitionAsync(bool wasAnonymous)
     {
-        if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId))
+        if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId)
+            && ShouldPromptForMigration())
         {
-            bool migrate = await PromptMigrateDeviceTasksAsync();
+            bool migrate = await SettingsViewModel.PromptMigrateDeviceTasksAsync();
             if (migrate)
             {
                 await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
@@ -345,6 +375,11 @@ public partial class SettingsViewModel : ObservableObject
 
         await _coordinator.RefreshAsync();
         await RefreshBoundCollectionsAsync(userScope, deviceScope);
+    }
+
+    private bool ShouldPromptForMigration()
+    {
+        return _tasksViewModel.Tasks.Count > 0;
     }
 
     private (string? UserId, string DeviceId) ResolveTaskScopes()
@@ -364,6 +399,57 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         return MainThread.InvokeOnMainThreadAsync(() => _tasksViewModel.LoadAsync(userScope, deviceScope));
+    }
+
+    private static Task ShowLoginRequiredAlertAsync()
+    {
+        const string title = "Sync unavailable";
+        const string message = "Log in to sync";
+
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK")
+            ?? Task.CompletedTask);
+    }
+
+    private async Task PersistSettingsAsync(bool broadcast = true)
+    {
+        Settings.Touch(_clock);
+        await _storage.SetSettingsAsync(Settings);
+
+        if (broadcast)
+        {
+            await _networkSync.PublishSettingsUpdatedAsync(Settings);
+        }
+    }
+
+    private async Task ShowConnectionErrorAsync(string message)
+    {
+        const string title = "Peer connection failed";
+
+        try
+        {
+            Task toast = _notifications.ShowToastAsync(title, message, Settings);
+            Task alert = MainThread.InvokeOnMainThreadAsync(() =>
+                Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK") ?? Task.CompletedTask);
+
+            await Task.WhenAll(toast, alert);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error showing connection error toast: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        UpdateNetworkSubscription(_networkOptions, null);
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 
 }

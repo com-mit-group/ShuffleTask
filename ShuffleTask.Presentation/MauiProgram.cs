@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using ShuffleTask.Application.Abstractions;
+﻿using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
@@ -11,6 +10,7 @@ using ShuffleTask.Views;
 using Yaref92.Events;
 using Yaref92.Events.Abstractions;
 using Yaref92.Events.Serialization;
+using Yaref92.Events.Transport.Grpc;
 using Yaref92.Events.Transports;
 
 namespace ShuffleTask.Presentation;
@@ -89,6 +89,7 @@ public static partial class MauiProgram
 
         // Views
         builder.Services.AddSingleton<DashboardPage>();
+        builder.Services.AddSingleton<PeersPage>();
         builder.Services.AddSingleton<SettingsPage>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();
@@ -101,6 +102,7 @@ public static partial class MauiProgram
 
         var app = builder.Build();
         _services = app.Services;
+        InitNetworkSync();
 
         return app;
     }
@@ -122,51 +124,60 @@ public static partial class MauiProgram
             }).Wait();
             return settings;
         });
-        
+
         builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
-        
+        builder.Services.AddSingleton<ISessionManager, SessionManager>(sp =>
+        {
+            var appSettings = sp.GetRequiredService<AppSettings>();
+            var options = appSettings.Network ?? NetworkOptions.CreateDefault();
+            return new SessionManager(
+                options.ListeningPort,
+                new Yaref92.Events.Sessions.ResilientSessionOptions());
+        });
+
         // TCPEventTransport gets NetworkOptions from AppSettings
-        builder.Services.AddSingleton<IEventTransport, TCPEventTransport>(sp =>
+        builder.Services.AddSingleton<IEventTransport, GrpcEventTransport>(sp =>
         {
             var appSettings = sp.GetRequiredService<AppSettings>();
             var options = appSettings.Network ?? NetworkOptions.CreateDefault();
             string authSecret = options.ResolveAuthenticationSecret();
-            return new TCPEventTransport(
+            var transport = new GrpcEventTransport(
                 options.ListeningPort,
+                sp.GetRequiredService<ISessionManager>(),
                 new JsonEventSerializer(),
-                TimeSpan.FromSeconds(20),
-                authSecret);
+                authSecret,
+                localPlatform: UtilityMethods.ParsePlatform(CreateLocalPlatformMetadata()));
+            return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
-        builder.Services.AddSingleton<TaskStartedAsyncHandler>(sp =>
-        {
-            var logger = sp.GetService<ILogger<NetworkSyncService>>();
-            var storage = sp.GetRequiredService<StorageService>();
-            var notifications = sp.GetRequiredService<INotificationService>();
-            var appSettings = sp.GetRequiredService<AppSettings>();
-            var taskStartedAsyncHandler = new TaskStartedAsyncHandler(logger, storage, notifications, appSettings);
-            return taskStartedAsyncHandler;
-        });
-        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>(sp =>
-        {
-            var logger = sp.GetService<ILogger<NetworkSyncService>>();
-            var storage = sp.GetRequiredService<StorageService>();
-            var notifications = sp.GetRequiredService<INotificationService>();
-            var appSettings = sp.GetRequiredService<AppSettings>();
-            var timeUpNotificationAsyncHandler = new TimeUpNotificationAsyncHandler(logger, storage, notifications, appSettings);
 
-            var ns = sp.GetRequiredService<INetworkSyncService>();
-            Task initTask = Task.Run(() => ns.InitAsync());
-            initTask.ContinueWith((t, o) =>
-            {
-                var aggregator = sp.GetRequiredService<NetworkedEventAggregator>();
-                var taskStartedAsyncHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
-                aggregator.SubscribeToEventType(taskStartedAsyncHandler);
-                aggregator.SubscribeToEventType(timeUpNotificationAsyncHandler);
-            }, TaskScheduler.Default);
-            return timeUpNotificationAsyncHandler;
-        });
+        builder.Services.AddSingleton<TaskStartedAsyncHandler>();
+        builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>();
+        builder.Services.AddSingleton<TaskManifestAnnouncedAsyncHandler>();
+        builder.Services.AddSingleton<TaskManifestRequestAsyncHandler>();
+        builder.Services.AddSingleton<TaskBatchResponseAsyncHandler>();
+    }
+
+    private static void InitNetworkSync()
+    {
+        INetworkSyncService networkSyncService = _services!.GetRequiredService<INetworkSyncService>(); // force eager initialization
+        var aggregator = _services!.GetRequiredService<NetworkedEventAggregator>();
+        Task initTask = Task.Run(() => networkSyncService.InitAsync());
+
+        initTask.ContinueWith((t, o) =>
+        {
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskStartedAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TimeUpNotificationAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskManifestAnnouncedAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskManifestRequestAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskBatchResponseAsyncHandler>());
+        }, TaskScheduler.Default);
+    }
+
+    private static string CreateLocalPlatformMetadata()
+    {
+        return DeviceInfo.Platform.ToString();
     }
 
     static partial void ConfigurePlatform(MauiAppBuilder builder);
