@@ -57,7 +57,7 @@ internal class SettingsUpdatedAsyncHandler : IAsyncEventHandler<SettingsUpdatedE
 
     private static bool IsAnonymousSession(AppSettings settings)
     {
-        return settings.Network?.AnonymousSession != false || string.IsNullOrWhiteSpace(settings.Network?.UserId);
+        return settings.Network?.AnonymousSession is true || string.IsNullOrWhiteSpace(settings.Network?.UserId);
     }
 
     private static bool IsSameUser(string? eventUserId, string? currentUserId)

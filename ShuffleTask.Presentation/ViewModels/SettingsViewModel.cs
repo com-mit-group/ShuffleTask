@@ -44,7 +44,9 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _selectedPeerPlatform, value);
     }
 
-    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync, AppSettings settings, TasksViewModel tasksViewModel)
+    public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications,
+                             ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync,
+                             AppSettings settings, TasksViewModel tasksViewModel)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -318,7 +320,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         return network.AnonymousSession || string.IsNullOrWhiteSpace(network.UserId);
     }
 
-    private Task<bool> PromptMigrateDeviceTasksAsync()
+    private static Task<bool> PromptMigrateDeviceTasksAsync()
     {
         const string title = "Sync device tasks?";
         const string message = "You just signed in. Do you want to attach tasks from this device to your account for cross-device sync?";
@@ -362,7 +364,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         if (wasAnonymous && !IsAnonymousSession && !string.IsNullOrWhiteSpace(Settings.Network.UserId)
             && ShouldPromptForMigration())
         {
-            bool migrate = await PromptMigrateDeviceTasksAsync();
+            bool migrate = await SettingsViewModel.PromptMigrateDeviceTasksAsync();
             if (migrate)
             {
                 await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);

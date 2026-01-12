@@ -16,7 +16,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly IStorageService _storage;
     private readonly AppSettings _appSettings;
     private readonly ILogger<NetworkSyncService>? _logger;
-    private readonly INotificationService? _notifications;
+#if DEBUG
+    private readonly INotificationService? _notifications; 
+#endif
     private readonly PeerSyncCoordinator _coordinator;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -83,7 +85,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     public NetworkOptions NetworkOptions => _appSettings.Network ?? NetworkOptions.CreateDefault();
 
-    private bool IsAnonymous => string.IsNullOrWhiteSpace(UserId);//NetworkOptions.AnonymousSession || string.IsNullOrWhiteSpace(UserId);
+    private bool IsAnonymous => string.IsNullOrWhiteSpace(UserId);
 
     public async Task RequestGracefulFlushAsync(CancellationToken cancellationToken = default)
     {
@@ -343,6 +345,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
     private Task DebugToastAsync(string title, string message)
     {
+        _logger?.LogDebug("{Title}: {Message}", title, message);
 #if DEBUG
         if (_notifications is null)
         {
