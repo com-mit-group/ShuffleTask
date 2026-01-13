@@ -168,6 +168,16 @@ public partial class NumericStepper : ContentView
         DisplayValue = ResolveDisplayValue(format);
     }
 
+    private void OnValueEntryCompleted(object sender, EventArgs e)
+    {
+        CommitEntryValue(sender as Entry);
+    }
+
+    private void OnValueEntryUnfocused(object sender, FocusEventArgs e)
+    {
+        CommitEntryValue(sender as Entry);
+    }
+
     private void OnDecrease()
     {
         Value = CoerceValue(Value - GetIncrement());
@@ -212,6 +222,30 @@ public partial class NumericStepper : ContentView
         }
 
         return coercedValue;
+    }
+
+    private void CommitEntryValue(Entry? entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+
+        var text = entry.Text;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            UpdateDisplayValue();
+            return;
+        }
+
+        if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out var parsed))
+        {
+            Value = CoerceValue(parsed);
+            return;
+        }
+
+        UpdateDisplayValue();
     }
 
     private static void InvokeIfNumericStepper(BindableObject bindable, Action<NumericStepper> action)

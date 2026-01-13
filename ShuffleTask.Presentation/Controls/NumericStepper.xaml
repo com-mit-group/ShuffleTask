@@ -21,13 +21,14 @@
                     HeightRequest="36"
                     Command="{Binding DecreaseCommand}"
                     IsEnabled="{Binding CanDecrease}" />
-            <Label Grid.Column="1"
+            <Entry Grid.Column="1"
                    VerticalOptions="Center"
                    HorizontalOptions="Start"
-                   InputTransparent="True"
                    MinimumWidthRequest="40"
                    HorizontalTextAlignment="Center"
-                   Text="{Binding DisplayValue}" />
+                   Text="{Binding DisplayValue, Mode=OneWay}"
+                   Completed="OnValueEntryCompleted"
+                   Unfocused="OnValueEntryUnfocused" />
             <Button Grid.Column="2"
                     Text="+"
                     WidthRequest="36"
