@@ -4,7 +4,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="ShuffleTask.Controls.NumericStepper"
              x:Name="Root"
-             HorizontalOptions="Start">
+             HorizontalOptions="Start"
+             Padding="1">
     <Border StrokeShape="RoundRectangle 8"
             StrokeThickness="1"
             Stroke="{AppThemeBinding Light=#C6C6C6, Dark=#555555}"
