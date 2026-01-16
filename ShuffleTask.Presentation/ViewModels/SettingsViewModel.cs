@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
@@ -21,12 +22,14 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
     private readonly TasksViewModel _tasksViewModel;
+    private readonly ILogger<SettingsViewModel>? _logger;
     private const int MaxUsernameLength = 64;
     private const string Windows = "Windows";
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
     private bool _disposed;
+    private bool _lastBackgroundActivityEnabled;
 
     private string _selectedPeerPlatform = Windows;
 
@@ -46,7 +49,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications,
                              ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync,
-                             AppSettings settings, TasksViewModel tasksViewModel)
+                             AppSettings settings, TasksViewModel tasksViewModel, ILogger<SettingsViewModel>? logger = null)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -56,7 +59,9 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
         _tasksViewModel = tasksViewModel ?? throw new ArgumentNullException(nameof(tasksViewModel));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger;
         UpdateNetworkSubscription(null, settings.Network);
+        SubscribeSettings(settings);
         CacheSessionState();
     }
 
@@ -275,6 +280,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnSettingsChanged(AppSettings value)
     {
         UpdateNetworkSubscription(_networkOptions, value.Network);
+        SubscribeSettings(value);
         OnPropertyChanged(nameof(UsePomodoro));
         OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
     }
@@ -282,6 +288,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnSettingsChanging(AppSettings value)
     {
         _ = value;
+        UnsubscribeSettings(_settings);
         UpdateNetworkSubscription(_networkOptions, null);
     }
 
@@ -308,6 +315,39 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         {
             newNetwork.PropertyChanged += OnNetworkChanged;
         }
+    }
+
+    private void SubscribeSettings(AppSettings settings)
+    {
+        _lastBackgroundActivityEnabled = settings.BackgroundActivityEnabled;
+        settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void UnsubscribeSettings(AppSettings? settings)
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        settings.PropertyChanged -= OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AppSettings.BackgroundActivityEnabled))
+        {
+            return;
+        }
+
+        bool enabled = Settings.BackgroundActivityEnabled;
+        if (enabled == _lastBackgroundActivityEnabled)
+        {
+            return;
+        }
+
+        _lastBackgroundActivityEnabled = enabled;
+        _logger?.LogInformation("Background activity setting changed to {Enabled}.", enabled);
     }
 
     private static bool DeriveIsAnonymousSession(NetworkOptions? network)

@@ -29,12 +29,22 @@ public partial class App : Microsoft.Maui.Controls.Application
     {
         base.OnStart();
         await EnsureSeedDataAsync();
+        if (!_settings.BackgroundActivityEnabled)
+        {
+            return;
+        }
+
         await _coordinator.StartAsync();
     }
 
     protected override async void OnResume()
     {
         base.OnResume();
+        if (!_settings.BackgroundActivityEnabled)
+        {
+            return;
+        }
+
         await _coordinator.ResumeAsync();
     }
 
@@ -73,6 +83,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         _settings.EnableNotifications = true;
         _settings.SoundOn = true;
         _settings.Active = true;
+        _settings.BackgroundActivityEnabled = true;
         _settings.AutoShuffleEnabled = true;
         _settings.ReminderMinutes = 60;
         _settings.MaxDailyShuffles = 6;
