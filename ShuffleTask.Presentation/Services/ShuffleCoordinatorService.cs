@@ -128,7 +128,7 @@ public class ShuffleCoordinatorService : IDisposable
             _gate.Release();
         }
 
-        if (!_isPaused)
+        if (!_isPaused && IsBackgroundActivityEnabled(_settings))
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
         }
@@ -180,6 +180,12 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         await EnsureInitializedAsync().ConfigureAwait(false);
+
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            CancelTimerInternal();
+            return;
+        }
 
         await RunWithGateAsync(() => ScheduleNextShuffleUnsafeAsync()).ConfigureAwait(false);
     }
@@ -437,6 +443,12 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            CancelTimerInternal();
+            return;
+        }
+
         if (Volatile.Read(ref _timerCts) != null)
         {
             CancelPersistentSchedule();
@@ -494,6 +506,11 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task NotifyExpiredTimerAsync()
     {
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            return;
+        }
+
         if (!PersistedTimerState.TryGetActiveTimer(
                 out _,
                 out _,
@@ -647,6 +664,11 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
+        if (!IsBackgroundActivityEnabled(settings))
+        {
+            return false;
+        }
+
         if (!settings.Active)
         {
             return false;
@@ -663,6 +685,11 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         return true;
+    }
+
+    private static bool IsBackgroundActivityEnabled(AppSettings settings)
+    {
+        return settings.BackgroundActivityEnabled;
     }
 
     private static bool HasReachedDailyLimit(AppSettings settings, DateTimeOffset now)
