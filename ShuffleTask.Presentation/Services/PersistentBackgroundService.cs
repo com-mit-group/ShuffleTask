@@ -84,6 +84,16 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
         OnCancelledCore();
     }
 
+    public void Stop()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _platform.Stop();
+    }
+
     private async Task RunTimerAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback)
     {
         try
@@ -192,6 +202,8 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
         void Schedule(DateTimeOffset when, TimeSpan delay, string? taskId);
 
         void Cancel();
+
+        void Stop();
     }
 
     private sealed class NoOpPersistentBackgroundPlatform : IPersistentBackgroundPlatform
@@ -203,6 +215,10 @@ internal partial class PersistentBackgroundService : IPersistentBackgroundServic
         }
 
         public void Cancel()
+        {
+        }
+
+        public void Stop()
         {
         }
     }

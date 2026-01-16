@@ -13,4 +13,6 @@ public interface IPersistentBackgroundService
     void Schedule(DateTimeOffset when, string? taskId);
 
     void Cancel();
+
+    void Stop();
 }

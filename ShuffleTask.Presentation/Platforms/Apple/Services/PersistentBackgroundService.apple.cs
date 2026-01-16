@@ -67,6 +67,11 @@ internal partial class PersistentBackgroundService
             ExecuteOnMainThread(() => BGTaskScheduler.Shared.Cancel(AppleTaskIdentifier));
         }
 
+        public void Stop()
+        {
+            ExecuteOnMainThread(() => BGTaskScheduler.Shared.Cancel(AppleTaskIdentifier));
+        }
+
         private void EnsureRegistered()
         {
             if (_registered)
