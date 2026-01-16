@@ -17,7 +17,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
     private readonly AppSettings _appSettings;
     private readonly ILogger<NetworkSyncService>? _logger;
 #if DEBUG
-    private readonly INotificationService? _notifications; 
+    private readonly INotificationService? _notifications;
 #endif
     private readonly PeerSyncCoordinator _coordinator;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
@@ -47,7 +47,9 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger;
+#if DEBUG
         _notifications = notifications;
+#endif
         _coordinator = new PeerSyncCoordinator(_storage);
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
