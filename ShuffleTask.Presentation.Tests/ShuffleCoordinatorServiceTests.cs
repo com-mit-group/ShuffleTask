@@ -177,6 +177,10 @@ public class ShuffleCoordinatorServiceTests
         {
         }
 
+        public void Stop()
+        {
+        }
+
         public Task TriggerAsyncCallbackAsync()
         {
             return _callback?.Invoke() ?? Task.CompletedTask;

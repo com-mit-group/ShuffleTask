@@ -9,6 +9,7 @@ using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
 using System;
 using System.ComponentModel;
+using System.Threading;
 using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.ViewModels;
@@ -30,6 +31,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _lastAnonymousMode;
     private bool _disposed;
     private bool _lastBackgroundActivityEnabled;
+    private readonly SemaphoreSlim _backgroundActivityToggleGate = new(1, 1);
 
     private string _selectedPeerPlatform = Windows;
 
@@ -353,6 +355,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     private async Task HandleBackgroundActivityToggleAsync(bool enabled)
     {
+        await _backgroundActivityToggleGate.WaitAsync().ConfigureAwait(false);
         try
         {
             await PersistSettingsAsync().ConfigureAwait(false);
@@ -361,6 +364,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to apply background activity toggle.");
+        }
+        finally
+        {
+            _backgroundActivityToggleGate.Release();
         }
     }
 
@@ -502,6 +509,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         UpdateNetworkSubscription(_networkOptions, null);
+        _backgroundActivityToggleGate.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }
