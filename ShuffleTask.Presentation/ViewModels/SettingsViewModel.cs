@@ -347,7 +347,21 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         _lastBackgroundActivityEnabled = enabled;
-        _logger?.LogInformation("Background activity setting changed to {Enabled}.", enabled);
+        _logger?.LogInformation("Background activity toggled {State}.", enabled ? "on" : "off");
+        _ = HandleBackgroundActivityToggleAsync(enabled);
+    }
+
+    private async Task HandleBackgroundActivityToggleAsync(bool enabled)
+    {
+        try
+        {
+            await PersistSettingsAsync().ConfigureAwait(false);
+            await _coordinator.ApplyBackgroundActivityChangeAsync(enabled).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to apply background activity toggle.");
+        }
     }
 
     private static bool DeriveIsAnonymousSession(NetworkOptions? network)

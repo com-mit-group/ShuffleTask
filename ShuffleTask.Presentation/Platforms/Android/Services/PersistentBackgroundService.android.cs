@@ -76,6 +76,13 @@ internal partial class PersistentBackgroundService
             pendingIntent.Cancel();
         }
 
+        public void Stop()
+        {
+            var context = Android.App.Application.Context;
+            var intent = new Intent(context, typeof(PersistentBackgroundAndroidService));
+            context.StopService(intent);
+        }
+
         private static void EnsureForegroundService()
         {
             var context = Android.App.Application.Context;
@@ -154,6 +161,12 @@ internal partial class PersistentBackgroundService
             {
                 context.StartService(intent);
             }
+        }
+
+        public static void Stop(Context context)
+        {
+            var intent = new Intent(context, typeof(PersistentBackgroundAndroidService));
+            context.StopService(intent);
         }
 
         public override void OnCreate()

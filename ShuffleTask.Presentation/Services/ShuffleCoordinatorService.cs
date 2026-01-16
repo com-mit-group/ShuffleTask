@@ -79,6 +79,18 @@ public class ShuffleCoordinatorService : IDisposable
 
     public Task ResumeAsync() => ResumeInternalAsync();
 
+    public async Task ApplyBackgroundActivityChangeAsync(bool enabled)
+    {
+        if (enabled)
+        {
+            await ResumeInternalAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await PauseAsync().ConfigureAwait(false);
+        _backgroundService.Stop();
+    }
+
     private async Task ResumeInternalAsync()
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
