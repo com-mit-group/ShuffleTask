@@ -8,7 +8,11 @@ using Android.Content.PM;
 using Android.OS;
 using Android.Util;
 using AndroidX.Core.App;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Maui.ApplicationModel;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation.Services;
 
 namespace ShuffleTask.Presentation.Services;
@@ -21,6 +25,8 @@ internal partial class PersistentBackgroundService
     private const string ForegroundChannelName = "ShuffleTask background";
     private const string ForegroundChannelDescription = "Keeps ShuffleTask timers active for reminders.";
     private const int ForegroundNotificationId = 0x7012;
+    private const string StopBackgroundAction = "com.commitgroup.shuffletask.STOP_BACKGROUND_ACTIVITY";
+    private const int StopBackgroundActionRequestCode = 0x7013;
 
     partial void InitializePlatform(TimeProvider clock, ref IPersistentBackgroundPlatform? platform)
     {
@@ -93,18 +99,7 @@ internal partial class PersistentBackgroundService
         }
 
         private static PendingIntent? CreatePendingIntent(Context context, PendingIntentFlags baseFlags)
-        {
-            var intent = new Intent(context, typeof(ShuffleCoordinatorAlarmReceiver))
-                .SetAction(AlarmAction);
-
-            PendingIntentFlags flags = baseFlags;
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
-            {
-                flags |= PendingIntentFlags.Immutable;
-            }
-
-            return PendingIntent.GetBroadcast(context, AlarmRequestCode, intent, flags);
-        }
+            => CreateAlarmPendingIntent(context, baseFlags);
     }
 
     [BroadcastReceiver(Enabled = true, Exported = true, Name = "com.commitgroup.shuffletask.ShuffleCoordinatorAlarmReceiver")]
@@ -133,6 +128,42 @@ internal partial class PersistentBackgroundService
                 catch (Exception ex)
                 {
                     Log.Warn("ShuffleTask", $"Alarm receiver error: {ex}");
+                }
+                finally
+                {
+                    pendingResult?.Finish();
+                }
+            });
+        }
+    }
+
+    [BroadcastReceiver(Enabled = true, Exported = false, Name = "com.commitgroup.shuffletask.StopBackgroundActionReceiver")]
+    [IntentFilter(new[] { StopBackgroundAction })]
+    private sealed class StopBackgroundActionReceiver : BroadcastReceiver
+    {
+        public override void OnReceive(Context? context, Intent? intent)
+        {
+            if (context == null || intent == null)
+            {
+                return;
+            }
+
+            if (!string.Equals(intent.Action, StopBackgroundAction, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var pendingResult = GoAsync();
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await HandleStopBackgroundActionAsync(context).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("ShuffleTask", $"Stop background action error: {ex}");
                 }
                 finally
                 {
@@ -231,6 +262,15 @@ internal partial class PersistentBackgroundService
 
             var pendingIntent = PendingIntent.GetActivity(context, 0, intent, flags);
 
+            var stopActionIntent = new Intent(context, typeof(StopBackgroundActionReceiver))
+                .SetAction(StopBackgroundAction);
+
+            var stopActionPendingIntent = PendingIntent.GetBroadcast(
+                context,
+                StopBackgroundActionRequestCode,
+                stopActionIntent,
+                flags);
+
             return new NotificationCompat.Builder(context, ForegroundChannelId)
                 .SetContentTitle("ShuffleTask is running")
                 .SetContentText("Background reminders are enabled.")
@@ -238,8 +278,87 @@ internal partial class PersistentBackgroundService
                 .SetOngoing(true)
                 .SetCategory(Notification.CategoryService)
                 .SetContentIntent(pendingIntent)
+                .AddAction(new NotificationCompat.Action.Builder(
+                    Android.Resource.Drawable.IcMenuCloseClearCancel,
+                    "Stop background activity.",
+                    stopActionPendingIntent).Build())
                 .Build();
         }
+    }
+
+    private static PendingIntent? CreateAlarmPendingIntent(Context context, PendingIntentFlags baseFlags)
+    {
+        var intent = new Intent(context, typeof(ShuffleCoordinatorAlarmReceiver))
+            .SetAction(AlarmAction);
+
+        PendingIntentFlags flags = baseFlags;
+        if (OperatingSystem.IsAndroidVersionAtLeast(23))
+        {
+            flags |= PendingIntentFlags.Immutable;
+        }
+
+        return PendingIntent.GetBroadcast(context, AlarmRequestCode, intent, flags);
+    }
+
+    private static void CancelAlarmOnly(Context context)
+    {
+        var pendingIntent = CreateAlarmPendingIntent(context, PendingIntentFlags.NoCreate);
+        if (pendingIntent == null)
+        {
+            return;
+        }
+
+        if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
+        {
+            alarmManager.Cancel(pendingIntent);
+        }
+
+        pendingIntent.Cancel();
+    }
+
+    private static async Task HandleStopBackgroundActionAsync(Context context)
+    {
+        NotificationManagerCompat.From(context).CancelAll();
+
+        var services = MauiProgram.TryGetServiceProvider();
+        if (services == null)
+        {
+            Log.Info("ShuffleTask", "Foreground notification action invoked: stop background activity.");
+            CancelAlarmOnly(context);
+            PersistentBackgroundAndroidService.Stop(context);
+            return;
+        }
+
+        var logger = services.GetService<ILogger<StopBackgroundActionReceiver>>();
+        logger?.LogInformation("Foreground notification action invoked: stop background activity.");
+
+        var settings = services.GetService<AppSettings>();
+        var storage = services.GetService<IStorageService>();
+        var coordinator = services.GetService<ShuffleCoordinatorService>();
+        var clock = services.GetService<TimeProvider>() ?? TimeProvider.System;
+
+        if (settings != null)
+        {
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                settings.BackgroundActivityEnabled = false;
+                settings.Touch(clock);
+            }).ConfigureAwait(false);
+
+            if (storage != null)
+            {
+                await storage.SetSettingsAsync(settings).ConfigureAwait(false);
+            }
+        }
+
+        if (coordinator != null)
+        {
+            await coordinator.ApplyBackgroundActivityChangeAsync(false).ConfigureAwait(false);
+            return;
+        }
+
+        CancelAlarmOnly(context);
+        PersistentBackgroundAndroidService.Stop(context);
     }
 }
 #endif
