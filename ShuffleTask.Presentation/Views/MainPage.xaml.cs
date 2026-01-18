@@ -1,4 +1,8 @@
+using Microsoft.Extensions.Logging;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation;
+using ShuffleTask.Presentation.Services;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Views;
@@ -105,5 +109,45 @@ public partial class MainPage : TabbedPage
         };
 
         return navigationPage;
+    }
+
+    private async void OnExitAndStopBackgroundClicked(object sender, EventArgs e)
+    {
+        IServiceProvider? services = ResolveServiceProvider();
+        if (services == null)
+        {
+            MauiApplication.Current?.Quit();
+            return;
+        }
+
+        var logger = services.GetService<ILogger<MainPage>>();
+        var storage = services.GetService<IStorageService>();
+        var settings = services.GetService<AppSettings>();
+        var coordinator = services.GetService<ShuffleCoordinatorService>();
+        var clock = services.GetService<TimeProvider>();
+
+        if (storage == null || settings == null || coordinator == null || clock == null)
+        {
+            logger?.LogWarning("Exit and stop background activity requested, but required services were unavailable.");
+            MauiApplication.Current?.Quit();
+            return;
+        }
+
+        try
+        {
+            logger?.LogInformation("Exit and stop background activity requested from menu.");
+            settings.BackgroundActivityEnabled = false;
+            settings.Touch(clock);
+            await storage.SetSettingsAsync(settings);
+            await coordinator.ApplyBackgroundActivityChangeAsync(false);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Failed to stop background activity before exiting.");
+        }
+        finally
+        {
+            MauiApplication.Current?.Quit();
+        }
     }
 }
