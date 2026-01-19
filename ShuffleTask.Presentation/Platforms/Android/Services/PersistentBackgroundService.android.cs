@@ -316,6 +316,12 @@ internal partial class PersistentBackgroundService
         pendingIntent.Cancel();
     }
 
+    /// <summary>
+    /// Handles Android shutdown by favoring a graceful teardown over a programmatic process kill:
+    /// 1) remove the foreground notification, 2) cancel scheduled alarm work, and
+    /// 3) stop the foreground service. This keeps the app compliant with platform guidance
+    /// and avoids forced process termination unless Android itself explicitly does so.
+    /// </summary>
     private static async Task HandleStopBackgroundActionAsync(Context context)
     {
         NotificationManagerCompat.From(context).CancelAll();
@@ -357,6 +363,8 @@ internal partial class PersistentBackgroundService
             return;
         }
 
+        // If we cannot reach the coordinator, explicitly cancel the alarm work and stop the
+        // foreground service. We still do not forcefully terminate the process here.
         CancelAlarmOnly(context);
         PersistentBackgroundAndroidService.Stop(context);
     }
