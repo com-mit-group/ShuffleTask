@@ -100,7 +100,14 @@ public static class TimeWindowService
 
         if (customWeekdays.HasValue)
         {
-            Weekdays today = GetWeekdayFlag(now);
+            DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+            DateTimeOffset weekdaySource = local;
+            if (start.Value > end.Value && local.TimeOfDay < end.Value)
+            {
+                weekdaySource = local.AddDays(-1);
+            }
+
+            Weekdays today = GetWeekdayFlag(weekdaySource);
             if (!customWeekdays.Value.HasFlag(today))
             {
                 return false;
