@@ -127,7 +127,7 @@ public static class TimeWindowService
             date = date.AddDays(1);
         }
 
-        DateTimeOffset candidate = new DateTimeOffset(date + start, local.Offset);
+        DateTimeOffset candidate = CreateLocalCandidate(date, start);
         if (candidate <= local)
         {
             date = date.AddDays(1);
@@ -136,10 +136,17 @@ public static class TimeWindowService
                 date = date.AddDays(1);
             }
 
-            candidate = new DateTimeOffset(date + start, local.Offset);
+            candidate = CreateLocalCandidate(date, start);
         }
 
         return candidate.ToOffset(TimeSpan.Zero);
+    }
+
+    private static DateTimeOffset CreateLocalCandidate(DateTime date, TimeSpan start)
+    {
+        DateTime localDateTime = date + start;
+        TimeSpan offset = TimeZoneInfo.Local.GetUtcOffset(localDateTime);
+        return new DateTimeOffset(localDateTime, offset);
     }
 
     private static DateTimeOffset GetNextOccurrence(DateTimeOffset now, TimeSpan boundary)
