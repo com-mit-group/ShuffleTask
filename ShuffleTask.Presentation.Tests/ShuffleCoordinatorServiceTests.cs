@@ -101,6 +101,35 @@ public class ShuffleCoordinatorServiceTests
         Assert.That(_background.ScheduleCount, Is.GreaterThan(1), "Reevaluation should schedule again.");
     }
 
+    [Test]
+    public async Task StartAsync_WhenBackgroundDisabled_DoesNotSchedule()
+    {
+        _settings.BackgroundActivityEnabled = false;
+
+        using var service = CreateService();
+        await service.StartAsync();
+
+        Assert.That(_background.ScheduleCount, Is.EqualTo(0));
+        Assert.That(_background.AsyncScheduleCount, Is.EqualTo(0));
+        Assert.That(_background.LastScheduledAt, Is.Null);
+    }
+
+    [Test]
+    public async Task ApplyBackgroundActivityChangeAsync_WhenReenabled_SchedulesWork()
+    {
+        _settings.BackgroundActivityEnabled = false;
+
+        using var service = CreateService();
+        await service.StartAsync();
+
+        _settings.BackgroundActivityEnabled = true;
+        await service.ApplyBackgroundActivityChangeAsync(true);
+
+        Assert.That(_background.ScheduleCount, Is.GreaterThan(0));
+        Assert.That(_background.AsyncScheduleCount, Is.GreaterThan(0));
+        Assert.That(_background.LastScheduledAt, Is.Not.Null);
+    }
+
     private ShuffleCoordinatorService CreateService()
     {
         var network = Substitute.For<INetworkSyncService>();
@@ -174,6 +203,10 @@ public class ShuffleCoordinatorServiceTests
         }
 
         public void Cancel()
+        {
+        }
+
+        public void Stop()
         {
         }
 

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Serialization;
+using Newtonsoft.Json;
 using NUnit.Framework;
 using ShuffleTask.Application.Models;
 
@@ -94,6 +95,32 @@ public class AppSettingsTests
             Assert.That(settings.UrgencyWeight, Is.EqualTo(11.1111111111).Within(1e-6));
             Assert.That(settings.ImportanceWeight + settings.UrgencyWeight, Is.EqualTo(100.0).Within(1e-6));
         });
+    }
+
+    [Test]
+    public void Deserialize_MissingBackgroundActivityFlag_DefaultsToOn()
+    {
+        const string legacyPayload = """{"Active":true}""";
+
+        var settings = JsonConvert.DeserializeObject<AppSettings>(legacyPayload);
+
+        Assert.That(settings, Is.Not.Null);
+        Assert.That(settings!.BackgroundActivityEnabled, Is.True);
+    }
+
+    [Test]
+    public void Deserialize_BackgroundActivityOff_PersistsAcrossRestarts()
+    {
+        var settings = new AppSettings
+        {
+            BackgroundActivityEnabled = false
+        };
+
+        string payload = JsonConvert.SerializeObject(settings);
+        var restored = JsonConvert.DeserializeObject<AppSettings>(payload);
+
+        Assert.That(restored, Is.Not.Null);
+        Assert.That(restored!.BackgroundActivityEnabled, Is.False);
     }
 
     private static void SetPrivateWeights(AppSettings settings, double importance, double urgency)

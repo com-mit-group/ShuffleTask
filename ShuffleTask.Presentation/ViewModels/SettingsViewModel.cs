@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
@@ -8,6 +9,7 @@ using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Presentation.Services;
 using System;
 using System.ComponentModel;
+using System.Threading;
 using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.ViewModels;
@@ -21,12 +23,15 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly TimeProvider _clock;
     private readonly INetworkSyncService _networkSync;
     private readonly TasksViewModel _tasksViewModel;
+    private readonly ILogger<SettingsViewModel>? _logger;
     private const int MaxUsernameLength = 64;
     private const string Windows = "Windows";
     private NetworkOptions? _networkOptions;
     private string? _lastUserId;
     private bool _lastAnonymousMode;
     private bool _disposed;
+    private bool _lastBackgroundActivityEnabled;
+    private readonly SemaphoreSlim _backgroundActivityToggleGate = new(1, 1);
 
     private string _selectedPeerPlatform = Windows;
 
@@ -46,7 +51,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     public SettingsViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications,
                              ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSync,
-                             AppSettings settings, TasksViewModel tasksViewModel)
+                             AppSettings settings, TasksViewModel tasksViewModel, ILogger<SettingsViewModel>? logger = null)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -56,7 +61,9 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _networkSync = networkSync ?? throw new ArgumentNullException(nameof(networkSync));
         _tasksViewModel = tasksViewModel ?? throw new ArgumentNullException(nameof(tasksViewModel));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger;
         UpdateNetworkSubscription(null, settings.Network);
+        SubscribeSettings(settings);
         CacheSessionState();
     }
 
@@ -275,6 +282,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnSettingsChanged(AppSettings value)
     {
         UpdateNetworkSubscription(_networkOptions, value.Network);
+        SubscribeSettings(value);
         OnPropertyChanged(nameof(UsePomodoro));
         OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
     }
@@ -282,6 +290,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnSettingsChanging(AppSettings value)
     {
         _ = value;
+        UnsubscribeSettings(_settings);
         UpdateNetworkSubscription(_networkOptions, null);
     }
 
@@ -307,6 +316,58 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         if (newNetwork != null)
         {
             newNetwork.PropertyChanged += OnNetworkChanged;
+        }
+    }
+
+    private void SubscribeSettings(AppSettings settings)
+    {
+        _lastBackgroundActivityEnabled = settings.BackgroundActivityEnabled;
+        settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void UnsubscribeSettings(AppSettings? settings)
+    {
+        if (settings is null)
+        {
+            return;
+        }
+
+        settings.PropertyChanged -= OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AppSettings.BackgroundActivityEnabled))
+        {
+            return;
+        }
+
+        bool enabled = Settings.BackgroundActivityEnabled;
+        if (enabled == _lastBackgroundActivityEnabled)
+        {
+            return;
+        }
+
+        _lastBackgroundActivityEnabled = enabled;
+        _logger?.LogInformation("Background activity toggled {State}.", enabled ? "on" : "off");
+        _ = HandleBackgroundActivityToggleAsync(enabled);
+    }
+
+    private async Task HandleBackgroundActivityToggleAsync(bool enabled)
+    {
+        await _backgroundActivityToggleGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await PersistSettingsAsync().ConfigureAwait(false);
+            await _coordinator.ApplyBackgroundActivityChangeAsync(enabled).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to apply background activity toggle.");
+        }
+        finally
+        {
+            _backgroundActivityToggleGate.Release();
         }
     }
 
@@ -448,6 +509,8 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         UpdateNetworkSubscription(_networkOptions, null);
+        UnsubscribeSettings(Settings);
+        _backgroundActivityToggleGate.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }

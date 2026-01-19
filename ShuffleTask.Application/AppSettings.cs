@@ -51,6 +51,9 @@ public partial class AppSettings : ObservableObject
     [ObservableProperty]
     private bool active = true; // master switch
 
+    [ObservableProperty]
+    private bool backgroundActivityEnabled = true; // background scheduling + notifications
+
     public bool AutoShuffleEnabled { get; set; } = true;
 
     [ObservableProperty]
@@ -126,6 +129,7 @@ public partial class AppSettings : ObservableObject
         EnableNotifications = source.EnableNotifications;
         SoundOn = source.SoundOn;
         Active = source.Active;
+        BackgroundActivityEnabled = source.BackgroundActivityEnabled;
         AutoShuffleEnabled = source.AutoShuffleEnabled;
         ManualShuffleRespectsAllowedPeriod = source.ManualShuffleRespectsAllowedPeriod;
         MaxDailyShuffles = source.MaxDailyShuffles;
