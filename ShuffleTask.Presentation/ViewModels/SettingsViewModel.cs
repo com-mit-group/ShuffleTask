@@ -509,6 +509,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         UpdateNetworkSubscription(_networkOptions, null);
+        UnsubscribeSettings(Settings);
         _backgroundActivityToggleGate.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
