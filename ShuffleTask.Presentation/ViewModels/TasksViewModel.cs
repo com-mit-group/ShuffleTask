@@ -228,7 +228,7 @@ public class TaskListItem
             AllowedPeriod.Any => "Auto shuffle: Any time",
             AllowedPeriod.Work => "Auto shuffle: Work hours (Mon–Fri)",
             AllowedPeriod.OffWork => "Auto shuffle: Off hours (includes weekends)",
-            AllowedPeriod.Custom => "Auto shuffle: Custom hours (Mon–Fri)",
+            AllowedPeriod.Custom => "Auto shuffle: Custom hours",
             _ => "Auto shuffle: Any time"
         };
 

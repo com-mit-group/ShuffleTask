@@ -80,7 +80,6 @@ public class TimeWindowServiceTests
         {
             Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.Work, weekend, settings), Is.False);
             Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.OffWork, weekend, settings), Is.True);
-            Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.Custom, weekend, settings), Is.False);
         });
     }
 
@@ -200,7 +199,7 @@ public class TimeWindowServiceTests
         {
             Assert.That(TimeWindowService.AutoShuffleAllowedNow(workTask, weekend, settings), Is.False);
             Assert.That(TimeWindowService.AutoShuffleAllowedNow(offWorkTask, weekend, settings), Is.True);
-            Assert.That(TimeWindowService.AutoShuffleAllowedNow(customTask, weekend, settings), Is.False);
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(customTask, weekend, settings), Is.True);
         });
     }
 

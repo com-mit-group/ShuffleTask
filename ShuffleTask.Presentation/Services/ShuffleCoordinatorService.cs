@@ -851,7 +851,12 @@ public class ShuffleCoordinatorService : IDisposable
                 return false;
             }
 
-            if (task.AllowedPeriod is AllowedPeriod.Work or AllowedPeriod.Custom)
+            if (task.AllowedPeriod is AllowedPeriod.Custom)
+            {
+                return false;
+            }
+
+            if (task.AllowedPeriod is AllowedPeriod.Work)
             {
                 hasWeekendBlocked = true;
             }

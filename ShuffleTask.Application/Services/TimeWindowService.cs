@@ -43,7 +43,6 @@ public static class TimeWindowService
             {
                 AllowedPeriod.Work => false,
                 AllowedPeriod.OffWork => true,
-                AllowedPeriod.Custom => false,
                 _ => true
             };
         }
@@ -74,7 +73,7 @@ public static class TimeWindowService
             {
                 AllowedPeriod.Work => false,
                 AllowedPeriod.OffWork => true,
-                AllowedPeriod.Custom => false,
+                AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime),
                 _ => true
             };
         }
@@ -93,6 +92,7 @@ public static class TimeWindowService
     // Check if current time is within custom hours defined for a task
     private static bool IsWithinCustomHours(DateTimeOffset now, TimeSpan? start, TimeSpan? end)
     {
+        // TODO: Expand custom period rules to support weekday-specific constraints.
         // If either custom bound is not set, default to allowing
         if (!start.HasValue || !end.HasValue)
         {

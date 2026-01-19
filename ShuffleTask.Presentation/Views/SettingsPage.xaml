@@ -72,7 +72,7 @@
 
             <Label Grid.Row="3"
                    Grid.ColumnSpan="2"
-                   Text="Work hours apply to weekdays only (Mon–Fri). Weekends are always Off-Work."
+                   Text="Work hours apply to weekdays (Mon–Fri). Custom hours follow your time range."
                    FontSize="12"
                    TextColor="#6B7280" />
 

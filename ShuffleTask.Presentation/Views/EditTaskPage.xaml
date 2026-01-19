@@ -164,7 +164,7 @@
                     SelectedItem="{Binding AllowedPeriod}" />
 
             <Label Grid.Row="9"
-                   Text="Weekends are always Off-Work."
+                   Text="Work hours apply to weekdays. Custom hours follow your time range."
                    FontSize="12"
                    TextColor="#6B7280" />
 
