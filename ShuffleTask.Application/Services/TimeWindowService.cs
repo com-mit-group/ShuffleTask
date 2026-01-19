@@ -73,7 +73,7 @@ public static class TimeWindowService
             {
                 AllowedPeriod.Work => false,
                 AllowedPeriod.OffWork => true,
-                AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime),
+                AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime, task.CustomWeekdays),
                 _ => true
             };
         }
@@ -84,22 +84,46 @@ public static class TimeWindowService
             AllowedPeriod.Any => true,
             AllowedPeriod.Work => IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             AllowedPeriod.OffWork => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
-            AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime),
+            AllowedPeriod.Custom => IsWithinCustomHours(now, task.CustomStartTime, task.CustomEndTime, task.CustomWeekdays),
             _ => true,
         };
     }
 
     // Check if current time is within custom hours defined for a task
-    private static bool IsWithinCustomHours(DateTimeOffset now, TimeSpan? start, TimeSpan? end)
+    private static bool IsWithinCustomHours(DateTimeOffset now, TimeSpan? start, TimeSpan? end, Weekdays? customWeekdays)
     {
-        // TODO: Expand custom period rules to support weekday-specific constraints.
         // If either custom bound is not set, default to allowing
         if (!start.HasValue || !end.HasValue)
         {
             return true;
         }
 
+        if (customWeekdays.HasValue)
+        {
+            Weekdays today = GetWeekdayFlag(now);
+            if (!customWeekdays.Value.HasFlag(today))
+            {
+                return false;
+            }
+        }
+
         return IsWithinWorkHours(now, start.Value, end.Value);
+    }
+
+    private static Weekdays GetWeekdayFlag(DateTimeOffset now)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        return local.DayOfWeek switch
+        {
+            DayOfWeek.Sunday => Weekdays.Sun,
+            DayOfWeek.Monday => Weekdays.Mon,
+            DayOfWeek.Tuesday => Weekdays.Tue,
+            DayOfWeek.Wednesday => Weekdays.Wed,
+            DayOfWeek.Thursday => Weekdays.Thu,
+            DayOfWeek.Friday => Weekdays.Fri,
+            DayOfWeek.Saturday => Weekdays.Sat,
+            _ => Weekdays.None
+        };
     }
 
     // Compute minutes until the next work window boundary (open or close)

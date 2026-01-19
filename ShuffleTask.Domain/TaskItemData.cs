@@ -34,6 +34,8 @@ public abstract class TaskItemData
 
     public TimeSpan? CustomEndTime { get; set; }
 
+    public Weekdays? CustomWeekdays { get; set; }
+
     public bool Paused { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -86,6 +88,7 @@ public abstract class TaskItemData
         AutoShuffleAllowed = source.AutoShuffleAllowed;
         CustomStartTime = source.CustomStartTime;
         CustomEndTime = source.CustomEndTime;
+        CustomWeekdays = source.CustomWeekdays;
         Paused = source.Paused;
         CreatedAt = source.CreatedAt;
         Status = source.Status;

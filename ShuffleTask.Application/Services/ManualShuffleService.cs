@@ -29,6 +29,7 @@ public static class ManualShuffleService
                 clone.AllowedPeriod = AllowedPeriod.Any;
                 clone.CustomStartTime = null;
                 clone.CustomEndTime = null;
+                clone.CustomWeekdays = null;
             }
 
             clones.Add(clone);

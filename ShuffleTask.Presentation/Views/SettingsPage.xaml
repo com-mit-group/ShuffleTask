@@ -72,7 +72,7 @@
 
             <Label Grid.Row="3"
                    Grid.ColumnSpan="2"
-                   Text="Work hours apply to weekdays (Mon–Fri). Custom hours follow your time range."
+                   Text="Work hours apply to weekdays (Mon–Fri). Custom hours use the task's weekdays and time range."
                    FontSize="12"
                    TextColor="#6B7280" />
 

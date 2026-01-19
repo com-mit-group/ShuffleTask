@@ -97,6 +97,7 @@ public class TaskItemTests
             IntervalDays = 2,
             LastDoneAt = new DateTime(2025, 9, 10, 12, 0, 0, DateTimeKind.Utc),
             AllowedPeriod = AllowedPeriod.Work,
+            CustomWeekdays = Weekdays.Mon | Weekdays.Wed,
             Paused = true,
             CreatedAt = new DateTime(2025, 9, 1, 9, 0, 0, DateTimeKind.Utc),
             Status = TaskLifecycleStatus.Completed,
@@ -127,6 +128,7 @@ public class TaskItemTests
             Assert.That(actual.IntervalDays, Is.EqualTo(expected.IntervalDays));
             Assert.That(actual.LastDoneAt, Is.EqualTo(expected.LastDoneAt));
             Assert.That(actual.AllowedPeriod, Is.EqualTo(expected.AllowedPeriod));
+            Assert.That(actual.CustomWeekdays, Is.EqualTo(expected.CustomWeekdays));
             Assert.That(actual.Paused, Is.EqualTo(expected.Paused));
             Assert.That(actual.CreatedAt, Is.EqualTo(expected.CreatedAt));
             Assert.That(actual.Status, Is.EqualTo(expected.Status));
