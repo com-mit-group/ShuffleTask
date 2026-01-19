@@ -67,6 +67,24 @@ public class TimeWindowServiceTests
     }
 
     [Test]
+    public void AllowedNow_WeekendOverridesWorkAndCustom()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var weekend = LocalDate(2024, 1, 6, 11, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.Work, weekend, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.OffWork, weekend, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(AllowedPeriod.Custom, weekend, settings), Is.False);
+        });
+    }
+
+    [Test]
     public void UntilNextBoundary_ReturnsZeroWhenAlwaysAllowed()
     {
         var settings = new AppSettings
@@ -145,6 +163,44 @@ public class TimeWindowServiceTests
                 "Task should be allowed during custom time window");
             Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, outside, settings), Is.False,
                 "Task should not be allowed outside custom time window");
+        });
+    }
+
+    [Test]
+    public void AutoShuffleAllowedNow_WeekendOverridesWorkAndCustom()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var weekend = LocalDate(2024, 1, 6, 11, 0);
+
+        var workTask = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Work,
+            AutoShuffleAllowed = true
+        };
+
+        var offWorkTask = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.OffWork,
+            AutoShuffleAllowed = true
+        };
+
+        var customTask = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Custom,
+            AutoShuffleAllowed = true,
+            CustomStartTime = new TimeSpan(10, 0, 0),
+            CustomEndTime = new TimeSpan(14, 0, 0)
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(workTask, weekend, settings), Is.False);
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(offWorkTask, weekend, settings), Is.True);
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(customTask, weekend, settings), Is.False);
         });
     }
 

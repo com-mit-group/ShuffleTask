@@ -226,9 +226,9 @@ public class TaskListItem
         string allowedPeriodText = task.AllowedPeriod switch
         {
             AllowedPeriod.Any => "Auto shuffle: Any time",
-            AllowedPeriod.Work => "Auto shuffle: Work hours",
-            AllowedPeriod.OffWork => "Auto shuffle: Off hours",
-            AllowedPeriod.Custom => "Auto shuffle: Custom hours",
+            AllowedPeriod.Work => "Auto shuffle: Work hours (Mon–Fri)",
+            AllowedPeriod.OffWork => "Auto shuffle: Off hours (includes weekends)",
+            AllowedPeriod.Custom => "Auto shuffle: Custom hours (Mon–Fri)",
             _ => "Auto shuffle: Any time"
         };
 

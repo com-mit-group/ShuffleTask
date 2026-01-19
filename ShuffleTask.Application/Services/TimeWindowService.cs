@@ -5,6 +5,12 @@ namespace ShuffleTask.Application.Services;
 
 public static class TimeWindowService
 {
+    public static bool IsWeekend(DateTimeOffset now)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        return local.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+    }
+
     // Returns true if nowLocal falls inside the [start, end) window in local time.
     // Handles overnight windows (e.g., start 22:00, end 06:00 -> spans midnight).
     public static bool IsWithinWorkHours(DateTimeOffset now, TimeSpan start, TimeSpan end)
@@ -30,13 +36,26 @@ public static class TimeWindowService
     }
 
     public static bool AllowedNow(AllowedPeriod ap, DateTimeOffset now, AppSettings s)
-        => ap switch
+    {
+        if (IsWeekend(now))
+        {
+            return ap switch
+            {
+                AllowedPeriod.Work => false,
+                AllowedPeriod.OffWork => true,
+                AllowedPeriod.Custom => false,
+                _ => true
+            };
+        }
+
+        return ap switch
         {
             AllowedPeriod.Any => true,
             AllowedPeriod.Work => IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             AllowedPeriod.OffWork => !IsWithinWorkHours(now, s.WorkStart, s.WorkEnd),
             _ => true,
         };
+    }
 
     // Check if auto-shuffle is allowed for a specific task at the current time.
     // Manual shuffle uses a separate candidate pool that always bypasses the AutoShuffleAllowed flag
@@ -47,6 +66,17 @@ public static class TimeWindowService
         if (!task.AutoShuffleAllowed)
         {
             return false;
+        }
+
+        if (IsWeekend(now))
+        {
+            return task.AllowedPeriod switch
+            {
+                AllowedPeriod.Work => false,
+                AllowedPeriod.OffWork => true,
+                AllowedPeriod.Custom => false,
+                _ => true
+            };
         }
 
         // Check the allowed period
@@ -85,6 +115,31 @@ public static class TimeWindowService
         DateTimeOffset nextBoundary = GetNextOccurrence(now, nextBoundaryTime);
 
         return nextBoundary - now;
+    }
+
+    public static DateTimeOffset NextWeekdayStart(DateTimeOffset now, TimeSpan start)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        DateTime date = local.Date;
+
+        while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            date = date.AddDays(1);
+        }
+
+        DateTimeOffset candidate = new DateTimeOffset(date + start, local.Offset);
+        if (candidate <= local)
+        {
+            date = date.AddDays(1);
+            while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            {
+                date = date.AddDays(1);
+            }
+
+            candidate = new DateTimeOffset(date + start, local.Offset);
+        }
+
+        return candidate.ToOffset(TimeSpan.Zero);
     }
 
     private static DateTimeOffset GetNextOccurrence(DateTimeOffset now, TimeSpan boundary)

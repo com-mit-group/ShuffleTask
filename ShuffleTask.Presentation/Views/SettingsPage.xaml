@@ -46,6 +46,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -70,23 +71,29 @@
                         Time="{Binding Settings.WorkEnd}" />
 
             <Label Grid.Row="3"
-                   Text="Quiet start"
-                   VerticalOptions="Center" />
-            <TimePicker Grid.Row="3"
-                        Grid.Column="1"
-                        Time="{Binding Settings.QuietHoursStart}" />
+                   Grid.ColumnSpan="2"
+                   Text="Work hours apply to weekdays only (Mon–Fri). Weekends are always Off-Work."
+                   FontSize="12"
+                   TextColor="#6B7280" />
 
             <Label Grid.Row="4"
-                   Text="Quiet end"
+                   Text="Quiet start"
                    VerticalOptions="Center" />
             <TimePicker Grid.Row="4"
                         Grid.Column="1"
-                        Time="{Binding Settings.QuietHoursEnd}" />
+                        Time="{Binding Settings.QuietHoursStart}" />
 
             <Label Grid.Row="5"
+                   Text="Quiet end"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="5"
+                        Grid.Column="1"
+                        Time="{Binding Settings.QuietHoursEnd}" />
+
+            <Label Grid.Row="6"
                    Text="Reminder (min)"
                    VerticalOptions="Center" />
-            <controls:NumericStepper Grid.Row="5"
+            <controls:NumericStepper Grid.Row="6"
                                      Grid.Column="1"
                                      Minimum="5"
                                      Maximum="240"
@@ -94,10 +101,10 @@
                                      Value="{Binding Settings.ReminderMinutes}"
                                      HorizontalOptions="Start" />
 
-            <Label Grid.Row="6"
+            <Label Grid.Row="7"
                    Text="Min gap (min)"
                    VerticalOptions="Center" />
-            <controls:NumericStepper Grid.Row="6"
+            <controls:NumericStepper Grid.Row="7"
                                      Grid.Column="1"
                                      Minimum="5"
                                      Maximum="240"
@@ -105,10 +112,10 @@
                                      Value="{Binding Settings.MinGapMinutes}"
                                      HorizontalOptions="Start" />
 
-            <Label Grid.Row="7"
+            <Label Grid.Row="8"
                    Text="Max gap (min)"
                    VerticalOptions="Center" />
-            <controls:NumericStepper Grid.Row="7"
+            <controls:NumericStepper Grid.Row="8"
                                      Grid.Column="1"
                                      Minimum="5"
                                      Maximum="480"
@@ -116,10 +123,10 @@
                                      Value="{Binding Settings.MaxGapMinutes}"
                                      HorizontalOptions="Start" />
 
-            <Label Grid.Row="8"
+            <Label Grid.Row="9"
                    Text="Max daily shuffles"
                    VerticalOptions="Center" />
-            <controls:NumericStepper Grid.Row="8"
+            <controls:NumericStepper Grid.Row="9"
                                      Grid.Column="1"
                                      Minimum="0"
                                      Maximum="24"
@@ -127,45 +134,45 @@
                                      Value="{Binding Settings.MaxDailyShuffles}"
                                      HorizontalOptions="Start" />
 
-            <Label Grid.Row="9"
-                   Text="Notifications"
-                   VerticalOptions="Center" />
-            <Switch Grid.Row="9"
-                    Grid.Column="1"
-                    IsToggled="{Binding Settings.EnableNotifications}" />
-
             <Label Grid.Row="10"
-                   Text="Sound"
+                   Text="Notifications"
                    VerticalOptions="Center" />
             <Switch Grid.Row="10"
                     Grid.Column="1"
-                    IsToggled="{Binding Settings.SoundOn}" />
+                    IsToggled="{Binding Settings.EnableNotifications}" />
 
             <Label Grid.Row="11"
-                   Text="Active"
+                   Text="Sound"
                    VerticalOptions="Center" />
             <Switch Grid.Row="11"
                     Grid.Column="1"
-                    IsToggled="{Binding Settings.Active}" />
+                    IsToggled="{Binding Settings.SoundOn}" />
 
             <Label Grid.Row="12"
-                   Text="Background activity"
+                   Text="Active"
                    VerticalOptions="Center" />
             <Switch Grid.Row="12"
                     Grid.Column="1"
-                    IsToggled="{Binding Settings.BackgroundActivityEnabled}" />
+                    IsToggled="{Binding Settings.Active}" />
 
             <Label Grid.Row="13"
-                   Text="Manual shuffle respects allowed hours"
+                   Text="Background activity"
                    VerticalOptions="Center" />
             <Switch Grid.Row="13"
                     Grid.Column="1"
-                    IsToggled="{Binding Settings.ManualShuffleRespectsAllowedPeriod}" />
+                    IsToggled="{Binding Settings.BackgroundActivityEnabled}" />
 
             <Label Grid.Row="14"
+                   Text="Manual shuffle respects allowed hours"
+                   VerticalOptions="Center" />
+            <Switch Grid.Row="14"
+                    Grid.Column="1"
+                    IsToggled="{Binding Settings.ManualShuffleRespectsAllowedPeriod}" />
+
+            <Label Grid.Row="15"
                    Text="Streak bias"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="14"
+            <Grid Grid.Row="15"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -177,17 +184,17 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="15"
+            <Label Grid.Row="16"
                    Text="Stable randomness"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="15"
+            <Switch Grid.Row="16"
                     Grid.Column="1"
                     IsToggled="{Binding Settings.StableRandomnessPerDay}" />
 
-            <Label Grid.Row="16"
+            <Label Grid.Row="17"
                    Text="Importance vs urgency"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="16"
+            <Grid Grid.Row="17"
                   Grid.Column="1"
                   RowDefinitions="Auto,Auto"
                   ColumnDefinitions="*,Auto"
@@ -209,10 +216,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="17"
+            <Label Grid.Row="18"
                    Text="Deadline share"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="17"
+            <Grid Grid.Row="18"
                   Grid.Column="1"
                   RowDefinitions="Auto,Auto"
                   ColumnDefinitions="*,Auto"
@@ -234,10 +241,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="18"
+            <Label Grid.Row="19"
                    Text="Repeat penalty"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="18"
+            <Grid Grid.Row="19"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -249,10 +256,10 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="19"
+            <Label Grid.Row="20"
                    Text="Size bias strength"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="19"
+            <Grid Grid.Row="20"
                   Grid.Column="1"
                   ColumnDefinitions="*,Auto"
                   ColumnSpacing="8">
@@ -264,18 +271,18 @@
                        VerticalOptions="Center" />
             </Grid>
 
-            <Label Grid.Row="20"
+            <Label Grid.Row="21"
                    Text="Pomodoro mode"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="20"
+            <Switch Grid.Row="21"
                     Grid.Column="1"
                     IsToggled="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="21"
+            <Label Grid.Row="22"
                    Text="Focus length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="21"
+            <controls:NumericStepper Grid.Row="22"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="240"
@@ -284,11 +291,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="22"
+            <Label Grid.Row="23"
                    Text="Break length (min)"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="22"
+            <controls:NumericStepper Grid.Row="23"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="120"
@@ -297,11 +304,11 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="23"
+            <Label Grid.Row="24"
                    Text="Cycles"
                    VerticalOptions="Center"
                    IsVisible="{Binding UsePomodoro}" />
-            <controls:NumericStepper Grid.Row="23"
+            <controls:NumericStepper Grid.Row="24"
                                      Grid.Column="1"
                                      Minimum="1"
                                      Maximum="12"
@@ -310,18 +317,18 @@
                                      HorizontalOptions="Start"
                                      IsVisible="{Binding UsePomodoro}" />
 
-            <Label Grid.Row="24"
+            <Label Grid.Row="25"
                    Text="Anonymous session"
                    VerticalOptions="Center" />
-            <Switch Grid.Row="24"
+            <Switch Grid.Row="25"
                     Grid.Column="1"
                     IsToggled="{Binding IsAnonymousSession}"
                     IsEnabled="False" />
 
-            <Label Grid.Row="25"
+            <Label Grid.Row="26"
                    Text="User id"
                    VerticalOptions="Center" />
-            <Grid Grid.Row="25" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="26" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <Label Grid.Column="0"
                        Text="{Binding UserDisplayLabel}" />
                 <Button Grid.Column="1"
@@ -336,7 +343,7 @@
                         IsVisible="{Binding IsLoggedIn}" />
             </Grid>
 
-            <Grid Grid.Row="26"
+            <Grid Grid.Row="27"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -348,7 +355,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="27"
+            <ActivityIndicator Grid.Row="28"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
