@@ -665,8 +665,8 @@ public partial class DashboardViewModel : ObservableObject
         string allowed = task.AllowedPeriod switch
         {
             AllowedPeriod.Any => "Any time",
-            AllowedPeriod.Work => "Work hours",
-            AllowedPeriod.OffWork => "Off hours",
+            AllowedPeriod.Work => "Work hours (Mon–Fri)",
+            AllowedPeriod.OffWork => "Off hours (includes weekends)",
             AllowedPeriod.Custom => FormatCustomWindow(task),
             _ => "Any time"
         };

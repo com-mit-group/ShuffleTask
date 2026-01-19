@@ -283,6 +283,14 @@ public class ShuffleCoordinatorService : IDisposable
             return;
         }
 
+        if (ShouldDelayForWeekend(tasks, target))
+        {
+            DateTimeOffset resumeAt = TimeWindowService.NextWeekdayStart(target, settings.WorkStart);
+            resumeAt = EnsureAllowed(resumeAt, settings);
+            StartTimer(resumeAt, null);
+            return;
+        }
+
         DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
         StartTimer(retryAt, null);
     }
@@ -811,6 +819,50 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         return TimeWindowService.AllowedNow(task.AllowedPeriod, when, settings);
+    }
+
+    private static bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
+    {
+        if (!TimeWindowService.IsWeekend(target))
+        {
+            return false;
+        }
+
+        bool hasWeekendBlocked = false;
+        foreach (var task in tasks)
+        {
+            if (task is null)
+            {
+                continue;
+            }
+
+            if (task.Paused || !task.AutoShuffleAllowed)
+            {
+                continue;
+            }
+
+            if (!UtilityMethods.LifecycleEligible(task, target.UtcDateTime))
+            {
+                continue;
+            }
+
+            if (task.AllowedPeriod is AllowedPeriod.Any or AllowedPeriod.OffWork)
+            {
+                return false;
+            }
+
+            if (task.AllowedPeriod is AllowedPeriod.Custom)
+            {
+                return false;
+            }
+
+            if (task.AllowedPeriod is AllowedPeriod.Work)
+            {
+                hasWeekendBlocked = true;
+            }
+        }
+
+        return hasWeekendBlocked;
     }
 
     private static void PersistPendingShuffle(string? taskId, DateTimeOffset scheduledAt)
