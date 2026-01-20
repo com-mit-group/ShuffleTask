@@ -70,6 +70,12 @@ public class StorageService : IStorageService
             await AddCol("IntervalDays", IntegerSqlType, "0");
             await AddCol("LastDoneAt", "TEXT", "NULL");
             await AddCol("AllowedPeriod", IntegerSqlType, "0");
+            await AddCol("PeriodDefinitionId", "TEXT", "NULL");
+            await AddCol("AdHocStartTime", "TEXT", "NULL");
+            await AddCol("AdHocEndTime", "TEXT", "NULL");
+            await AddCol("AdHocWeekdays", IntegerSqlType, "NULL");
+            await AddCol("AdHocIsAllDay", IntegerSqlType, "0");
+            await AddCol("AdHocMode", IntegerSqlType, "0");
             await AddCol("AutoShuffleAllowed", IntegerSqlType, "1");
             await AddCol("CustomStartTime", "TEXT", "NULL");
             await AddCol("CustomEndTime", "TEXT", "NULL");
