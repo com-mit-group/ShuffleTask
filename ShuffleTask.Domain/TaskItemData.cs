@@ -28,6 +28,18 @@ public abstract class TaskItemData
 
     public AllowedPeriod AllowedPeriod { get; set; }
 
+    public string? PeriodDefinitionId { get; set; }
+
+    public TimeSpan? AdHocStartTime { get; set; }
+
+    public TimeSpan? AdHocEndTime { get; set; }
+
+    public Weekdays? AdHocWeekdays { get; set; }
+
+    public bool AdHocIsAllDay { get; set; }
+
+    public PeriodDefinitionMode AdHocMode { get; set; }
+
     public bool AutoShuffleAllowed { get; set; } = true;
 
     public TimeSpan? CustomStartTime { get; set; }
@@ -85,6 +97,12 @@ public abstract class TaskItemData
         IntervalDays = source.IntervalDays;
         LastDoneAt = source.LastDoneAt;
         AllowedPeriod = source.AllowedPeriod;
+        PeriodDefinitionId = source.PeriodDefinitionId;
+        AdHocStartTime = source.AdHocStartTime;
+        AdHocEndTime = source.AdHocEndTime;
+        AdHocWeekdays = source.AdHocWeekdays;
+        AdHocIsAllDay = source.AdHocIsAllDay;
+        AdHocMode = source.AdHocMode;
         AutoShuffleAllowed = source.AutoShuffleAllowed;
         CustomStartTime = source.CustomStartTime;
         CustomEndTime = source.CustomEndTime;
