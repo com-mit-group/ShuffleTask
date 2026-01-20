@@ -166,6 +166,35 @@ public class TimeWindowServiceTests
     }
 
     [Test]
+    public void AutoShuffleAllowedNow_CustomWeekdays_RestrictsWeekend()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var weekday = LocalDate(2024, 1, 2, 11, 0);
+        var weekend = LocalDate(2024, 1, 6, 11, 0);
+
+        var task = new TaskItem
+        {
+            AllowedPeriod = AllowedPeriod.Custom,
+            AutoShuffleAllowed = true,
+            CustomStartTime = new TimeSpan(10, 0, 0),
+            CustomEndTime = new TimeSpan(14, 0, 0),
+            CustomWeekdays = Weekdays.Mon | Weekdays.Tue
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, weekday, settings), Is.True,
+                "Task should be allowed on configured weekdays within the time range");
+            Assert.That(TimeWindowService.AutoShuffleAllowedNow(task, weekend, settings), Is.False,
+                "Task should not be allowed on weekends when custom weekdays exclude them");
+        });
+    }
+
+    [Test]
     public void AutoShuffleAllowedNow_WeekendOverridesWorkAndCustom()
     {
         var settings = new AppSettings

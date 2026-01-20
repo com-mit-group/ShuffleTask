@@ -14,6 +14,9 @@ public partial class EditTaskViewModel : ObservableObject
     private TaskItem _workingCopy = new();
 
     private Weekdays _selectedWeekdays;
+    private Weekdays _selectedCustomWeekdays;
+
+    private static readonly Weekdays AllWeekdays = Weekdays.Sun | Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri | Weekdays.Sat;
 
     private const double MinSizePoints = 0.5;
     private const double MaxSizePoints = 13.0;
@@ -33,6 +36,24 @@ public partial class EditTaskViewModel : ObservableObject
                 OnPropertyChanged(nameof(Thursday));
                 OnPropertyChanged(nameof(Friday));
                 OnPropertyChanged(nameof(Saturday));
+            }
+        }
+    }
+
+    public Weekdays SelectedCustomWeekdays
+    {
+        get => _selectedCustomWeekdays;
+        set
+        {
+            if (SetProperty(ref _selectedCustomWeekdays, value))
+            {
+                OnPropertyChanged(nameof(CustomSunday));
+                OnPropertyChanged(nameof(CustomMonday));
+                OnPropertyChanged(nameof(CustomTuesday));
+                OnPropertyChanged(nameof(CustomWednesday));
+                OnPropertyChanged(nameof(CustomThursday));
+                OnPropertyChanged(nameof(CustomFriday));
+                OnPropertyChanged(nameof(CustomSaturday));
             }
         }
     }
@@ -145,6 +166,13 @@ public partial class EditTaskViewModel : ObservableObject
         SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, day, isSelected);
     }
 
+    private bool GetCustomWeekday(Weekdays day) => _selectedCustomWeekdays.HasFlag(day);
+
+    private void SetCustomWeekday(Weekdays day, bool isSelected)
+    {
+        SelectedCustomWeekdays = ApplyWeekdaySelection(SelectedCustomWeekdays, day, isSelected);
+    }
+
     public bool Sunday
     {
         get => GetWeekday(Weekdays.Sun);
@@ -186,6 +214,48 @@ public partial class EditTaskViewModel : ObservableObject
         get => GetWeekday(Weekdays.Sat);
         set => SetWeekday(Weekdays.Sat, value);
     }
+
+    public bool CustomSunday
+    {
+        get => GetCustomWeekday(Weekdays.Sun);
+        set => SetCustomWeekday(Weekdays.Sun, value);
+    }
+
+    public bool CustomMonday
+    {
+        get => GetCustomWeekday(Weekdays.Mon);
+        set => SetCustomWeekday(Weekdays.Mon, value);
+    }
+
+    public bool CustomTuesday
+    {
+        get => GetCustomWeekday(Weekdays.Tue);
+        set => SetCustomWeekday(Weekdays.Tue, value);
+    }
+
+    public bool CustomWednesday
+    {
+        get => GetCustomWeekday(Weekdays.Wed);
+        set => SetCustomWeekday(Weekdays.Wed, value);
+    }
+
+    public bool CustomThursday
+    {
+        get => GetCustomWeekday(Weekdays.Thu);
+        set => SetCustomWeekday(Weekdays.Thu, value);
+    }
+
+    public bool CustomFriday
+    {
+        get => GetCustomWeekday(Weekdays.Fri);
+        set => SetCustomWeekday(Weekdays.Fri, value);
+    }
+
+    public bool CustomSaturday
+    {
+        get => GetCustomWeekday(Weekdays.Sat);
+        set => SetCustomWeekday(Weekdays.Sat, value);
+    }
     public AppSettings AppSettings { get; }
 
     public event EventHandler? Saved;
@@ -209,6 +279,7 @@ public partial class EditTaskViewModel : ObservableObject
         IsPaused = _workingCopy.Paused;
         CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
+        SelectedCustomWeekdays = _workingCopy.CustomWeekdays ?? AllWeekdays;
 
         // Load custom timer _settings
         UseCustomTimer = _workingCopy.CustomTimerMode.HasValue;
@@ -274,6 +345,9 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.AutoShuffleAllowed = AutoShuffleAllowed;
             _workingCopy.CustomStartTime = AllowedPeriod == AllowedPeriod.Custom ? CustomStartTime : null;
             _workingCopy.CustomEndTime = AllowedPeriod == AllowedPeriod.Custom ? CustomEndTime : null;
+            _workingCopy.CustomWeekdays = AllowedPeriod == AllowedPeriod.Custom
+                ? SelectedCustomWeekdays == AllWeekdays ? null : SelectedCustomWeekdays
+                : null;
             _workingCopy.Paused = IsPaused;
             _workingCopy.CutInLineMode = CutInLineMode;
 
