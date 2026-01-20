@@ -55,6 +55,35 @@ public static class TimeWindowService
         return AllowedNow(definition, now, s);
     }
 
+    public static bool AllowsWeekend(TaskItem task, AppSettings s)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        PeriodDefinition definition = ResolveDefinition(task);
+        return AllowsWeekend(definition, s);
+    }
+
+    public static bool AllowsWeekend(PeriodDefinition definition, AppSettings s)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
+        TimeSpan start = definition.StartTime ?? TimeSpan.Zero;
+        TimeSpan end = definition.EndTime ?? TimeSpan.Zero;
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours))
+        {
+            start = s.WorkStart;
+            end = s.WorkEnd;
+        }
+
+        if (weekdays.HasFlag(Weekdays.Sat) || weekdays.HasFlag(Weekdays.Sun))
+        {
+            return true;
+        }
+
+        return start > end && end > TimeSpan.Zero && weekdays.HasFlag(Weekdays.Fri);
+    }
+
     public static bool AllowedNow(PeriodDefinition definition, DateTimeOffset now, AppSettings s)
     {
         ArgumentNullException.ThrowIfNull(definition);

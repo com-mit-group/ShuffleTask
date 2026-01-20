@@ -821,7 +821,7 @@ public class ShuffleCoordinatorService : IDisposable
         return TimeWindowService.AllowedNow(task, when, settings);
     }
 
-    private static bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
+    private bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
     {
         if (!TimeWindowService.IsWeekend(target))
         {
@@ -846,7 +846,7 @@ public class ShuffleCoordinatorService : IDisposable
                 continue;
             }
 
-            if (TimeWindowService.AllowedNow(task, target, settings))
+            if (TimeWindowService.AllowsWeekend(task, _settings))
             {
                 return false;
             }
