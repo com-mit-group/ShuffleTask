@@ -40,6 +40,7 @@ public class StorageService : IStorageService
         _db = new SQLiteAsyncConnection(_dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
 
         await _db.CreateTableAsync<TaskItemRecord>();
+        await _db.CreateTableAsync<PeriodDefinitionRecord>();
         await _db.CreateTableAsync<KeyValueEntity>();
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
@@ -161,7 +162,9 @@ public class StorageService : IStorageService
         var records = await query
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
-        return records.Select(r => r.ToDomain()).ToList();
+        var tasks = records.Select(r => r.ToDomain()).ToList();
+        await ApplyPeriodDefinitionsAsync(tasks);
+        return tasks;
     }
 
     public async Task<TaskItem?> GetTaskAsync(string id)
@@ -171,7 +174,9 @@ public class StorageService : IStorageService
         var record = await Db.Table<TaskItemRecord>()
                              .Where(t => t.Id == id)
                              .FirstOrDefaultAsync();
-        return record?.ToDomain();
+        var task = record?.ToDomain();
+        await ApplyPeriodDefinitionAsync(task);
+        return task;
     }
 
     public async Task AddTaskAsync(TaskItem item)
@@ -189,7 +194,7 @@ public class StorageService : IStorageService
 
         EnsureMetadata(item, null, bumpVersion: true);
 
-        var record = TaskItemRecord.FromDomain(item);
+        var record = BuildTaskRecord(item);
         await Db.InsertAsync(record);
     }
 
@@ -209,7 +214,7 @@ public class StorageService : IStorageService
 
         EnsureMetadata(item, existing, bumpVersion: true);
 
-        var record = TaskItemRecord.FromDomain(item);
+        var record = BuildTaskRecord(item);
         if (existing == null)
         {
             await Db.InsertAsync(record);
@@ -223,6 +228,68 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
         await Db.DeleteAsync<TaskItemRecord>(id);
+    }
+
+    // Period definitions CRUD
+    public async Task<List<PeriodDefinition>> GetPeriodDefinitionsAsync()
+    {
+        var records = await Db.Table<PeriodDefinitionRecord>()
+                              .OrderBy(r => r.Name)
+                              .ToListAsync();
+        return records.Select(r => r.ToDomain()).ToList();
+    }
+
+    public async Task<PeriodDefinition?> GetPeriodDefinitionAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        var record = await Db.Table<PeriodDefinitionRecord>()
+                              .Where(r => r.Id == id)
+                              .FirstOrDefaultAsync();
+        return record?.ToDomain();
+    }
+
+    public async Task AddPeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        var record = PeriodDefinitionRecord.FromDomain(definition);
+        await Db.InsertAsync(record);
+    }
+
+    public async Task UpdatePeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        var record = PeriodDefinitionRecord.FromDomain(definition);
+        int updated = await Db.UpdateAsync(record);
+        if (updated == 0)
+        {
+            await Db.InsertAsync(record);
+        }
+    }
+
+    public async Task DeletePeriodDefinitionAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return;
+        }
+
+        await Db.DeleteAsync<PeriodDefinitionRecord>(id);
     }
 
     public async Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
@@ -288,6 +355,8 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
+        await ApplyPeriodDefinitionAsync(updated);
+
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
@@ -332,6 +401,8 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
+        await ApplyPeriodDefinitionAsync(updated);
+
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
@@ -363,6 +434,8 @@ public class StorageService : IStorageService
             conn.Update(existing);
             updated = existing.ToDomain();
         });
+
+        await ApplyPeriodDefinitionAsync(updated);
 
         if (updated != null && originalStatus != null)
         {
@@ -474,6 +547,89 @@ public class StorageService : IStorageService
             DateTimeKind.Local => value.ToUniversalTime(),
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
+    }
+
+    private static TaskItemRecord BuildTaskRecord(TaskItem item)
+    {
+        var record = TaskItemRecord.FromDomain(item);
+        NormalizePeriodDefinition(record);
+        return record;
+    }
+
+    private static void NormalizePeriodDefinition(TaskItemData item)
+    {
+        if (string.IsNullOrWhiteSpace(item.PeriodDefinitionId))
+        {
+            return;
+        }
+
+        item.AdHocStartTime = null;
+        item.AdHocEndTime = null;
+        item.AdHocWeekdays = null;
+        item.AdHocIsAllDay = false;
+        item.AdHocMode = PeriodDefinitionMode.None;
+    }
+
+    private async Task ApplyPeriodDefinitionsAsync(IReadOnlyList<TaskItem> tasks)
+    {
+        if (tasks.Count == 0)
+        {
+            return;
+        }
+
+        var ids = tasks.Select(t => t.PeriodDefinitionId)
+            .Where(IsCustomPeriodDefinitionId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var records = await Db.Table<PeriodDefinitionRecord>()
+                              .Where(r => ids.Contains(r.Id))
+                              .ToListAsync();
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var map = records.ToDictionary(r => r.Id, r => r.ToDomain(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var task in tasks)
+        {
+            if (task.PeriodDefinitionId != null && map.TryGetValue(task.PeriodDefinitionId, out PeriodDefinition? definition))
+            {
+                ApplyPeriodDefinition(task, definition);
+            }
+        }
+    }
+
+    private async Task ApplyPeriodDefinitionAsync(TaskItem? task)
+    {
+        if (task == null)
+        {
+            return;
+        }
+
+        await ApplyPeriodDefinitionsAsync(new[] { task });
+    }
+
+    private static void ApplyPeriodDefinition(TaskItem task, PeriodDefinition definition)
+    {
+        task.AdHocStartTime = definition.StartTime;
+        task.AdHocEndTime = definition.EndTime;
+        task.AdHocWeekdays = definition.Weekdays;
+        task.AdHocIsAllDay = definition.IsAllDay;
+        task.AdHocMode = definition.Mode;
+    }
+
+    private static bool IsCustomPeriodDefinitionId(string? id)
+    {
+        return !string.IsNullOrWhiteSpace(id)
+            && !PeriodDefinitionCatalog.TryGet(id, out _);
     }
 
     // Settings
