@@ -563,6 +563,11 @@ public class StorageService : IStorageService
             return;
         }
 
+        if (IsCustomPeriodDefinitionId(item.PeriodDefinitionId))
+        {
+            return;
+        }
+
         item.AdHocStartTime = null;
         item.AdHocEndTime = null;
         item.AdHocWeekdays = null;
