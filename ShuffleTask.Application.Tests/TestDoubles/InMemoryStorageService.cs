@@ -8,6 +8,7 @@ namespace ShuffleTask.Application.Tests.TestDoubles;
 internal sealed class InMemoryStorageService : IStorageService
 {
     private readonly ConcurrentDictionary<string, TaskItem> _tasks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, PeriodDefinition> _periodDefinitions = new(StringComparer.OrdinalIgnoreCase);
     private readonly TimeProvider _clock;
     private bool _initialized;
     private readonly AppSettings _settings;
@@ -38,20 +39,29 @@ internal sealed class InMemoryStorageService : IStorageService
             query = query.Where(t => string.IsNullOrWhiteSpace(t.UserId) && string.Equals(t.DeviceId, deviceId, StringComparison.Ordinal));
         }
 
-        return Task.FromResult(query.Select(Clone).ToList());
+        var tasks = query.Select(Clone).ToList();
+        ApplyPeriodDefinitions(tasks);
+        return Task.FromResult(tasks);
     }
 
     public Task<TaskItem?> GetTaskAsync(string id)
     {
         EnsureInitialized();
-        return Task.FromResult(_tasks.TryGetValue(id, out var value) ? Clone(value) : null);
+        if (!_tasks.TryGetValue(id, out var value))
+        {
+            return Task.FromResult<TaskItem?>(null);
+        }
+
+        var clone = Clone(value);
+        ApplyPeriodDefinition(clone);
+        return Task.FromResult<TaskItem?>(clone);
     }
 
     public Task AddTaskAsync(TaskItem item)
     {
         EnsureInitialized();
         NormalizeMetadata(item, null, bumpVersion: true);
-        _tasks[item.Id] = Clone(item);
+        _tasks[item.Id] = NormalizePeriodDefinition(item);
         return Task.CompletedTask;
     }
 
@@ -59,13 +69,60 @@ internal sealed class InMemoryStorageService : IStorageService
     {
         EnsureInitialized();
         NormalizeMetadata(item, _tasks.TryGetValue(item.Id, out var existing) ? existing : null, bumpVersion: true);
-        _tasks[item.Id] = Clone(item);
+        _tasks[item.Id] = NormalizePeriodDefinition(item);
         return Task.CompletedTask;
     }
 
     public Task DeleteTaskAsync(string id)
     {
         _tasks.TryRemove(id, out _);
+        return Task.CompletedTask;
+    }
+
+    public Task<List<PeriodDefinition>> GetPeriodDefinitionsAsync()
+    {
+        EnsureInitialized();
+        var definitions = _periodDefinitions.Values
+            .OrderBy(definition => definition.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(Clone)
+            .ToList();
+        return Task.FromResult(definitions);
+    }
+
+    public Task<PeriodDefinition?> GetPeriodDefinitionAsync(string id)
+    {
+        EnsureInitialized();
+        return Task.FromResult(_periodDefinitions.TryGetValue(id, out var definition) ? Clone(definition) : null);
+    }
+
+    public Task AddPeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        EnsureInitialized();
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        _periodDefinitions[definition.Id] = Clone(definition);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdatePeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        EnsureInitialized();
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        _periodDefinitions[definition.Id] = Clone(definition);
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePeriodDefinitionAsync(string id)
+    {
+        EnsureInitialized();
+        _periodDefinitions.TryRemove(id, out _);
         return Task.CompletedTask;
     }
 
@@ -120,6 +177,68 @@ internal sealed class InMemoryStorageService : IStorageService
     }
 
     private static TaskItem Clone(TaskItem task) => TaskItem.Clone(task);
+
+    private static PeriodDefinition Clone(PeriodDefinition definition)
+    {
+        return new PeriodDefinition
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            Weekdays = definition.Weekdays,
+            StartTime = definition.StartTime,
+            EndTime = definition.EndTime,
+            IsAllDay = definition.IsAllDay,
+            Mode = definition.Mode
+        };
+    }
+
+    private TaskItem NormalizePeriodDefinition(TaskItem task)
+    {
+        var clone = Clone(task);
+        if (string.IsNullOrWhiteSpace(clone.PeriodDefinitionId))
+        {
+            return clone;
+        }
+
+        clone.AdHocStartTime = null;
+        clone.AdHocEndTime = null;
+        clone.AdHocWeekdays = null;
+        clone.AdHocIsAllDay = false;
+        clone.AdHocMode = PeriodDefinitionMode.None;
+        return clone;
+    }
+
+    private void ApplyPeriodDefinitions(IReadOnlyList<TaskItem> tasks)
+    {
+        foreach (var task in tasks)
+        {
+            ApplyPeriodDefinition(task);
+        }
+    }
+
+    private void ApplyPeriodDefinition(TaskItem task)
+    {
+        if (string.IsNullOrWhiteSpace(task.PeriodDefinitionId))
+        {
+            return;
+        }
+
+        if (PeriodDefinitionCatalog.TryGet(task.PeriodDefinitionId, out _))
+        {
+            return;
+        }
+
+        if (!_periodDefinitions.TryGetValue(task.PeriodDefinitionId, out var definition))
+        {
+            return;
+        }
+
+        task.AdHocStartTime = definition.StartTime;
+        task.AdHocEndTime = definition.EndTime;
+        task.AdHocWeekdays = definition.Weekdays;
+        task.AdHocIsAllDay = definition.IsAllDay;
+        task.AdHocMode = definition.Mode;
+    }
 
     private static DateTime EnsureUtc(DateTime value) => value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
 }
