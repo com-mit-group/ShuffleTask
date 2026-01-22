@@ -37,14 +37,7 @@ public static class TimeWindowService
 
     public static bool AllowedNow(AllowedPeriod ap, DateTimeOffset now, AppSettings s)
     {
-        PeriodDefinition definition = ap switch
-        {
-            AllowedPeriod.Work => PeriodDefinitionCatalog.Work,
-            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWork,
-            _ => PeriodDefinitionCatalog.Any
-        };
-
-        return AllowedNow(definition, now, s);
+        return AllowedNow(GetDefinitionForAllowedPeriod(ap), now, s);
     }
 
     public static bool AllowedNow(TaskItem task, DateTimeOffset now, AppSettings s)
@@ -68,13 +61,7 @@ public static class TimeWindowService
         ArgumentNullException.ThrowIfNull(definition);
 
         Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
-        TimeSpan start = definition.StartTime ?? TimeSpan.Zero;
-        TimeSpan end = definition.EndTime ?? TimeSpan.Zero;
-        if (definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours))
-        {
-            start = s.WorkStart;
-            end = s.WorkEnd;
-        }
+        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
 
         if (weekdays.HasFlag(Weekdays.Sat) || weekdays.HasFlag(Weekdays.Sun))
         {
@@ -89,15 +76,17 @@ public static class TimeWindowService
         ArgumentNullException.ThrowIfNull(definition);
 
         Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
-        TimeSpan start = definition.StartTime ?? TimeSpan.Zero;
-        TimeSpan end = definition.EndTime ?? TimeSpan.Zero;
-        if (definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours))
-        {
-            start = s.WorkStart;
-            end = s.WorkEnd;
-        }
+        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+        bool isAllDay = definition.IsAllDay;
 
-        if (!IsWithinWeekdayScope(now, weekdays, start, end))
+        if (isAllDay)
+        {
+            if (!IsWithinWeekdayScopeForAllDay(now, weekdays))
+            {
+                return false;
+            }
+        }
+        else if (!IsWithinWeekdayScope(now, weekdays, start, end))
         {
             return false;
         }
@@ -112,7 +101,7 @@ public static class TimeWindowService
             return !IsWithinWorkHours(now, start, end);
         }
 
-        return definition.IsAllDay || IsWithinWorkHours(now, start, end);
+        return isAllDay || IsWithinWorkHours(now, start, end);
     }
 
     private static PeriodDefinition ResolveDefinition(TaskItem task)
@@ -129,10 +118,8 @@ public static class TimeWindowService
 
         return task.AllowedPeriod switch
         {
-            AllowedPeriod.Work => PeriodDefinitionCatalog.Work,
-            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWork,
             AllowedPeriod.Custom => BuildLegacyCustomDefinition(task),
-            _ => PeriodDefinitionCatalog.Any
+            _ => GetDefinitionForAllowedPeriod(task.AllowedPeriod)
         };
     }
 
@@ -182,6 +169,39 @@ public static class TimeWindowService
     private static Weekdays NormalizeWeekdays(Weekdays weekdays)
     {
         return weekdays == Weekdays.None ? PeriodDefinitionCatalog.AllWeekdays : weekdays;
+    }
+
+    private static bool IsWithinWeekdayScopeForAllDay(DateTimeOffset now, Weekdays weekdays)
+    {
+        if (weekdays == Weekdays.None)
+        {
+            return true;
+        }
+
+        return weekdays.HasFlag(GetWeekdayFlag(now));
+    }
+
+    private static PeriodDefinition GetDefinitionForAllowedPeriod(AllowedPeriod allowedPeriod)
+    {
+        return allowedPeriod switch
+        {
+            AllowedPeriod.Work => PeriodDefinitionCatalog.Work,
+            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWork,
+            _ => PeriodDefinitionCatalog.Any
+        };
+    }
+
+    private static (TimeSpan Start, TimeSpan End) ResolveTimeWindow(PeriodDefinition definition, AppSettings s)
+    {
+        bool alignsWithWorkHours = definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours)
+            || definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours);
+
+        if (alignsWithWorkHours)
+        {
+            return (s.WorkStart, s.WorkEnd);
+        }
+
+        return (definition.StartTime ?? TimeSpan.Zero, definition.EndTime ?? TimeSpan.Zero);
     }
 
     private static bool IsWithinWeekdayScope(DateTimeOffset now, Weekdays weekdays, TimeSpan start, TimeSpan end)
