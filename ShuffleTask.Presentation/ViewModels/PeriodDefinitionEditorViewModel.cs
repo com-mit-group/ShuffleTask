@@ -15,7 +15,7 @@ public sealed partial class PeriodDefinitionEditorViewModel : ViewModelWithWeekd
     public PeriodDefinitionEditorViewModel(IStorageService storage)
     {
         _storage = storage;
-        AlignmentModeOptions = AlignmentModeOption.CreateDefaults();
+        AlignmentModeOptions = AlignmentModeCatalog.Defaults;
         SelectedAlignmentMode = AlignmentModeOptions[0];
         SelectedWeekdays = PeriodDefinitionCatalog.AllWeekdays;
     }
