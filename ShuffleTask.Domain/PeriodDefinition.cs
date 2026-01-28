@@ -37,7 +37,7 @@ public static class PeriodDefinitionCatalog
     public const string LunchBreakId = "lunch-break";
 
     public static readonly Weekdays AllWeekdays =
-        Weekdays.Sun | Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri | Weekdays.Sat;
+        Entities.Weekdays.Sun| Entities.Weekdays.Mon | Entities.Weekdays.Tue | Entities.Weekdays.Wed | Entities.Weekdays.Thu | Entities.Weekdays.Fri | Entities.Weekdays.Sat;
 
     public static readonly PeriodDefinition Any = new()
     {
@@ -52,7 +52,7 @@ public static class PeriodDefinitionCatalog
     {
         Id = WorkId,
         Name = "Work hours",
-        Weekdays = Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri,
+        Weekdays = Entities.Weekdays.Mon | Entities.Weekdays.Tue | Entities.Weekdays.Wed | Entities.Weekdays.Thu | Entities.Weekdays.Fri,
         IsAllDay = false,
         Mode = PeriodDefinitionMode.AlignWithWorkHours
     };
@@ -70,7 +70,7 @@ public static class PeriodDefinitionCatalog
     {
         Id = WeekdaysId,
         Name = "Weekdays",
-        Weekdays = Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri,
+        Weekdays = Entities.Weekdays.Mon | Entities.Weekdays.Tue | Entities.Weekdays.Wed | Entities.Weekdays.Thu | Entities.Weekdays.Fri,
         IsAllDay = true,
         Mode = PeriodDefinitionMode.None
     };
@@ -79,7 +79,7 @@ public static class PeriodDefinitionCatalog
     {
         Id = WeekendsId,
         Name = "Weekends",
-        Weekdays = Weekdays.Sun | Weekdays.Sat,
+        Weekdays = Entities.Weekdays.Sun | Entities.Weekdays.Sat,
         IsAllDay = true,
         Mode = PeriodDefinitionMode.None
     };
