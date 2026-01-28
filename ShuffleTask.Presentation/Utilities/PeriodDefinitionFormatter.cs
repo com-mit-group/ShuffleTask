@@ -14,12 +14,12 @@ internal static class PeriodDefinitionFormatter
         }
 
         if (!string.IsNullOrWhiteSpace(task.PeriodDefinitionId)
-            && TryBuildAdHocDefinition(task, out PeriodDefinition presetDefinition))
+            && TaskItemPeriodDefinitionHelper.TryBuildAdHocDefinition(task, out PeriodDefinition presetDefinition))
         {
             return $"Preset ({DescribeDefinition(presetDefinition)})";
         }
 
-        if (TryBuildAdHocDefinition(task, out PeriodDefinition adHocDefinition))
+        if (TaskItemPeriodDefinitionHelper.TryBuildAdHocDefinition(task, out PeriodDefinition adHocDefinition))
         {
             return $"Ad-hoc ({DescribeDefinition(adHocDefinition)})";
         }
@@ -150,33 +150,6 @@ internal static class PeriodDefinitionFormatter
         }
 
         return string.Empty;
-    }
-
-    private static bool TryBuildAdHocDefinition(TaskItem task, out PeriodDefinition definition)
-    {
-        bool hasAdHocDefinition = task.AdHocStartTime.HasValue
-            || task.AdHocEndTime.HasValue
-            || task.AdHocWeekdays.HasValue
-            || task.AdHocIsAllDay
-            || task.AdHocMode != PeriodDefinitionMode.None;
-
-        if (!hasAdHocDefinition)
-        {
-            definition = PeriodDefinitionCatalog.Any;
-            return false;
-        }
-
-        definition = new PeriodDefinition
-        {
-            Id = string.Empty,
-            Name = "Ad-hoc",
-            StartTime = task.AdHocStartTime,
-            EndTime = task.AdHocEndTime,
-            Weekdays = task.AdHocWeekdays ?? PeriodDefinitionCatalog.AllWeekdays,
-            IsAllDay = task.AdHocIsAllDay,
-            Mode = task.AdHocMode
-        };
-        return true;
     }
 
     private static string FormatLegacyCustom(TaskItem task)
