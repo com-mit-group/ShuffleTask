@@ -3,7 +3,7 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Presentation.Utilities;
 
-public abstract class WeekdaySelectionHelper : ObservableObject
+public abstract class ViewModelWithWeekdaySelection : ObservableObject
 {
     private Weekdays _selectedWeekdays;
 

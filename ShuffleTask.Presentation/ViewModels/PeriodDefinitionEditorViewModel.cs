@@ -6,7 +6,7 @@ using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
-public sealed partial class PeriodDefinitionEditorViewModel : WeekdaySelectionHelper
+public sealed partial class PeriodDefinitionEditorViewModel : ViewModelWithWeekdaySelection
 {
     private readonly IStorageService _storage;
     private string? _definitionId;

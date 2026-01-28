@@ -8,7 +8,7 @@ using System.Collections.ObjectModel;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class EditTaskViewModel : WeekdaySelectionHelper
+public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
 {
     private readonly IStorageService _storage;
     private readonly TimeProvider _clock;
