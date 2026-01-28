@@ -45,6 +45,7 @@ public class StorageService : IStorageService
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
         await EnsureTaskSchemaAsync();
+        await EnsurePresetPeriodDefinitionsAsync();
     }
 
     private async Task EnsureTaskSchemaAsync()
@@ -102,6 +103,32 @@ public class StorageService : IStorageService
         catch
         {
             // best-effort; ignore migration errors
+        }
+    }
+
+    private async Task EnsurePresetPeriodDefinitionsAsync()
+    {
+        var presets = PeriodDefinitionCatalog.CreatePresetDefinitions();
+        var presetIds = presets.Select(preset => preset.Id).ToList();
+        if (presetIds.Count == 0)
+        {
+            return;
+        }
+
+        var existing = await Db.Table<PeriodDefinitionRecord>()
+            .Where(record => presetIds.Contains(record.Id))
+            .ToListAsync();
+        var existingIds = new HashSet<string>(existing.Select(record => record.Id), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var preset in presets)
+        {
+            if (existingIds.Contains(preset.Id))
+            {
+                continue;
+            }
+
+            var record = PeriodDefinitionRecord.FromDomain(preset);
+            await Db.InsertAsync(record);
         }
     }
 
