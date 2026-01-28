@@ -122,7 +122,12 @@ public static class PeriodDefinitionCatalog
         {
             [AnyId] = Any,
             [WorkId] = Work,
-            [OffWorkId] = OffWork
+            [OffWorkId] = OffWork,
+            [WeekdaysId] = Weekdays,
+            [WeekendsId] = Weekends,
+            [MorningsId] = Mornings,
+            [EveningsId] = Evenings,
+            [LunchBreakId] = LunchBreak
         };
 
     public static IReadOnlyList<PeriodDefinition> CreatePresetDefinitions()
