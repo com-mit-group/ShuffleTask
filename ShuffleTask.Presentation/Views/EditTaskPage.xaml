@@ -27,7 +27,6 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -159,15 +158,107 @@
                                          HorizontalOptions="Start" />
             </Grid>
 
-            <Picker Grid.Row="8"
-                    Title="Allowed period"
-                    ItemsSource="{Binding AllowedPeriodOptions}"
-                    SelectedItem="{Binding AllowedPeriod}" />
+            <VerticalStackLayout Grid.Row="8"
+                                 Spacing="8">
+                <Label Text="Allowed period"
+                       FontAttributes="Bold" />
+                <Picker Title="Allowed period"
+                        ItemsSource="{Binding PeriodDefinitionOptions}"
+                        SelectedItem="{Binding SelectedPeriodDefinition}"
+                        ItemDisplayBinding="{Binding Name}"
+                        SemanticProperties.Description="{Binding SelectedPeriodDefinitionDescription}" />
+                <Label Text="{Binding SelectedPeriodDefinitionDescription}"
+                       FontSize="12"
+                       TextColor="#6B7280" />
+                <Grid ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <Button Grid.Column="0"
+                            Text="New preset"
+                            Clicked="OnCreatePeriodDefinitionClicked" />
+                    <Button Grid.Column="1"
+                            Text="Edit selected"
+                            IsEnabled="{Binding CanEditSelectedDefinition}"
+                            Clicked="OnEditSelectedPeriodDefinitionClicked" />
+                </Grid>
+            </VerticalStackLayout>
 
-            <Label Grid.Row="9"
-                   Text="Work hours apply to weekdays (Mon–Fri). Custom hours use the task's weekday and time range."
-                   FontSize="12"
-                   TextColor="#6B7280" />
+            <Grid Grid.Row="9"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="8"
+                  IsVisible="{Binding IsAdHocSelection}">
+                <Label Grid.Row="0"
+                       Text="Ad-hoc custom"
+                       FontAttributes="Bold" />
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="Auto,Auto"
+                      ColumnSpacing="12">
+                    <Label Text="All day"
+                           VerticalOptions="Center" />
+                    <Switch Grid.Column="1"
+                            IsToggled="{Binding AdHocIsAllDay}"
+                            SemanticProperties.Description="All-day windows ignore the time range below." />
+                </Grid>
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <TimePicker Grid.Column="0"
+                                Time="{Binding AdHocStartTime}">
+                        <TimePicker.Triggers>
+                            <DataTrigger TargetType="TimePicker"
+                                         Binding="{Binding AdHocIsAllDay}"
+                                         Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </TimePicker.Triggers>
+                    </TimePicker>
+                    <TimePicker Grid.Column="1"
+                                Time="{Binding AdHocEndTime}">
+                        <TimePicker.Triggers>
+                            <DataTrigger TargetType="TimePicker"
+                                         Binding="{Binding AdHocIsAllDay}"
+                                         Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </TimePicker.Triggers>
+                    </TimePicker>
+                </Grid>
+                <Grid Grid.Row="3"
+                      ColumnDefinitions="Auto,*"
+                      ColumnSpacing="12">
+                    <Label Text="Alignment mode"
+                           VerticalOptions="Center" />
+                    <Picker Grid.Column="1"
+                            ItemsSource="{Binding AlignmentModeOptions}"
+                            SelectedItem="{Binding SelectedAlignmentMode}"
+                            ItemDisplayBinding="{Binding Name}"
+                            SemanticProperties.Description="{Binding SelectedAlignmentMode.Description}" />
+                </Grid>
+                <Label Grid.Row="4"
+                       Text="{Binding SelectedAlignmentMode.Description}"
+                       FontSize="12"
+                       TextColor="#6B7280" />
+                <Label Grid.Row="5"
+                       Text="Weekdays" />
+                <Grid Grid.Row="6"
+                      RowDefinitions="Auto,Auto"
+                      ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                      ColumnSpacing="8">
+                    <CheckBox Grid.Row="0" Grid.Column="0" IsChecked="{Binding AdHocSunday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding AdHocMonday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="2" IsChecked="{Binding AdHocTuesday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="3" IsChecked="{Binding AdHocWednesday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="4" IsChecked="{Binding AdHocThursday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="5" IsChecked="{Binding AdHocFriday}" />
+                    <CheckBox Grid.Row="0" Grid.Column="6" IsChecked="{Binding AdHocSaturday}" />
+                    <Label Grid.Row="1" Grid.Column="0" Text="Sun" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="1" Text="Mon" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="2" Text="Tue" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="3" Text="Wed" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="4" Text="Thu" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="5" Text="Fri" HorizontalOptions="Center" />
+                    <Label Grid.Row="1" Grid.Column="6" Text="Sat" HorizontalOptions="Center" />
+                </Grid>
+            </Grid>
 
             <Grid Grid.Row="10"
                   ColumnDefinitions="Auto,*"
@@ -190,50 +281,6 @@
             </Grid>
 
             <Grid Grid.Row="12"
-                  RowDefinitions="Auto,Auto,Auto,Auto"
-                  RowSpacing="8"
-                  IsVisible="False">
-                <Grid.Triggers>
-                    <DataTrigger TargetType="Grid"
-                                Binding="{Binding AllowedPeriod}"
-                                Value="Custom">
-                        <Setter Property="IsVisible" Value="True" />
-                    </DataTrigger>
-                </Grid.Triggers>
-                <Label Grid.Row="0"
-                       Text="Custom time range" />
-                <Grid Grid.Row="1"
-                      ColumnDefinitions="*,*"
-                      ColumnSpacing="12">
-                    <TimePicker Grid.Column="0"
-                                Time="{Binding CustomStartTime}" />
-                    <TimePicker Grid.Column="1"
-                                Time="{Binding CustomEndTime}" />
-                </Grid>
-                <Label Grid.Row="2"
-                       Text="Custom weekdays" />
-                <Grid Grid.Row="3"
-                      RowDefinitions="Auto,Auto"
-                      ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                      ColumnSpacing="8">
-                    <CheckBox Grid.Row="0" Grid.Column="0" IsChecked="{Binding CustomSunday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding CustomMonday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="2" IsChecked="{Binding CustomTuesday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="3" IsChecked="{Binding CustomWednesday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="4" IsChecked="{Binding CustomThursday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="5" IsChecked="{Binding CustomFriday}" />
-                    <CheckBox Grid.Row="0" Grid.Column="6" IsChecked="{Binding CustomSaturday}" />
-                    <Label Grid.Row="1" Grid.Column="0" Text="Sun" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="1" Text="Mon" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="2" Text="Tue" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="3" Text="Wed" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="4" Text="Thu" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="5" Text="Fri" HorizontalOptions="Center" />
-                    <Label Grid.Row="1" Grid.Column="6" Text="Sat" HorizontalOptions="Center" />
-                </Grid>
-            </Grid>
-
-            <Grid Grid.Row="13"
                   ColumnDefinitions="Auto,Auto"
                   ColumnSpacing="12">
                 <Label Text="Paused"
@@ -243,7 +290,7 @@
             </Grid>
 
             <!-- Custom Timer Override Section -->
-            <Grid Grid.Row="14"
+            <Grid Grid.Row="13"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="8">
                 <Grid Grid.Row="0"
@@ -332,7 +379,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="15"
+            <Grid Grid.Row="14"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
@@ -343,7 +390,7 @@
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="16"
+            <ActivityIndicator Grid.Row="15"
                                IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
                                HorizontalOptions="Center" />

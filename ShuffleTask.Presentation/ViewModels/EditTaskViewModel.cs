@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
+using System.Collections.ObjectModel;
 
 namespace ShuffleTask.ViewModels;
 
@@ -14,7 +16,7 @@ public partial class EditTaskViewModel : ObservableObject
     private TaskItem _workingCopy = new();
 
     private Weekdays _selectedWeekdays;
-    private Weekdays _selectedCustomWeekdays;
+    private Weekdays _selectedAdHocWeekdays;
 
     private static readonly Weekdays AllWeekdays = Weekdays.Sun | Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri | Weekdays.Sat;
 
@@ -40,20 +42,21 @@ public partial class EditTaskViewModel : ObservableObject
         }
     }
 
-    public Weekdays SelectedCustomWeekdays
+    public Weekdays SelectedAdHocWeekdays
     {
-        get => _selectedCustomWeekdays;
+        get => _selectedAdHocWeekdays;
         set
         {
-            if (SetProperty(ref _selectedCustomWeekdays, value))
+            if (SetProperty(ref _selectedAdHocWeekdays, value))
             {
-                OnPropertyChanged(nameof(CustomSunday));
-                OnPropertyChanged(nameof(CustomMonday));
-                OnPropertyChanged(nameof(CustomTuesday));
-                OnPropertyChanged(nameof(CustomWednesday));
-                OnPropertyChanged(nameof(CustomThursday));
-                OnPropertyChanged(nameof(CustomFriday));
-                OnPropertyChanged(nameof(CustomSaturday));
+                OnPropertyChanged(nameof(AdHocSunday));
+                OnPropertyChanged(nameof(AdHocMonday));
+                OnPropertyChanged(nameof(AdHocTuesday));
+                OnPropertyChanged(nameof(AdHocWednesday));
+                OnPropertyChanged(nameof(AdHocThursday));
+                OnPropertyChanged(nameof(AdHocFriday));
+                OnPropertyChanged(nameof(AdHocSaturday));
+                OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
             }
         }
     }
@@ -92,10 +95,13 @@ public partial class EditTaskViewModel : ObservableObject
     private bool autoShuffleAllowed = true;
 
     [ObservableProperty]
-    private TimeSpan customStartTime = new(9, 0, 0);
+    private TimeSpan adHocStartTime = new(9, 0, 0);
 
     [ObservableProperty]
-    private TimeSpan customEndTime = new(17, 0, 0);
+    private TimeSpan adHocEndTime = new(17, 0, 0);
+
+    [ObservableProperty]
+    private bool adHocIsAllDay;
 
     [ObservableProperty]
     private bool isPaused;
@@ -125,6 +131,12 @@ public partial class EditTaskViewModel : ObservableObject
     [ObservableProperty]
     private double customPomodoroCycles = 3;
 
+    [ObservableProperty]
+    private AlignmentModeOption selectedAlignmentMode;
+
+    [ObservableProperty]
+    private PeriodDefinitionOption? selectedPeriodDefinition;
+
     private bool _isNew = true;
     public bool IsNew
     {
@@ -138,21 +150,41 @@ public partial class EditTaskViewModel : ObservableObject
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         AppSettings = appSettings;
         DeadlineDate = GetTodayUtcDate();
+        AlignmentModeOptions = AlignmentModeOption.CreateDefaults();
+        SelectedAlignmentMode = AlignmentModeOptions[0];
     }
 
     public RepeatType[] RepeatOptions { get; } = Enum.GetValues<RepeatType>();
 
     public CutInLineMode[] CutInLineModeOptions { get; } = Enum.GetValues<CutInLineMode>();
 
-    public AllowedPeriod[] AllowedPeriodOptions { get; } = new[]
-    {
-        AllowedPeriod.Any,
-        AllowedPeriod.Work,
-        AllowedPeriod.OffWork,
-        AllowedPeriod.Custom
-    };
+    public ObservableCollection<PeriodDefinitionOption> PeriodDefinitionOptions { get; } = new();
+
+    public IReadOnlyList<AlignmentModeOption> AlignmentModeOptions { get; }
 
     public string[] TimerModeOptions { get; } = new[] { "Long Interval", "Pomodoro" };
+
+    public bool IsAdHocSelection => SelectedPeriodDefinition?.IsAdHoc ?? false;
+
+    public bool CanEditSelectedDefinition => SelectedPeriodDefinition?.IsEditable ?? false;
+
+    public string SelectedPeriodDefinitionDescription
+    {
+        get
+        {
+            if (SelectedPeriodDefinition == null)
+            {
+                return string.Empty;
+            }
+
+            if (SelectedPeriodDefinition.IsAdHoc)
+            {
+                return PeriodDefinitionFormatter.DescribeDefinition(BuildAdHocDefinition());
+            }
+
+            return SelectedPeriodDefinition.Description;
+        }
+    }
 
     private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
     {
@@ -166,11 +198,11 @@ public partial class EditTaskViewModel : ObservableObject
         SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, day, isSelected);
     }
 
-    private bool GetCustomWeekday(Weekdays day) => _selectedCustomWeekdays.HasFlag(day);
+    private bool GetAdHocWeekday(Weekdays day) => _selectedAdHocWeekdays.HasFlag(day);
 
-    private void SetCustomWeekday(Weekdays day, bool isSelected)
+    private void SetAdHocWeekday(Weekdays day, bool isSelected)
     {
-        SelectedCustomWeekdays = ApplyWeekdaySelection(SelectedCustomWeekdays, day, isSelected);
+        SelectedAdHocWeekdays = ApplyWeekdaySelection(SelectedAdHocWeekdays, day, isSelected);
     }
 
     public bool Sunday
@@ -215,54 +247,56 @@ public partial class EditTaskViewModel : ObservableObject
         set => SetWeekday(Weekdays.Sat, value);
     }
 
-    public bool CustomSunday
+    public bool AdHocSunday
     {
-        get => GetCustomWeekday(Weekdays.Sun);
-        set => SetCustomWeekday(Weekdays.Sun, value);
+        get => GetAdHocWeekday(Weekdays.Sun);
+        set => SetAdHocWeekday(Weekdays.Sun, value);
     }
 
-    public bool CustomMonday
+    public bool AdHocMonday
     {
-        get => GetCustomWeekday(Weekdays.Mon);
-        set => SetCustomWeekday(Weekdays.Mon, value);
+        get => GetAdHocWeekday(Weekdays.Mon);
+        set => SetAdHocWeekday(Weekdays.Mon, value);
     }
 
-    public bool CustomTuesday
+    public bool AdHocTuesday
     {
-        get => GetCustomWeekday(Weekdays.Tue);
-        set => SetCustomWeekday(Weekdays.Tue, value);
+        get => GetAdHocWeekday(Weekdays.Tue);
+        set => SetAdHocWeekday(Weekdays.Tue, value);
     }
 
-    public bool CustomWednesday
+    public bool AdHocWednesday
     {
-        get => GetCustomWeekday(Weekdays.Wed);
-        set => SetCustomWeekday(Weekdays.Wed, value);
+        get => GetAdHocWeekday(Weekdays.Wed);
+        set => SetAdHocWeekday(Weekdays.Wed, value);
     }
 
-    public bool CustomThursday
+    public bool AdHocThursday
     {
-        get => GetCustomWeekday(Weekdays.Thu);
-        set => SetCustomWeekday(Weekdays.Thu, value);
+        get => GetAdHocWeekday(Weekdays.Thu);
+        set => SetAdHocWeekday(Weekdays.Thu, value);
     }
 
-    public bool CustomFriday
+    public bool AdHocFriday
     {
-        get => GetCustomWeekday(Weekdays.Fri);
-        set => SetCustomWeekday(Weekdays.Fri, value);
+        get => GetAdHocWeekday(Weekdays.Fri);
+        set => SetAdHocWeekday(Weekdays.Fri, value);
     }
 
-    public bool CustomSaturday
+    public bool AdHocSaturday
     {
-        get => GetCustomWeekday(Weekdays.Sat);
-        set => SetCustomWeekday(Weekdays.Sat, value);
+        get => GetAdHocWeekday(Weekdays.Sat);
+        set => SetAdHocWeekday(Weekdays.Sat, value);
     }
     public AppSettings AppSettings { get; }
 
     public event EventHandler? Saved;
 
-    public void Load(TaskItem? task)
+    public async Task LoadAsync(TaskItem? task)
     {
         IsBusy = false;
+        await _storage.InitializeAsync();
+        await LoadPeriodDefinitionOptionsAsync();
         _workingCopy = task != null ? TaskItem.Clone(task) : new TaskItem();
         IsNew = task == null || string.IsNullOrWhiteSpace(task.Id);
 
@@ -274,12 +308,16 @@ public partial class EditTaskViewModel : ObservableObject
         IntervalDays = _workingCopy.IntervalDays > 0 ? _workingCopy.IntervalDays : 1;
         AllowedPeriod = _workingCopy.AllowedPeriod;
         AutoShuffleAllowed = _workingCopy.AutoShuffleAllowed;
-        CustomStartTime = _workingCopy.CustomStartTime ?? new TimeSpan(9, 0, 0);
-        CustomEndTime = _workingCopy.CustomEndTime ?? new TimeSpan(17, 0, 0);
+        AdHocStartTime = _workingCopy.AdHocStartTime ?? _workingCopy.CustomStartTime ?? new TimeSpan(9, 0, 0);
+        AdHocEndTime = _workingCopy.AdHocEndTime ?? _workingCopy.CustomEndTime ?? new TimeSpan(17, 0, 0);
+        AdHocIsAllDay = _workingCopy.AdHocIsAllDay
+            || (_workingCopy.AllowedPeriod == AllowedPeriod.Custom && !_workingCopy.AdHocStartTime.HasValue && !_workingCopy.AdHocEndTime.HasValue);
         IsPaused = _workingCopy.Paused;
         CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
-        SelectedCustomWeekdays = _workingCopy.CustomWeekdays ?? AllWeekdays;
+        SelectedAdHocWeekdays = _workingCopy.AdHocWeekdays ?? _workingCopy.CustomWeekdays ?? AllWeekdays;
+        SelectedAlignmentMode = AlignmentModeOptions.FirstOrDefault(option => option.Mode == _workingCopy.AdHocMode)
+            ?? AlignmentModeOptions[0];
 
         // Load custom timer _settings
         UseCustomTimer = _workingCopy.CustomTimerMode.HasValue;
@@ -313,6 +351,9 @@ public partial class EditTaskViewModel : ObservableObject
             DeadlineDate = GetTodayUtcDate();
             DeadlineTime = new TimeSpan(9, 0, 0);
         }
+
+        SelectPeriodDefinitionOption(_workingCopy);
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
     }
 
     [RelayCommand]
@@ -341,13 +382,11 @@ public partial class EditTaskViewModel : ObservableObject
             _workingCopy.Weekdays = Repeat == RepeatType.Weekly ? SelectedWeekdays : Weekdays.None;
             int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
             _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
-            _workingCopy.AllowedPeriod = AllowedPeriod;
             _workingCopy.AutoShuffleAllowed = AutoShuffleAllowed;
-            _workingCopy.CustomStartTime = AllowedPeriod == AllowedPeriod.Custom ? CustomStartTime : null;
-            _workingCopy.CustomEndTime = AllowedPeriod == AllowedPeriod.Custom ? CustomEndTime : null;
-            _workingCopy.CustomWeekdays = AllowedPeriod == AllowedPeriod.Custom
-                ? SelectedCustomWeekdays == AllWeekdays ? null : SelectedCustomWeekdays
-                : null;
+            _workingCopy.CustomStartTime = null;
+            _workingCopy.CustomEndTime = null;
+            _workingCopy.CustomWeekdays = null;
+            ApplyPeriodDefinitionSelection(_workingCopy);
             _workingCopy.Paused = IsPaused;
             _workingCopy.CutInLineMode = CutInLineMode;
 
@@ -433,6 +472,185 @@ public partial class EditTaskViewModel : ObservableObject
         // Stepper may return values like 2.4999999997, round to 0.5 increments
         double rounded = Math.Round(value * 2.0, MidpointRounding.AwayFromZero) / 2.0;
         return Math.Max(MinSizePoints, Math.Min(MaxSizePoints, rounded));
+    }
+
+    private async Task LoadPeriodDefinitionOptionsAsync()
+    {
+        var definitions = await _storage.GetPeriodDefinitionsAsync();
+        var options = new List<PeriodDefinitionOption>
+        {
+            CreateOption(PeriodDefinitionCatalog.Any, isCoreBuiltIn: true),
+            CreateOption(PeriodDefinitionCatalog.Work, isCoreBuiltIn: true),
+            CreateOption(PeriodDefinitionCatalog.OffWork, isCoreBuiltIn: true)
+        };
+
+        foreach (PeriodDefinition definition in definitions)
+        {
+            if (string.Equals(definition.Id, PeriodDefinitionCatalog.AnyId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(definition.Id, PeriodDefinitionCatalog.WorkId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(definition.Id, PeriodDefinitionCatalog.OffWorkId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            options.Add(CreateOption(definition, isCoreBuiltIn: false));
+        }
+
+        options.Add(new PeriodDefinitionOption(
+            "ad-hoc",
+            "Ad-hoc custom",
+            "Define a one-off window just for this task.",
+            definition: null,
+            isAdHoc: true,
+            isCoreBuiltIn: false));
+
+        PeriodDefinitionOptions.Clear();
+        foreach (PeriodDefinitionOption option in options)
+        {
+            PeriodDefinitionOptions.Add(option);
+        }
+    }
+
+    public async Task RefreshPeriodDefinitionsAsync(string? selectDefinitionId = null)
+    {
+        await _storage.InitializeAsync();
+        string? desiredId = selectDefinitionId ?? SelectedPeriodDefinition?.Id;
+        await LoadPeriodDefinitionOptionsAsync();
+
+        if (!string.IsNullOrWhiteSpace(desiredId))
+        {
+            PeriodDefinitionOption? match = PeriodDefinitionOptions
+                .FirstOrDefault(option => string.Equals(option.Id, desiredId, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+            {
+                SelectedPeriodDefinition = match;
+            }
+        }
+
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
+    }
+
+    private void SelectPeriodDefinitionOption(TaskItem task)
+    {
+        PeriodDefinitionOption? selected = null;
+
+        if (!string.IsNullOrWhiteSpace(task.PeriodDefinitionId))
+        {
+            selected = PeriodDefinitionOptions
+                .FirstOrDefault(option => string.Equals(option.Id, task.PeriodDefinitionId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (selected == null && HasAdHocDefinition(task))
+        {
+            selected = PeriodDefinitionOptions.FirstOrDefault(option => option.IsAdHoc);
+        }
+
+        if (selected == null)
+        {
+            selected = task.AllowedPeriod switch
+            {
+                AllowedPeriod.Work => PeriodDefinitionOptions.FirstOrDefault(option =>
+                    string.Equals(option.Id, PeriodDefinitionCatalog.WorkId, StringComparison.OrdinalIgnoreCase)),
+                AllowedPeriod.OffWork => PeriodDefinitionOptions.FirstOrDefault(option =>
+                    string.Equals(option.Id, PeriodDefinitionCatalog.OffWorkId, StringComparison.OrdinalIgnoreCase)),
+                _ => PeriodDefinitionOptions.FirstOrDefault(option =>
+                    string.Equals(option.Id, PeriodDefinitionCatalog.AnyId, StringComparison.OrdinalIgnoreCase))
+            };
+        }
+
+        SelectedPeriodDefinition = selected ?? PeriodDefinitionOptions.FirstOrDefault();
+    }
+
+    private void ApplyPeriodDefinitionSelection(TaskItem task)
+    {
+        if (SelectedPeriodDefinition?.IsAdHoc == true)
+        {
+            task.PeriodDefinitionId = null;
+            task.AdHocStartTime = AdHocIsAllDay ? null : AdHocStartTime;
+            task.AdHocEndTime = AdHocIsAllDay ? null : AdHocEndTime;
+            task.AdHocWeekdays = SelectedAdHocWeekdays == AllWeekdays ? null : SelectedAdHocWeekdays;
+            task.AdHocIsAllDay = AdHocIsAllDay;
+            task.AdHocMode = SelectedAlignmentMode.Mode;
+            task.AllowedPeriod = AllowedPeriod.Custom;
+            return;
+        }
+
+        task.PeriodDefinitionId = SelectedPeriodDefinition?.Id;
+        task.AdHocStartTime = null;
+        task.AdHocEndTime = null;
+        task.AdHocWeekdays = null;
+        task.AdHocIsAllDay = false;
+        task.AdHocMode = PeriodDefinitionMode.None;
+
+        task.AllowedPeriod = SelectedPeriodDefinition?.Id switch
+        {
+            PeriodDefinitionCatalog.WorkId => AllowedPeriod.Work,
+            PeriodDefinitionCatalog.OffWorkId => AllowedPeriod.OffWork,
+            PeriodDefinitionCatalog.AnyId => AllowedPeriod.Any,
+            _ => AllowedPeriod.Custom
+        };
+    }
+
+    private static bool HasAdHocDefinition(TaskItem task)
+    {
+        return task.AdHocStartTime.HasValue
+            || task.AdHocEndTime.HasValue
+            || task.AdHocWeekdays.HasValue
+            || task.AdHocIsAllDay
+            || task.AdHocMode != PeriodDefinitionMode.None
+            || task.AllowedPeriod == AllowedPeriod.Custom;
+    }
+
+    private static PeriodDefinitionOption CreateOption(PeriodDefinition definition, bool isCoreBuiltIn)
+    {
+        return new PeriodDefinitionOption(
+            definition.Id,
+            definition.Name,
+            PeriodDefinitionFormatter.DescribeDefinition(definition),
+            definition,
+            isAdHoc: false,
+            isCoreBuiltIn: isCoreBuiltIn);
+    }
+
+    private PeriodDefinition BuildAdHocDefinition()
+    {
+        return new PeriodDefinition
+        {
+            Id = string.Empty,
+            Name = "Ad-hoc custom",
+            StartTime = AdHocIsAllDay ? null : AdHocStartTime,
+            EndTime = AdHocIsAllDay ? null : AdHocEndTime,
+            Weekdays = SelectedAdHocWeekdays == Weekdays.None ? AllWeekdays : SelectedAdHocWeekdays,
+            IsAllDay = AdHocIsAllDay,
+            Mode = SelectedAlignmentMode.Mode
+        };
+    }
+
+    partial void OnSelectedPeriodDefinitionChanged(PeriodDefinitionOption? value)
+    {
+        OnPropertyChanged(nameof(IsAdHocSelection));
+        OnPropertyChanged(nameof(CanEditSelectedDefinition));
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
+    }
+
+    partial void OnAdHocStartTimeChanged(TimeSpan value)
+    {
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
+    }
+
+    partial void OnAdHocEndTimeChanged(TimeSpan value)
+    {
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
+    }
+
+    partial void OnAdHocIsAllDayChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
+    }
+
+    partial void OnSelectedAlignmentModeChanged(AlignmentModeOption value)
+    {
+        OnPropertyChanged(nameof(SelectedPeriodDefinitionDescription));
     }
 
     private DateTime GetTodayUtcDate()

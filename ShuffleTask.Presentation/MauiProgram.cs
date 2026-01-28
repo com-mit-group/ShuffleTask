@@ -85,6 +85,7 @@ public static partial class MauiProgram
         });
         builder.Services.AddSingleton<TasksViewModel>();
         builder.Services.AddSingleton<EditTaskViewModel>();
+        builder.Services.AddSingleton<PeriodDefinitionEditorViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views
@@ -94,6 +95,7 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<TasksPage>();
         builder.Services.AddSingleton<EditTaskPage>();
+        builder.Services.AddSingleton<PeriodDefinitionEditorPage>();
 
 #if DEBUG
         var loggingBuilder = builder.Logging;
