@@ -310,8 +310,12 @@ public partial class EditTaskViewModel : ObservableObject
         AutoShuffleAllowed = _workingCopy.AutoShuffleAllowed;
         AdHocStartTime = _workingCopy.AdHocStartTime ?? _workingCopy.CustomStartTime ?? new TimeSpan(9, 0, 0);
         AdHocEndTime = _workingCopy.AdHocEndTime ?? _workingCopy.CustomEndTime ?? new TimeSpan(17, 0, 0);
-        AdHocIsAllDay = _workingCopy.AdHocIsAllDay
-            || (_workingCopy.AllowedPeriod == AllowedPeriod.Custom && !_workingCopy.AdHocStartTime.HasValue && !_workingCopy.AdHocEndTime.HasValue);
+        bool isLegacyCustomAllDay = _workingCopy.AllowedPeriod == AllowedPeriod.Custom
+            && string.IsNullOrWhiteSpace(_workingCopy.PeriodDefinitionId)
+            && _workingCopy.AdHocMode == PeriodDefinitionMode.None
+            && !_workingCopy.AdHocStartTime.HasValue
+            && !_workingCopy.AdHocEndTime.HasValue;
+        AdHocIsAllDay = _workingCopy.AdHocIsAllDay || isLegacyCustomAllDay;
         IsPaused = _workingCopy.Paused;
         CutInLineMode = _workingCopy.CutInLineMode;
         SelectedWeekdays = _workingCopy.Weekdays;
