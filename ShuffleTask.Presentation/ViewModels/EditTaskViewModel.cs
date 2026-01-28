@@ -8,14 +8,13 @@ using System.Collections.ObjectModel;
 
 namespace ShuffleTask.ViewModels;
 
-public partial class EditTaskViewModel : ObservableObject
+public partial class EditTaskViewModel : WeekdaySelectionHelper
 {
     private readonly IStorageService _storage;
     private readonly TimeProvider _clock;
 
     private TaskItem _workingCopy = new();
 
-    private Weekdays _selectedWeekdays;
     private Weekdays _selectedAdHocWeekdays;
 
     private static readonly Weekdays AllWeekdays = Weekdays.Sun | Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri | Weekdays.Sat;
@@ -23,24 +22,6 @@ public partial class EditTaskViewModel : ObservableObject
     private const double MinSizePoints = 0.5;
     private const double MaxSizePoints = 13.0;
     private const double DefaultSizePoints = 3.0;
-
-    public Weekdays SelectedWeekdays
-    {
-        get => _selectedWeekdays;
-        set
-        {
-            if (SetProperty(ref _selectedWeekdays, value))
-            {
-                OnPropertyChanged(nameof(Sunday));
-                OnPropertyChanged(nameof(Monday));
-                OnPropertyChanged(nameof(Tuesday));
-                OnPropertyChanged(nameof(Wednesday));
-                OnPropertyChanged(nameof(Thursday));
-                OnPropertyChanged(nameof(Friday));
-                OnPropertyChanged(nameof(Saturday));
-            }
-        }
-    }
 
     public Weekdays SelectedAdHocWeekdays
     {
@@ -186,65 +167,11 @@ public partial class EditTaskViewModel : ObservableObject
         }
     }
 
-    private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
-    {
-        return enabled ? current | day : current & ~day;
-    }
-
-    private bool GetWeekday(Weekdays day) => _selectedWeekdays.HasFlag(day);
-
-    private void SetWeekday(Weekdays day, bool isSelected)
-    {
-        SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, day, isSelected);
-    }
-
     private bool GetAdHocWeekday(Weekdays day) => _selectedAdHocWeekdays.HasFlag(day);
 
     private void SetAdHocWeekday(Weekdays day, bool isSelected)
     {
         SelectedAdHocWeekdays = ApplyWeekdaySelection(SelectedAdHocWeekdays, day, isSelected);
-    }
-
-    public bool Sunday
-    {
-        get => GetWeekday(Weekdays.Sun);
-        set => SetWeekday(Weekdays.Sun, value);
-    }
-
-    public bool Monday
-    {
-        get => GetWeekday(Weekdays.Mon);
-        set => SetWeekday(Weekdays.Mon, value);
-    }
-
-    public bool Tuesday
-    {
-        get => GetWeekday(Weekdays.Tue);
-        set => SetWeekday(Weekdays.Tue, value);
-    }
-
-    public bool Wednesday
-    {
-        get => GetWeekday(Weekdays.Wed);
-        set => SetWeekday(Weekdays.Wed, value);
-    }
-
-    public bool Thursday
-    {
-        get => GetWeekday(Weekdays.Thu);
-        set => SetWeekday(Weekdays.Thu, value);
-    }
-
-    public bool Friday
-    {
-        get => GetWeekday(Weekdays.Fri);
-        set => SetWeekday(Weekdays.Fri, value);
-    }
-
-    public bool Saturday
-    {
-        get => GetWeekday(Weekdays.Sat);
-        set => SetWeekday(Weekdays.Sat, value);
     }
 
     public bool AdHocSunday
