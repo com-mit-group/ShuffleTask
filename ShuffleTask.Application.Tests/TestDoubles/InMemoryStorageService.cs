@@ -22,6 +22,10 @@ internal sealed class InMemoryStorageService : IStorageService
     public Task InitializeAsync()
     {
         _initialized = true;
+        foreach (var preset in PeriodDefinitionCatalog.CreatePresetDefinitions())
+        {
+            _periodDefinitions[preset.Id] = Clone(preset);
+        }
         return Task.CompletedTask;
     }
 

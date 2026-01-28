@@ -36,6 +36,10 @@ public class StorageServiceStub : IStorageService
     {
         InitializeCallCount++;
         _initialized = true;
+        foreach (var preset in PeriodDefinitionCatalog.CreatePresetDefinitions())
+        {
+            _periodDefinitions[preset.Id] = Clone(preset);
+        }
         return Task.CompletedTask;
     }
 

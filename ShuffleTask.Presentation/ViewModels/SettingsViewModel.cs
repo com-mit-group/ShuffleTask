@@ -6,9 +6,11 @@ using Microsoft.Maui.Controls;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
+using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using Yaref92.Events.Transport.Grpc;
 
@@ -32,6 +34,9 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _disposed;
     private bool _lastBackgroundActivityEnabled;
     private readonly SemaphoreSlim _backgroundActivityToggleGate = new(1, 1);
+    private PeriodDefinition? _morningDefinition;
+    private PeriodDefinition? _eveningDefinition;
+    private PeriodDefinition? _lunchDefinition;
 
     private string _selectedPeerPlatform = Windows;
 
@@ -40,6 +45,24 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool isBusy;
+
+    [ObservableProperty]
+    private TimeSpan morningStart = new(7, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan morningEnd = new(10, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan eveningStart = new(18, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan eveningEnd = new(21, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan lunchStart = new(12, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan lunchEnd = new(13, 0, 0);
 
     public IReadOnlyList<string> PeerPlatforms { get; } = new[] { "Android", Windows };
 
@@ -90,6 +113,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             Settings.NormalizeWeights();
             Settings.Network?.Normalize();
             await _notifications.InitializeAsync();
+            await LoadPresetDefinitionsAsync();
             CacheSessionState();
         });
     }
@@ -102,6 +126,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             bool wasAnonymous = _lastAnonymousMode;
             ApplyValidation();
             await PersistSettingsAsync();
+            await PersistPresetDefinitionsAsync();
             bool sessionChanged = wasAnonymous != IsAnonymousSession || !string.Equals(_lastUserId, Settings.Network.UserId, StringComparison.Ordinal);
             if (sessionChanged)
             {
@@ -263,6 +288,56 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     {
         _lastUserId = Settings.Network?.UserId;
         _lastAnonymousMode = IsAnonymousSession;
+    }
+
+    private async Task LoadPresetDefinitionsAsync()
+    {
+        _morningDefinition = await _storage.GetPeriodDefinitionAsync(PeriodDefinitionCatalog.MorningsId);
+        _eveningDefinition = await _storage.GetPeriodDefinitionAsync(PeriodDefinitionCatalog.EveningsId);
+        _lunchDefinition = await _storage.GetPeriodDefinitionAsync(PeriodDefinitionCatalog.LunchBreakId);
+
+        ApplyDefinitionTimes(_morningDefinition, PeriodDefinitionCatalog.Mornings, start => MorningStart = start, end => MorningEnd = end);
+        ApplyDefinitionTimes(_eveningDefinition, PeriodDefinitionCatalog.Evenings, start => EveningStart = start, end => EveningEnd = end);
+        ApplyDefinitionTimes(_lunchDefinition, PeriodDefinitionCatalog.LunchBreak, start => LunchStart = start, end => LunchEnd = end);
+    }
+
+    private async Task PersistPresetDefinitionsAsync()
+    {
+        await UpsertPresetDefinitionAsync(_morningDefinition, PeriodDefinitionCatalog.Mornings, MorningStart, MorningEnd);
+        await UpsertPresetDefinitionAsync(_eveningDefinition, PeriodDefinitionCatalog.Evenings, EveningStart, EveningEnd);
+        await UpsertPresetDefinitionAsync(_lunchDefinition, PeriodDefinitionCatalog.LunchBreak, LunchStart, LunchEnd);
+    }
+
+    private static void ApplyDefinitionTimes(PeriodDefinition? definition, PeriodDefinition fallback, Action<TimeSpan> setStart, Action<TimeSpan> setEnd)
+    {
+        TimeSpan start = definition?.StartTime ?? fallback.StartTime ?? TimeSpan.Zero;
+        TimeSpan end = definition?.EndTime ?? fallback.EndTime ?? TimeSpan.Zero;
+        setStart(start);
+        setEnd(end);
+    }
+
+    private async Task UpsertPresetDefinitionAsync(PeriodDefinition? definition, PeriodDefinition fallback, TimeSpan start, TimeSpan end)
+    {
+        definition ??= PeriodDefinitionCatalog.CreatePresetDefinitions()
+            .FirstOrDefault(item => string.Equals(item.Id, fallback.Id, StringComparison.OrdinalIgnoreCase))
+            ?? fallback;
+
+        definition.StartTime = start;
+        definition.EndTime = end;
+        definition.IsAllDay = false;
+        definition.Mode = PeriodDefinitionMode.None;
+
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = fallback.Id;
+        }
+
+        if (string.IsNullOrWhiteSpace(definition.Name))
+        {
+            definition.Name = fallback.Name;
+        }
+
+        await _storage.UpdatePeriodDefinitionAsync(definition);
     }
 
     private void ApplyValidation()

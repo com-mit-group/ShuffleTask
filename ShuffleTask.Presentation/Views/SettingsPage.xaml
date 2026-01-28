@@ -47,6 +47,12 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0"
@@ -343,7 +349,49 @@
                         IsVisible="{Binding IsLoggedIn}" />
             </Grid>
 
-            <Grid Grid.Row="27"
+            <Label Grid.Row="27"
+                   Text="Morning start"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="27"
+                        Grid.Column="1"
+                        Time="{Binding MorningStart}" />
+
+            <Label Grid.Row="28"
+                   Text="Morning end"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="28"
+                        Grid.Column="1"
+                        Time="{Binding MorningEnd}" />
+
+            <Label Grid.Row="29"
+                   Text="Evening start"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="29"
+                        Grid.Column="1"
+                        Time="{Binding EveningStart}" />
+
+            <Label Grid.Row="30"
+                   Text="Evening end"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="30"
+                        Grid.Column="1"
+                        Time="{Binding EveningEnd}" />
+
+            <Label Grid.Row="31"
+                   Text="Lunch start"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="31"
+                        Grid.Column="1"
+                        Time="{Binding LunchStart}" />
+
+            <Label Grid.Row="32"
+                   Text="Lunch end"
+                   VerticalOptions="Center" />
+            <TimePicker Grid.Row="32"
+                        Grid.Column="1"
+                        Time="{Binding LunchEnd}" />
+
+            <Grid Grid.Row="33"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="*,*"
                   ColumnSpacing="16">
@@ -355,7 +403,7 @@
                         Command="{Binding ShufflePreviewCommand}" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="28"
+            <ActivityIndicator Grid.Row="34"
                                Grid.ColumnSpan="2"
                                HorizontalOptions="Center"
                                IsVisible="{Binding IsBusy}"
