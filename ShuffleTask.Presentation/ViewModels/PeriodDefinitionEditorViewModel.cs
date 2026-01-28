@@ -2,13 +2,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
-public sealed partial class PeriodDefinitionEditorViewModel : ObservableObject
+public sealed partial class PeriodDefinitionEditorViewModel : ViewModelWithWeekdaySelection
 {
     private readonly IStorageService _storage;
-    private Weekdays _selectedWeekdays;
     private string? _definitionId;
     private bool _isNew = true;
 
@@ -21,24 +21,6 @@ public sealed partial class PeriodDefinitionEditorViewModel : ObservableObject
     }
 
     public IReadOnlyList<AlignmentModeOption> AlignmentModeOptions { get; }
-
-    public Weekdays SelectedWeekdays
-    {
-        get => _selectedWeekdays;
-        set
-        {
-            if (SetProperty(ref _selectedWeekdays, value))
-            {
-                OnPropertyChanged(nameof(Sunday));
-                OnPropertyChanged(nameof(Monday));
-                OnPropertyChanged(nameof(Tuesday));
-                OnPropertyChanged(nameof(Wednesday));
-                OnPropertyChanged(nameof(Thursday));
-                OnPropertyChanged(nameof(Friday));
-                OnPropertyChanged(nameof(Saturday));
-            }
-        }
-    }
 
     [ObservableProperty]
     private string name = string.Empty;
@@ -62,48 +44,6 @@ public sealed partial class PeriodDefinitionEditorViewModel : ObservableObject
     {
         get => _isNew;
         private set => SetProperty(ref _isNew, value);
-    }
-
-    public bool Sunday
-    {
-        get => GetWeekday(Weekdays.Sun);
-        set => SetWeekday(Weekdays.Sun, value);
-    }
-
-    public bool Monday
-    {
-        get => GetWeekday(Weekdays.Mon);
-        set => SetWeekday(Weekdays.Mon, value);
-    }
-
-    public bool Tuesday
-    {
-        get => GetWeekday(Weekdays.Tue);
-        set => SetWeekday(Weekdays.Tue, value);
-    }
-
-    public bool Wednesday
-    {
-        get => GetWeekday(Weekdays.Wed);
-        set => SetWeekday(Weekdays.Wed, value);
-    }
-
-    public bool Thursday
-    {
-        get => GetWeekday(Weekdays.Thu);
-        set => SetWeekday(Weekdays.Thu, value);
-    }
-
-    public bool Friday
-    {
-        get => GetWeekday(Weekdays.Fri);
-        set => SetWeekday(Weekdays.Fri, value);
-    }
-
-    public bool Saturday
-    {
-        get => GetWeekday(Weekdays.Sat);
-        set => SetWeekday(Weekdays.Sat, value);
     }
 
     public event EventHandler<PeriodDefinitionSavedEventArgs>? Saved;
@@ -182,15 +122,4 @@ public sealed partial class PeriodDefinitionEditorViewModel : ObservableObject
         }
     }
 
-    private static Weekdays ApplyWeekdaySelection(Weekdays current, Weekdays day, bool enabled)
-    {
-        return enabled ? current | day : current & ~day;
-    }
-
-    private bool GetWeekday(Weekdays day) => _selectedWeekdays.HasFlag(day);
-
-    private void SetWeekday(Weekdays day, bool isSelected)
-    {
-        SelectedWeekdays = ApplyWeekdaySelection(SelectedWeekdays, day, isSelected);
-    }
 }
