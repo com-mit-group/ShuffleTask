@@ -1,5 +1,8 @@
 using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.ViewModels;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation;
 
 namespace ShuffleTask.Views;
 
@@ -54,6 +57,49 @@ public partial class EditTaskPage : ContentPage
         {
             _viewModel.HasDeadline = false;
         }
+    }
+
+    private async void OnCreatePeriodDefinitionClicked(object sender, EventArgs e)
+    {
+        await OpenPeriodDefinitionEditorAsync(null);
+    }
+
+    private async void OnEditSelectedPeriodDefinitionClicked(object sender, EventArgs e)
+    {
+        if (_viewModel?.SelectedPeriodDefinition?.Definition is PeriodDefinition definition)
+        {
+            await OpenPeriodDefinitionEditorAsync(definition);
+        }
+    }
+
+    private async Task OpenPeriodDefinitionEditorAsync(PeriodDefinition? definition)
+    {
+        if (_viewModel == null)
+        {
+            return;
+        }
+
+        var editorPage = MauiProgram.Services.GetRequiredService<PeriodDefinitionEditorPage>();
+        var editorViewModel = MauiProgram.Services.GetRequiredService<PeriodDefinitionEditorViewModel>();
+        editorViewModel.Load(definition);
+
+        void OnSaved(object? sender, PeriodDefinitionSavedEventArgs args)
+        {
+            editorViewModel.Saved -= OnSaved;
+            _ = _viewModel.RefreshPeriodDefinitionsAsync(args.Definition.Id);
+        }
+
+        void OnEditorDisappearing(object? sender, EventArgs args)
+        {
+            editorViewModel.Saved -= OnSaved;
+            editorPage.Disappearing -= OnEditorDisappearing;
+        }
+
+        editorViewModel.Saved += OnSaved;
+        editorPage.BindingContext = editorViewModel;
+        editorPage.Disappearing -= OnEditorDisappearing;
+        editorPage.Disappearing += OnEditorDisappearing;
+        await Navigation.PushModalAsync(new NavigationPage(editorPage));
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

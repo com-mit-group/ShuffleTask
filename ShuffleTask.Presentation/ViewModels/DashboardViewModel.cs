@@ -662,14 +662,7 @@ public partial class DashboardViewModel : ObservableObject
             _ => "Schedule unknown"
         };
 
-        string allowed = task.AllowedPeriod switch
-        {
-            AllowedPeriod.Any => "Any time",
-            AllowedPeriod.Work => "Work hours (Mon–Fri)",
-            AllowedPeriod.OffWork => "Off hours (includes weekends)",
-            AllowedPeriod.Custom => FormatCustomWindow(task),
-            _ => "Any time"
-        };
+        string allowed = PeriodDefinitionFormatter.FormatAllowedPeriodLabel(task);
 
         return $"{deadline} • {repeat} • {allowed}";
     }
@@ -702,13 +695,5 @@ public partial class DashboardViewModel : ObservableObject
         return string.Join(", ", names);
     }
 
-    private static string FormatCustomWindow(TaskItem task)
-    {
-        if (task.CustomStartTime.HasValue && task.CustomEndTime.HasValue)
-        {
-            return $"Custom hours ({task.CustomStartTime:hh\\:mm}–{task.CustomEndTime:hh\\:mm})";
-        }
-
-        return "Custom hours";
-    }
+    
 }
