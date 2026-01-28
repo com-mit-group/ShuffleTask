@@ -119,7 +119,7 @@ public partial class TasksPage : ContentPage
     {
         var page = _services.GetRequiredService<EditTaskPage>();
         var editorVm = _services.GetRequiredService<EditTaskViewModel>();
-        editorVm.Load(task);
+        await editorVm.LoadAsync(task);
         editorVm.Saved -= OnEditorSaved;
         editorVm.Saved += OnEditorSaved;
 
