@@ -6,7 +6,7 @@ public static class TaskItemPeriodDefinitionHelper
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        return HasAdHocDefinition((TaskItemData)task);
+        return HasAdHocDefinition(task);
     }
 
     public static bool TryBuildAdHocDefinition(TaskItem task, out PeriodDefinition definition)
