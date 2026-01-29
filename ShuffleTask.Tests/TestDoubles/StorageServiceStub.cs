@@ -451,7 +451,7 @@ public class StorageServiceStub : IStorageService
 
     private void ApplyPeriodDefinition(TaskItem task)
     {
-        NormalizeLegacyPeriodDefinition(task);
+        TaskItemPeriodDefinitionHelper.NormalizeLegacyPeriodDefinition(task);
         if (string.IsNullOrWhiteSpace(task.PeriodDefinitionId))
         {
             return;
@@ -472,44 +472,6 @@ public class StorageServiceStub : IStorageService
         task.AdHocWeekdays = definition.Weekdays;
         task.AdHocIsAllDay = definition.IsAllDay;
         task.AdHocMode = definition.Mode;
-    }
-
-    private static void NormalizeLegacyPeriodDefinition(TaskItem task)
-    {
-        if (!string.IsNullOrWhiteSpace(task.PeriodDefinitionId) || HasAdHocDefinition(task))
-        {
-            return;
-        }
-
-        if (task.AllowedPeriod == AllowedPeriod.Custom)
-        {
-            if (task.CustomStartTime.HasValue || task.CustomEndTime.HasValue || task.CustomWeekdays.HasValue)
-            {
-                task.AdHocStartTime = task.CustomStartTime;
-                task.AdHocEndTime = task.CustomEndTime;
-                task.AdHocWeekdays = task.CustomWeekdays;
-                task.AdHocIsAllDay = !task.CustomStartTime.HasValue || !task.CustomEndTime.HasValue;
-                task.AdHocMode = PeriodDefinitionMode.None;
-            }
-
-            return;
-        }
-
-        task.PeriodDefinitionId = task.AllowedPeriod switch
-        {
-            AllowedPeriod.Work => PeriodDefinitionCatalog.WorkId,
-            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWorkId,
-            _ => PeriodDefinitionCatalog.AnyId
-        };
-    }
-
-    private static bool HasAdHocDefinition(TaskItem task)
-    {
-        return task.AdHocStartTime.HasValue
-            || task.AdHocEndTime.HasValue
-            || task.AdHocWeekdays.HasValue
-            || task.AdHocIsAllDay
-            || task.AdHocMode != PeriodDefinitionMode.None;
     }
 
     private static DateTime EnsureUtc(DateTime value)
