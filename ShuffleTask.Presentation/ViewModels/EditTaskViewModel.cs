@@ -131,7 +131,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         AppSettings = appSettings;
         DeadlineDate = GetTodayUtcDate();
-        AlignmentModeOptions = AlignmentModeOption.CreateDefaults();
+        AlignmentModeOptions = AlignmentModeCatalog.Defaults;
         SelectedAlignmentMode = AlignmentModeOptions[0];
     }
 
