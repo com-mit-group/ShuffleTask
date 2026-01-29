@@ -2,11 +2,15 @@ namespace ShuffleTask.Domain.Entities;
 
 public static class TaskItemPeriodDefinitionHelper
 {
-    public static bool HasAdHocDefinition(TaskItem task)
+    public static bool HasAdHocDefinition(TaskItemData task)
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        return HasAdHocDefinition(task);
+        return task.AdHocStartTime.HasValue
+            || task.AdHocEndTime.HasValue
+            || task.AdHocWeekdays.HasValue
+            || task.AdHocIsAllDay
+            || task.AdHocMode != PeriodDefinitionMode.None;
     }
 
     public static bool TryBuildAdHocDefinition(TaskItem task, out PeriodDefinition definition)
@@ -61,14 +65,5 @@ public static class TaskItemPeriodDefinitionHelper
             AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWorkId,
             _ => PeriodDefinitionCatalog.AnyId
         };
-    }
-
-    private static bool HasAdHocDefinition(TaskItemData task)
-    {
-        return task.AdHocStartTime.HasValue
-            || task.AdHocEndTime.HasValue
-            || task.AdHocWeekdays.HasValue
-            || task.AdHocIsAllDay
-            || task.AdHocMode != PeriodDefinitionMode.None;
     }
 }
