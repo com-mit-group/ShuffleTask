@@ -54,11 +54,51 @@ internal sealed class TaskItemRecord : TaskItemData
             AllowedPeriod = AllowedPeriod.OffWork;
         }
 
+        NormalizeLegacyPeriodDefinition();
+
         if (UpdatedAt == default)
         {
             UpdatedAt = CreatedAt;
         }
 
         return TaskItem.FromData(this);
+    }
+
+    private void NormalizeLegacyPeriodDefinition()
+    {
+        if (!string.IsNullOrWhiteSpace(PeriodDefinitionId) || HasAdHocDefinition())
+        {
+            return;
+        }
+
+        if (AllowedPeriod == AllowedPeriod.Custom)
+        {
+            if (CustomStartTime.HasValue || CustomEndTime.HasValue || CustomWeekdays.HasValue)
+            {
+                AdHocStartTime = CustomStartTime;
+                AdHocEndTime = CustomEndTime;
+                AdHocWeekdays = CustomWeekdays;
+                AdHocIsAllDay = !CustomStartTime.HasValue || !CustomEndTime.HasValue;
+                AdHocMode = PeriodDefinitionMode.None;
+            }
+
+            return;
+        }
+
+        PeriodDefinitionId = AllowedPeriod switch
+        {
+            AllowedPeriod.Work => PeriodDefinitionCatalog.WorkId,
+            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWorkId,
+            _ => PeriodDefinitionCatalog.AnyId
+        };
+    }
+
+    private bool HasAdHocDefinition()
+    {
+        return AdHocStartTime.HasValue
+            || AdHocEndTime.HasValue
+            || AdHocWeekdays.HasValue
+            || AdHocIsAllDay
+            || AdHocMode != PeriodDefinitionMode.None;
     }
 }
