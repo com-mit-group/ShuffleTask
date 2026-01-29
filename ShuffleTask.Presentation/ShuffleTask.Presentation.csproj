@@ -65,6 +65,9 @@
       <MauiXaml Update="Views\EditTaskPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
+      <MauiXaml Update="Views\PeriodDefinitionEditorPage.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </MauiXaml>
       <MauiXaml Update="Views\DashboardPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
