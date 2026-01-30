@@ -222,6 +222,7 @@ internal sealed class InMemoryStorageService : IStorageService
 
     private void ApplyPeriodDefinition(TaskItem task)
     {
+        TaskItemPeriodDefinitionHelper.NormalizeLegacyPeriodDefinition(task);
         if (string.IsNullOrWhiteSpace(task.PeriodDefinitionId))
         {
             return;

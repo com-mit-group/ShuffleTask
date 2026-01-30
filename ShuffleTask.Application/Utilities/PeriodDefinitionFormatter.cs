@@ -1,8 +1,8 @@
 using ShuffleTask.Domain.Entities;
 
-namespace ShuffleTask.Presentation.Utilities;
+namespace ShuffleTask.Application.Utilities;
 
-internal static class PeriodDefinitionFormatter
+public static class PeriodDefinitionFormatter
 {
     public static string FormatAllowedPeriodLabel(TaskItem task)
     {

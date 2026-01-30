@@ -2,7 +2,7 @@ namespace ShuffleTask.Domain.Entities;
 
 public static class TaskItemPeriodDefinitionHelper
 {
-    public static bool HasAdHocDefinition(TaskItem task)
+    public static bool HasAdHocDefinition(TaskItemData task)
     {
         ArgumentNullException.ThrowIfNull(task);
 
@@ -34,5 +34,36 @@ public static class TaskItemPeriodDefinitionHelper
             Mode = task.AdHocMode
         };
         return true;
+    }
+
+    public static void NormalizeLegacyPeriodDefinition(TaskItemData task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        if (!string.IsNullOrWhiteSpace(task.PeriodDefinitionId) || HasAdHocDefinition(task))
+        {
+            return;
+        }
+
+        if (task.AllowedPeriod == AllowedPeriod.Custom)
+        {
+            if (task.CustomStartTime.HasValue || task.CustomEndTime.HasValue || task.CustomWeekdays.HasValue)
+            {
+                task.AdHocStartTime = task.CustomStartTime;
+                task.AdHocEndTime = task.CustomEndTime;
+                task.AdHocWeekdays = task.CustomWeekdays;
+                task.AdHocIsAllDay = !task.CustomStartTime.HasValue || !task.CustomEndTime.HasValue;
+                task.AdHocMode = PeriodDefinitionMode.None;
+            }
+
+            return;
+        }
+
+        task.PeriodDefinitionId = task.AllowedPeriod switch
+        {
+            AllowedPeriod.Work => PeriodDefinitionCatalog.WorkId,
+            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWorkId,
+            _ => PeriodDefinitionCatalog.AnyId
+        };
     }
 }
