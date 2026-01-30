@@ -272,6 +272,74 @@ public class StorageServiceStubTests
     }
 
     [Test]
+    public async Task PeriodDefinitionRoundTrip_PreservesNamedDefinitionFields()
+    {
+        var stub = new StorageServiceStub();
+        await stub.InitializeAsync();
+
+        var definition = new PeriodDefinition
+        {
+            Id = "afternoon",
+            Name = "Afternoon",
+            Weekdays = Weekdays.Mon | Weekdays.Wed,
+            StartTime = new TimeSpan(13, 0, 0),
+            EndTime = new TimeSpan(15, 0, 0),
+            IsAllDay = false,
+            Mode = PeriodDefinitionMode.None
+        };
+
+        await stub.AddPeriodDefinitionAsync(definition);
+        var retrieved = await stub.GetPeriodDefinitionAsync(definition.Id);
+
+        Assert.That(retrieved, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(retrieved!.Id, Is.EqualTo(definition.Id));
+            Assert.That(retrieved.Name, Is.EqualTo(definition.Name));
+            Assert.That(retrieved.Weekdays, Is.EqualTo(definition.Weekdays));
+            Assert.That(retrieved.StartTime, Is.EqualTo(definition.StartTime));
+            Assert.That(retrieved.EndTime, Is.EqualTo(definition.EndTime));
+            Assert.That(retrieved.IsAllDay, Is.EqualTo(definition.IsAllDay));
+            Assert.That(retrieved.Mode, Is.EqualTo(definition.Mode));
+        });
+    }
+
+    [Test]
+    public async Task TaskWithAdHocPeriod_PersistsWithoutAddingNamedDefinition()
+    {
+        var stub = new StorageServiceStub();
+        await stub.InitializeAsync();
+
+        var beforeDefinitions = await stub.GetPeriodDefinitionsAsync();
+        var task = new TaskItem
+        {
+            Id = "adhoc-task",
+            Title = "Ad-hoc period",
+            AdHocStartTime = new TimeSpan(9, 30, 0),
+            AdHocEndTime = new TimeSpan(11, 0, 0),
+            AdHocWeekdays = Weekdays.Mon | Weekdays.Fri,
+            AdHocIsAllDay = false,
+            AdHocMode = PeriodDefinitionMode.None
+        };
+
+        await stub.AddTaskAsync(task);
+        var retrieved = await stub.GetTaskAsync(task.Id);
+        var afterDefinitions = await stub.GetPeriodDefinitionsAsync();
+
+        Assert.That(retrieved, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(retrieved!.PeriodDefinitionId, Is.Null);
+            Assert.That(retrieved.AdHocStartTime, Is.EqualTo(task.AdHocStartTime));
+            Assert.That(retrieved.AdHocEndTime, Is.EqualTo(task.AdHocEndTime));
+            Assert.That(retrieved.AdHocWeekdays, Is.EqualTo(task.AdHocWeekdays));
+            Assert.That(retrieved.AdHocIsAllDay, Is.EqualTo(task.AdHocIsAllDay));
+            Assert.That(retrieved.AdHocMode, Is.EqualTo(task.AdHocMode));
+            Assert.That(afterDefinitions.Count, Is.EqualTo(beforeDefinitions.Count));
+        });
+    }
+
+    [Test]
     public async Task SetSettingsAsync_UpdatesSharedInstanceWithoutReads()
     {
         var shared = new AppSettings

@@ -84,6 +84,78 @@ public class TimeWindowServiceTests
     }
 
     [Test]
+    public void AllowedNow_AllDayDefinitionHonorsWeekdayConstraints()
+    {
+        var settings = new AppSettings();
+        var monday = LocalDate(2024, 1, 1, 9, 0);
+        var tuesday = LocalDate(2024, 1, 2, 9, 0);
+
+        var definition = new PeriodDefinition
+        {
+            Id = "weekday-only",
+            Name = "Weekday only",
+            Weekdays = Weekdays.Mon | Weekdays.Wed,
+            IsAllDay = true,
+            Mode = PeriodDefinitionMode.None
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(definition, monday, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(definition, tuesday, settings), Is.False);
+        });
+    }
+
+    [Test]
+    public void AllowedNow_WorkAndOffWorkAlignWithAppSettings()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(6, 0, 0),
+            WorkEnd = new TimeSpan(14, 0, 0)
+        };
+        var weekdayEarly = LocalDate(2024, 1, 2, 5, 30);
+        var weekdayInside = LocalDate(2024, 1, 2, 7, 0);
+        var weekdayOutside = LocalDate(2024, 1, 2, 15, 0);
+        var weekendDuringWork = LocalDate(2024, 1, 6, 7, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Work, weekdayInside, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Work, weekdayOutside, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.OffWork, weekdayEarly, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.OffWork, weekdayInside, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.OffWork, weekendDuringWork, settings), Is.True);
+        });
+    }
+
+    [Test]
+    public void AllowedNow_DefaultRangesForMorningsEveningsAndLunch()
+    {
+        var settings = new AppSettings
+        {
+            WorkStart = new TimeSpan(9, 0, 0),
+            WorkEnd = new TimeSpan(17, 0, 0)
+        };
+        var morningInside = LocalDate(2024, 1, 2, 8, 0);
+        var morningOutside = LocalDate(2024, 1, 2, 11, 0);
+        var eveningInside = LocalDate(2024, 1, 2, 19, 0);
+        var eveningOutside = LocalDate(2024, 1, 2, 10, 0);
+        var lunchInside = LocalDate(2024, 1, 2, 12, 30);
+        var lunchOutside = LocalDate(2024, 1, 2, 14, 0);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Mornings, morningInside, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Mornings, morningOutside, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Evenings, eveningInside, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.Evenings, eveningOutside, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.LunchBreak, lunchInside, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(PeriodDefinitionCatalog.LunchBreak, lunchOutside, settings), Is.False);
+        });
+    }
+
+    [Test]
     public void UntilNextBoundary_ReturnsZeroWhenAlwaysAllowed()
     {
         var settings = new AppSettings
