@@ -124,6 +124,21 @@ public static class PeriodDefinitionFormatter
             return "Work hours";
         }
 
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Morning))
+        {
+            return "Morning hours";
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Lunch))
+        {
+            return "Lunch break";
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Evening))
+        {
+            return "Evening hours";
+        }
+
         if (definition.IsAllDay)
         {
             return "All day";
@@ -147,6 +162,21 @@ public static class PeriodDefinitionFormatter
         if (mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours))
         {
             return "Aligns to Settings → Work hours.";
+        }
+
+        if (mode.HasFlag(PeriodDefinitionMode.Morning))
+        {
+            return "Aligns to Settings → Morning hours.";
+        }
+
+        if (mode.HasFlag(PeriodDefinitionMode.Lunch))
+        {
+            return "Aligns to Settings → Lunch break.";
+        }
+
+        if (mode.HasFlag(PeriodDefinitionMode.Evening))
+        {
+            return "Aligns to Settings → Evening hours.";
         }
 
         return string.Empty;
