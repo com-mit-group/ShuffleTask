@@ -97,6 +97,14 @@ public class TaskItemTests
             IntervalDays = 2,
             LastDoneAt = new DateTime(2025, 9, 10, 12, 0, 0, DateTimeKind.Utc),
             AllowedPeriod = AllowedPeriod.Work,
+            PeriodDefinitionId = "afternoon",
+            AdHocStartTime = new TimeSpan(9, 30, 0),
+            AdHocEndTime = new TimeSpan(11, 15, 0),
+            AdHocWeekdays = Weekdays.Mon | Weekdays.Fri,
+            AdHocIsAllDay = false,
+            AdHocMode = PeriodDefinitionMode.AlignWithWorkHours,
+            CustomStartTime = new TimeSpan(8, 0, 0),
+            CustomEndTime = new TimeSpan(9, 0, 0),
             CustomWeekdays = Weekdays.Mon | Weekdays.Wed,
             Paused = true,
             CreatedAt = new DateTime(2025, 9, 1, 9, 0, 0, DateTimeKind.Utc),
@@ -128,6 +136,14 @@ public class TaskItemTests
             Assert.That(actual.IntervalDays, Is.EqualTo(expected.IntervalDays));
             Assert.That(actual.LastDoneAt, Is.EqualTo(expected.LastDoneAt));
             Assert.That(actual.AllowedPeriod, Is.EqualTo(expected.AllowedPeriod));
+            Assert.That(actual.PeriodDefinitionId, Is.EqualTo(expected.PeriodDefinitionId));
+            Assert.That(actual.AdHocStartTime, Is.EqualTo(expected.AdHocStartTime));
+            Assert.That(actual.AdHocEndTime, Is.EqualTo(expected.AdHocEndTime));
+            Assert.That(actual.AdHocWeekdays, Is.EqualTo(expected.AdHocWeekdays));
+            Assert.That(actual.AdHocIsAllDay, Is.EqualTo(expected.AdHocIsAllDay));
+            Assert.That(actual.AdHocMode, Is.EqualTo(expected.AdHocMode));
+            Assert.That(actual.CustomStartTime, Is.EqualTo(expected.CustomStartTime));
+            Assert.That(actual.CustomEndTime, Is.EqualTo(expected.CustomEndTime));
             Assert.That(actual.CustomWeekdays, Is.EqualTo(expected.CustomWeekdays));
             Assert.That(actual.Paused, Is.EqualTo(expected.Paused));
             Assert.That(actual.CreatedAt, Is.EqualTo(expected.CreatedAt));
