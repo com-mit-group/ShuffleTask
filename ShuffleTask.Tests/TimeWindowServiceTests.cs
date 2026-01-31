@@ -135,13 +135,19 @@ public class TimeWindowServiceTests
         var settings = new AppSettings
         {
             WorkStart = new TimeSpan(9, 0, 0),
-            WorkEnd = new TimeSpan(17, 0, 0)
+            WorkEnd = new TimeSpan(17, 0, 0),
+            MorningStart = new TimeSpan(6, 0, 0),
+            MorningEnd = new TimeSpan(9, 0, 0),
+            LunchStart = new TimeSpan(11, 30, 0),
+            LunchEnd = new TimeSpan(12, 30, 0),
+            EveningStart = new TimeSpan(19, 0, 0),
+            EveningEnd = new TimeSpan(22, 0, 0)
         };
-        var morningInside = LocalDate(2024, 1, 2, 8, 0);
-        var morningOutside = LocalDate(2024, 1, 2, 11, 0);
-        var eveningInside = LocalDate(2024, 1, 2, 19, 0);
+        var morningInside = LocalDate(2024, 1, 2, 7, 30);
+        var morningOutside = LocalDate(2024, 1, 2, 10, 0);
+        var eveningInside = LocalDate(2024, 1, 2, 21, 0);
         var eveningOutside = LocalDate(2024, 1, 2, 10, 0);
-        var lunchInside = LocalDate(2024, 1, 2, 12, 30);
+        var lunchInside = LocalDate(2024, 1, 2, 12, 0);
         var lunchOutside = LocalDate(2024, 1, 2, 14, 0);
 
         Assert.Multiple(() =>

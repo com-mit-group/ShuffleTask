@@ -5,7 +5,10 @@ public enum PeriodDefinitionMode
 {
     None = 0,
     AlignWithWorkHours = 1,
-    OffWorkRelativeToWorkHours = 2
+    OffWorkRelativeToWorkHours = 2,
+    Morning = 4,
+    Lunch = 8,
+    Evening = 16
 }
 
 public class PeriodDefinition
@@ -92,7 +95,7 @@ public static class PeriodDefinitionCatalog
         StartTime = new TimeSpan(7, 0, 0),
         EndTime = new TimeSpan(10, 0, 0),
         IsAllDay = false,
-        Mode = PeriodDefinitionMode.None
+        Mode = PeriodDefinitionMode.Morning
     };
 
     public static readonly PeriodDefinition Evenings = new()
@@ -103,7 +106,7 @@ public static class PeriodDefinitionCatalog
         StartTime = new TimeSpan(18, 0, 0),
         EndTime = new TimeSpan(21, 0, 0),
         IsAllDay = false,
-        Mode = PeriodDefinitionMode.None
+        Mode = PeriodDefinitionMode.Evening
     };
 
     public static readonly PeriodDefinition LunchBreak = new()
@@ -114,7 +117,7 @@ public static class PeriodDefinitionCatalog
         StartTime = new TimeSpan(12, 0, 0),
         EndTime = new TimeSpan(13, 0, 0),
         IsAllDay = false,
-        Mode = PeriodDefinitionMode.None
+        Mode = PeriodDefinitionMode.Lunch
     };
 
     private static readonly IReadOnlyDictionary<string, PeriodDefinition> BuiltIns =
