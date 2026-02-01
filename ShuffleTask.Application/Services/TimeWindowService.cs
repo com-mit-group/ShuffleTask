@@ -174,6 +174,21 @@ public static class TimeWindowService
             return (s.WorkStart, s.WorkEnd);
         }
 
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Morning))
+        {
+            return (s.MorningStart, s.MorningEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Lunch))
+        {
+            return (s.LunchStart, s.LunchEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Evening))
+        {
+            return (s.EveningStart, s.EveningEnd);
+        }
+
         return (definition.StartTime ?? TimeSpan.Zero, definition.EndTime ?? TimeSpan.Zero);
     }
 

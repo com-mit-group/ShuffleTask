@@ -25,6 +25,24 @@ public partial class AppSettings : ObservableObject
 
     [ObservableProperty]
     private TimeSpan workEnd = new(17, 0, 0); // default 17:00
+
+    [ObservableProperty]
+    private TimeSpan morningStart = new(7, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan morningEnd = new(10, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan lunchStart = new(12, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan lunchEnd = new(13, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan eveningStart = new(18, 0, 0);
+
+    [ObservableProperty]
+    private TimeSpan eveningEnd = new(21, 0, 0);
     public TimerMode TimerMode { get; set; } = TimerMode.LongInterval;
 
     public int FocusMinutes { get; set; } = 15;
@@ -119,6 +137,12 @@ public partial class AppSettings : ObservableObject
 
         WorkStart = source.WorkStart;
         WorkEnd = source.WorkEnd;
+        MorningStart = source.MorningStart;
+        MorningEnd = source.MorningEnd;
+        LunchStart = source.LunchStart;
+        LunchEnd = source.LunchEnd;
+        EveningStart = source.EveningStart;
+        EveningEnd = source.EveningEnd;
         TimerMode = source.TimerMode;
         FocusMinutes = source.FocusMinutes;
         BreakMinutes = source.BreakMinutes;
