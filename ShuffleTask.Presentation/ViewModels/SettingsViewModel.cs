@@ -297,10 +297,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _eveningDefinition = await _storage.GetPeriodDefinitionAsync(PeriodDefinitionCatalog.EveningsId);
         _lunchDefinition = await _storage.GetPeriodDefinitionAsync(PeriodDefinitionCatalog.LunchBreakId);
 
-        ApplyDefinitionTimes(_morningDefinition, PeriodDefinitionCatalog.Mornings, start => MorningStart = start, end => MorningEnd = end);
-        ApplyDefinitionTimes(_eveningDefinition, PeriodDefinitionCatalog.Evenings, start => EveningStart = start, end => EveningEnd = end);
-        ApplyDefinitionTimes(_lunchDefinition, PeriodDefinitionCatalog.LunchBreak, start => LunchStart = start, end => LunchEnd = end);
-        SyncSlotSettingsFromViewModel();
+        ApplySlotSettingsFromSettings();
     }
 
     private async Task PersistPresetDefinitionsAsync()
@@ -310,12 +307,14 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         await UpsertPresetDefinitionAsync(_lunchDefinition, PeriodDefinitionCatalog.LunchBreak, LunchStart, LunchEnd);
     }
 
-    private static void ApplyDefinitionTimes(PeriodDefinition? definition, PeriodDefinition fallback, Action<TimeSpan> setStart, Action<TimeSpan> setEnd)
+    private void ApplySlotSettingsFromSettings()
     {
-        TimeSpan start = definition?.StartTime ?? fallback.StartTime ?? TimeSpan.Zero;
-        TimeSpan end = definition?.EndTime ?? fallback.EndTime ?? TimeSpan.Zero;
-        setStart(start);
-        setEnd(end);
+        MorningStart = Settings.MorningStart;
+        MorningEnd = Settings.MorningEnd;
+        LunchStart = Settings.LunchStart;
+        LunchEnd = Settings.LunchEnd;
+        EveningStart = Settings.EveningStart;
+        EveningEnd = Settings.EveningEnd;
     }
 
     private async Task UpsertPresetDefinitionAsync(PeriodDefinition? definition, PeriodDefinition fallback, TimeSpan start, TimeSpan end)
