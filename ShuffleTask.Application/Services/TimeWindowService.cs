@@ -80,7 +80,23 @@ public static class TimeWindowService
 
         if (isAllDay)
         {
-            return IsWithinWeekdayScopeForAllDay(now, weekdays);
+            if (!IsWithinWeekdayScopeForAllDay(now, weekdays))
+            {
+                return false;
+            }
+
+            if (definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours))
+            {
+                (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+                if (IsWeekend(now))
+                {
+                    return true;
+                }
+
+                return !IsWithinWorkHours(now, start, end);
+            }
+
+            return true;
         }
 
         (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
