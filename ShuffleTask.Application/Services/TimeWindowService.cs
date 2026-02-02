@@ -76,7 +76,6 @@ public static class TimeWindowService
         ArgumentNullException.ThrowIfNull(definition);
 
         Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
-        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
         bool isAllDay = definition.IsAllDay;
 
         if (isAllDay)
@@ -85,8 +84,23 @@ public static class TimeWindowService
             {
                 return false;
             }
+
+            if (definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours))
+            {
+                (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+                if (IsWeekend(now))
+                {
+                    return true;
+                }
+
+                return !IsWithinWorkHours(now, start, end);
+            }
+
+            return true;
         }
-        else if (!IsWithinWeekdayScope(now, weekdays, start, end))
+
+        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+        if (!IsWithinWeekdayScope(now, weekdays, start, end))
         {
             return false;
         }
@@ -101,7 +115,7 @@ public static class TimeWindowService
             return !IsWithinWorkHours(now, start, end);
         }
 
-        return isAllDay || IsWithinWorkHours(now, start, end);
+        return IsWithinWorkHours(now, start, end);
     }
 
     private static PeriodDefinition ResolveDefinition(TaskItem task)
