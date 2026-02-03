@@ -45,6 +45,7 @@ public class StorageService : IStorageService
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
         await EnsureTaskSchemaAsync();
+        await EnsurePeriodDefinitionSchemaAsync();
         await EnsurePresetPeriodDefinitionsAsync();
     }
 
@@ -122,13 +123,57 @@ public class StorageService : IStorageService
 
         foreach (var preset in presets)
         {
+            var record = PeriodDefinitionRecord.FromDomain(preset);
+
             if (existingIds.Contains(preset.Id))
             {
+                var existingRecord = existing.First(existingItem =>
+                    string.Equals(existingItem.Id, preset.Id, StringComparison.OrdinalIgnoreCase));
+
+                bool needsUpdate = existingRecord.Mode != record.Mode;
+                bool shouldClearTimes = record.StartTime is null && record.EndTime is null
+                    && (existingRecord.StartTime.HasValue || existingRecord.EndTime.HasValue);
+
+                if (needsUpdate || shouldClearTimes)
+                {
+                    existingRecord.Mode = record.Mode;
+                    existingRecord.StartTime = record.StartTime;
+                    existingRecord.EndTime = record.EndTime;
+                    await Db.UpdateAsync(existingRecord);
+                }
+
                 continue;
             }
 
-            var record = PeriodDefinitionRecord.FromDomain(preset);
             await Db.InsertAsync(record);
+        }
+    }
+
+    private async Task EnsurePeriodDefinitionSchemaAsync()
+    {
+        try
+        {
+            var infos = await Db.QueryAsync<TableInfo>("PRAGMA table_info(PeriodDefinition);");
+            var cols = new HashSet<string>(infos.Select(i => i.name), StringComparer.OrdinalIgnoreCase);
+            async Task AddCol(string name, string sqlType, string defaultSql)
+            {
+                if (!cols.Contains(name))
+                {
+                    string alter = $"ALTER TABLE PeriodDefinition ADD COLUMN {name} {sqlType} DEFAULT {defaultSql}";
+                    await Db.ExecuteAsync(alter);
+                }
+            }
+
+            await AddCol("Name", "TEXT", "''");
+            await AddCol("Weekdays", IntegerSqlType, "0");
+            await AddCol("StartTime", "TEXT", "NULL");
+            await AddCol("EndTime", "TEXT", "NULL");
+            await AddCol("IsAllDay", IntegerSqlType, "0");
+            await AddCol("Mode", IntegerSqlType, "0");
+        }
+        catch
+        {
+            // best-effort; ignore migration errors
         }
     }
 
