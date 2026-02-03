@@ -11,6 +11,7 @@ public class StorageService : IStorageService
 {
     private const string SettingsKey = "app_settings";
     private const string IntegerSqlType = "INTEGER";
+    private readonly record struct SchemaColumn(string Name, string SqlType, string DefaultSql);
 
     private readonly TimeProvider _clock;
     private readonly string _dbPath;
@@ -51,60 +52,47 @@ public class StorageService : IStorageService
 
     private async Task EnsureTaskSchemaAsync()
     {
-        try
-        {
-            var infos = await Db.QueryAsync<TableInfo>("PRAGMA table_info(TaskItem);");
-            var cols = new HashSet<string>(infos.Select(i => i.name), StringComparer.OrdinalIgnoreCase);
-            async Task AddCol(string name, string sqlType, string defaultSql)
+        await EnsureSchemaAsync(
+            "TaskItem",
+            new[]
             {
-                if (!cols.Contains(name))
-                {
-                    string alter = $"ALTER TABLE TaskItem ADD COLUMN {name} {sqlType} DEFAULT {defaultSql}";
-                    await Db.ExecuteAsync(alter);
-                }
-            }
-
-            await AddCol("Title", "TEXT", "''");
-            await AddCol("Importance", IntegerSqlType, "1");
-            await AddCol("SizePoints", "REAL", "3");
-            await AddCol("Deadline", "TEXT", "NULL");
-            await AddCol("Repeat", IntegerSqlType, "0");
-            await AddCol("Weekdays", IntegerSqlType, "0");
-            await AddCol("IntervalDays", IntegerSqlType, "0");
-            await AddCol("LastDoneAt", "TEXT", "NULL");
-            await AddCol("AllowedPeriod", IntegerSqlType, "0");
-            await AddCol("PeriodDefinitionId", "TEXT", "NULL");
-            await AddCol("AdHocStartTime", "TEXT", "NULL");
-            await AddCol("AdHocEndTime", "TEXT", "NULL");
-            await AddCol("AdHocWeekdays", IntegerSqlType, "NULL");
-            await AddCol("AdHocIsAllDay", IntegerSqlType, "0");
-            await AddCol("AdHocMode", IntegerSqlType, "0");
-            await AddCol("AutoShuffleAllowed", IntegerSqlType, "1");
-            await AddCol("CustomStartTime", "TEXT", "NULL");
-            await AddCol("CustomEndTime", "TEXT", "NULL");
-            await AddCol("CustomWeekdays", IntegerSqlType, "NULL");
-            await AddCol("Paused", IntegerSqlType, "0");
-            await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
-            await AddCol("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP");
-            await AddCol("Description", "TEXT", "''");
-            await AddCol("Status", IntegerSqlType, "0");
-            await AddCol("SnoozedUntil", "TEXT", "NULL");
-            await AddCol("CompletedAt", "TEXT", "NULL");
-            await AddCol("NextEligibleAt", "TEXT", "NULL");
-            await AddCol("CustomTimerMode", IntegerSqlType, "NULL");
-            await AddCol("CustomReminderMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomFocusMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
-            await AddCol("CutInLineMode", IntegerSqlType, "0");
-            await AddCol("EventVersion", IntegerSqlType, "0");
-            await AddCol("DeviceId", "TEXT", "''");
-            await AddCol("UserId", "TEXT", "NULL");
-        }
-        catch
-        {
-            // best-effort; ignore migration errors
-        }
+                new SchemaColumn("Title", "TEXT", "''"),
+                new SchemaColumn("Importance", IntegerSqlType, "1"),
+                new SchemaColumn("SizePoints", "REAL", "3"),
+                new SchemaColumn("Deadline", "TEXT", "NULL"),
+                new SchemaColumn("Repeat", IntegerSqlType, "0"),
+                new SchemaColumn("Weekdays", IntegerSqlType, "0"),
+                new SchemaColumn("IntervalDays", IntegerSqlType, "0"),
+                new SchemaColumn("LastDoneAt", "TEXT", "NULL"),
+                new SchemaColumn("AllowedPeriod", IntegerSqlType, "0"),
+                new SchemaColumn("PeriodDefinitionId", "TEXT", "NULL"),
+                new SchemaColumn("AdHocStartTime", "TEXT", "NULL"),
+                new SchemaColumn("AdHocEndTime", "TEXT", "NULL"),
+                new SchemaColumn("AdHocWeekdays", IntegerSqlType, "NULL"),
+                new SchemaColumn("AdHocIsAllDay", IntegerSqlType, "0"),
+                new SchemaColumn("AdHocMode", IntegerSqlType, "0"),
+                new SchemaColumn("AutoShuffleAllowed", IntegerSqlType, "1"),
+                new SchemaColumn("CustomStartTime", "TEXT", "NULL"),
+                new SchemaColumn("CustomEndTime", "TEXT", "NULL"),
+                new SchemaColumn("CustomWeekdays", IntegerSqlType, "NULL"),
+                new SchemaColumn("Paused", IntegerSqlType, "0"),
+                new SchemaColumn("CreatedAt", "TEXT", "CURRENT_TIMESTAMP"),
+                new SchemaColumn("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP"),
+                new SchemaColumn("Description", "TEXT", "''"),
+                new SchemaColumn("Status", IntegerSqlType, "0"),
+                new SchemaColumn("SnoozedUntil", "TEXT", "NULL"),
+                new SchemaColumn("CompletedAt", "TEXT", "NULL"),
+                new SchemaColumn("NextEligibleAt", "TEXT", "NULL"),
+                new SchemaColumn("CustomTimerMode", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomReminderMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomFocusMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomBreakMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomPomodoroCycles", IntegerSqlType, "NULL"),
+                new SchemaColumn("CutInLineMode", IntegerSqlType, "0"),
+                new SchemaColumn("EventVersion", IntegerSqlType, "0"),
+                new SchemaColumn("DeviceId", "TEXT", "''"),
+                new SchemaColumn("UserId", "TEXT", "NULL")
+            });
     }
 
     private async Task EnsurePresetPeriodDefinitionsAsync()
@@ -151,25 +139,36 @@ public class StorageService : IStorageService
 
     private async Task EnsurePeriodDefinitionSchemaAsync()
     {
+        await EnsureSchemaAsync(
+            "PeriodDefinition",
+            new[]
+            {
+                new SchemaColumn("Name", "TEXT", "''"),
+                new SchemaColumn("Weekdays", IntegerSqlType, "0"),
+                new SchemaColumn("StartTime", "TEXT", "NULL"),
+                new SchemaColumn("EndTime", "TEXT", "NULL"),
+                new SchemaColumn("IsAllDay", IntegerSqlType, "0"),
+                new SchemaColumn("Mode", IntegerSqlType, "0")
+            });
+    }
+
+    private async Task EnsureSchemaAsync(string tableName, IReadOnlyCollection<SchemaColumn> columns)
+    {
         try
         {
-            var infos = await Db.QueryAsync<TableInfo>("PRAGMA table_info(PeriodDefinition);");
+            var infos = await Db.QueryAsync<TableInfo>($"PRAGMA table_info({tableName});");
             var cols = new HashSet<string>(infos.Select(i => i.name), StringComparer.OrdinalIgnoreCase);
-            async Task AddCol(string name, string sqlType, string defaultSql)
-            {
-                if (!cols.Contains(name))
-                {
-                    string alter = $"ALTER TABLE PeriodDefinition ADD COLUMN {name} {sqlType} DEFAULT {defaultSql}";
-                    await Db.ExecuteAsync(alter);
-                }
-            }
 
-            await AddCol("Name", "TEXT", "''");
-            await AddCol("Weekdays", IntegerSqlType, "0");
-            await AddCol("StartTime", "TEXT", "NULL");
-            await AddCol("EndTime", "TEXT", "NULL");
-            await AddCol("IsAllDay", IntegerSqlType, "0");
-            await AddCol("Mode", IntegerSqlType, "0");
+            foreach (var column in columns)
+            {
+                if (cols.Contains(column.Name))
+                {
+                    continue;
+                }
+
+                string alter = $"ALTER TABLE {tableName} ADD COLUMN {column.Name} {column.SqlType} DEFAULT {column.DefaultSql}";
+                await Db.ExecuteAsync(alter);
+            }
         }
         catch
         {
