@@ -77,6 +77,7 @@ public static class TimeWindowService
 
         Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
         bool isAllDay = definition.IsAllDay;
+        TimeSpan start, end;
 
         if (isAllDay)
         {
@@ -87,7 +88,7 @@ public static class TimeWindowService
 
             if (definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours))
             {
-                (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+                (start, end) = ResolveTimeWindow(definition, s);
                 if (IsWeekend(now))
                 {
                     return true;
@@ -99,7 +100,7 @@ public static class TimeWindowService
             return true;
         }
 
-        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+        (start, end) = ResolveTimeWindow(definition, s);
         if (!IsWithinWeekdayScope(now, weekdays, start, end))
         {
             return false;
