@@ -162,6 +162,99 @@ public class TimeWindowServiceTests
     }
 
     [Test]
+    public void AllowedNow_MorningMode_UsesSettingsTimesAndWeekdays()
+    {
+        var settings = new AppSettings
+        {
+            MorningStart = new TimeSpan(5, 0, 0),
+            MorningEnd = new TimeSpan(8, 0, 0)
+        };
+        var mondayMorning = LocalDate(2024, 1, 1, 6, 30);
+        var tuesdayMorning = LocalDate(2024, 1, 2, 6, 30);
+        var mondayLate = LocalDate(2024, 1, 1, 9, 0);
+
+        var definition = new PeriodDefinition
+        {
+            Id = "custom-morning",
+            Name = "Custom morning",
+            Weekdays = Weekdays.Mon,
+            StartTime = new TimeSpan(9, 0, 0),
+            EndTime = new TimeSpan(10, 0, 0),
+            IsAllDay = false,
+            Mode = PeriodDefinitionMode.Morning
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(definition, mondayMorning, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(definition, tuesdayMorning, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(definition, mondayLate, settings), Is.False);
+        });
+    }
+
+    [Test]
+    public void AllowedNow_LunchMode_WeekendOnlyRespectsSettingsWindow()
+    {
+        var settings = new AppSettings
+        {
+            LunchStart = new TimeSpan(11, 0, 0),
+            LunchEnd = new TimeSpan(12, 0, 0)
+        };
+        var saturdayLunch = LocalDate(2024, 1, 6, 11, 30);
+        var saturdayLate = LocalDate(2024, 1, 6, 13, 0);
+        var mondayLunch = LocalDate(2024, 1, 1, 11, 30);
+
+        var definition = new PeriodDefinition
+        {
+            Id = "weekend-lunch",
+            Name = "Weekend lunch",
+            Weekdays = Weekdays.Sat | Weekdays.Sun,
+            StartTime = new TimeSpan(13, 0, 0),
+            EndTime = new TimeSpan(14, 0, 0),
+            IsAllDay = false,
+            Mode = PeriodDefinitionMode.Lunch
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(definition, saturdayLunch, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(definition, saturdayLate, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(definition, mondayLunch, settings), Is.False);
+        });
+    }
+
+    [Test]
+    public void AllowedNow_EveningMode_UsesSettingsTimesAndWeekdays()
+    {
+        var settings = new AppSettings
+        {
+            EveningStart = new TimeSpan(20, 0, 0),
+            EveningEnd = new TimeSpan(22, 0, 0)
+        };
+        var tuesdayEvening = LocalDate(2024, 1, 2, 21, 0);
+        var wednesdayEvening = LocalDate(2024, 1, 3, 21, 0);
+        var tuesdayLate = LocalDate(2024, 1, 2, 23, 0);
+
+        var definition = new PeriodDefinition
+        {
+            Id = "weekday-evening",
+            Name = "Weekday evening",
+            Weekdays = Weekdays.Tue,
+            StartTime = new TimeSpan(18, 0, 0),
+            EndTime = new TimeSpan(19, 0, 0),
+            IsAllDay = false,
+            Mode = PeriodDefinitionMode.Evening
+        };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(TimeWindowService.AllowedNow(definition, tuesdayEvening, settings), Is.True);
+            Assert.That(TimeWindowService.AllowedNow(definition, wednesdayEvening, settings), Is.False);
+            Assert.That(TimeWindowService.AllowedNow(definition, tuesdayLate, settings), Is.False);
+        });
+    }
+
+    [Test]
     public void UntilNextBoundary_ReturnsZeroWhenAlwaysAllowed()
     {
         var settings = new AppSettings
