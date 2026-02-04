@@ -62,9 +62,12 @@
             </Grid>
 
             <Grid Grid.Row="3"
+                  RowDefinitions="Auto,Auto"
                   ColumnDefinitions="*,*"
-                  ColumnSpacing="12">
-                <TimePicker Grid.Column="0"
+                  ColumnSpacing="12"
+                  RowSpacing="8">
+                <TimePicker Grid.Row="0"
+                            Grid.Column="0"
                             Time="{Binding StartTime}">
                     <TimePicker.Triggers>
                         <DataTrigger TargetType="TimePicker"
@@ -72,9 +75,15 @@
                                      Value="True">
                             <Setter Property="IsEnabled" Value="False" />
                         </DataTrigger>
+                        <DataTrigger TargetType="TimePicker"
+                                     Binding="{Binding IsAlignmentFromSettings}"
+                                     Value="True">
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
                     </TimePicker.Triggers>
                 </TimePicker>
-                <TimePicker Grid.Column="1"
+                <TimePicker Grid.Row="0"
+                            Grid.Column="1"
                             Time="{Binding EndTime}">
                     <TimePicker.Triggers>
                         <DataTrigger TargetType="TimePicker"
@@ -82,8 +91,26 @@
                                      Value="True">
                             <Setter Property="IsEnabled" Value="False" />
                         </DataTrigger>
+                        <DataTrigger TargetType="TimePicker"
+                                     Binding="{Binding IsAlignmentFromSettings}"
+                                     Value="True">
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
                     </TimePicker.Triggers>
                 </TimePicker>
+                <Label Grid.Row="1"
+                       Grid.ColumnSpan="2"
+                       Text="{Binding SettingsResolvedTimeRange}"
+                       FontSize="12"
+                       TextColor="#6B7280">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label"
+                                     Binding="{Binding IsAlignmentFromSettings}"
+                                     Value="False">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
             </Grid>
 
             <Grid Grid.Row="4"
