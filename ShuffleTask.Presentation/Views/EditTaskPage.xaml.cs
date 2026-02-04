@@ -81,7 +81,7 @@ public partial class EditTaskPage : ContentPage
 
         var editorPage = MauiProgram.Services.GetRequiredService<PeriodDefinitionEditorPage>();
         var editorViewModel = MauiProgram.Services.GetRequiredService<PeriodDefinitionEditorViewModel>();
-        editorViewModel.Load(definition);
+        await editorViewModel.LoadAsync(definition);
 
         void OnSaved(object? sender, PeriodDefinitionSavedEventArgs args)
         {
