@@ -29,6 +29,12 @@ Timer → Platform Notification → Fallback Alert → Logging
 **Background Notifications:**
 Auto-shuffle notifications fire reliably even when the app is backgrounded, using OS-native scheduled notification APIs (AlarmManager on Android, UNUserNotificationCenter on iOS/macOS, ScheduledToastNotification on Windows).
 
+## Allowed periods & presets
+
+Each task can define when it is allowed to be shuffled. The period editor lets you pick a preset (such as a workday or custom window) or create a new preset to reuse across tasks. Presets provide default weekday/time windows; editing a preset updates those defaults for future tasks that choose it.
+
+When using the ad-hoc editor, the **All-day** toggle ignores the start/end time pickers, while alignment modes help snap the window to work or off-work hours. Work/off-work alignment uses the **Work start/end** times from Settings, and off-work covers all remaining hours.
+
 
 ## Prioritization formula
 

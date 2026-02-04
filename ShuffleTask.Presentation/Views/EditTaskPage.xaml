@@ -180,10 +180,13 @@
                             IsEnabled="{Binding CanEditSelectedDefinition}"
                             Clicked="OnEditSelectedPeriodDefinitionClicked" />
                 </Grid>
+                <Label Text="Presets set default allowed windows; choose one or edit it to update the schedule for future tasks."
+                       FontSize="12"
+                       TextColor="#6B7280" />
             </VerticalStackLayout>
 
             <Grid Grid.Row="9"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="8"
                   IsVisible="{Binding IsAdHocSelection}">
                 <Label Grid.Row="0"
@@ -198,7 +201,11 @@
                             IsToggled="{Binding AdHocIsAllDay}"
                             SemanticProperties.Description="All-day windows ignore the time range below." />
                 </Grid>
-                <Grid Grid.Row="2"
+                <Label Grid.Row="2"
+                       Text="All-day ignores the time range; toggle off to set a specific start and end time."
+                       FontSize="12"
+                       TextColor="#6B7280" />
+                <Grid Grid.Row="3"
                       ColumnDefinitions="*,*"
                       ColumnSpacing="12">
                     <TimePicker Grid.Column="0"
@@ -222,7 +229,7 @@
                         </TimePicker.Triggers>
                     </TimePicker>
                 </Grid>
-                <Grid Grid.Row="3"
+                <Grid Grid.Row="4"
                       ColumnDefinitions="Auto,*"
                       ColumnSpacing="12">
                     <Label Text="Alignment mode"
@@ -233,13 +240,17 @@
                             ItemDisplayBinding="{Binding Name}"
                             SemanticProperties.Description="{Binding SelectedAlignmentMode.Description}" />
                 </Grid>
-                <Label Grid.Row="4"
+                <Label Grid.Row="5"
                        Text="{Binding SelectedAlignmentMode.Description}"
                        FontSize="12"
                        TextColor="#6B7280" />
-                <Label Grid.Row="5"
+                <Label Grid.Row="6"
+                       Text="Work/off-work alignment uses the Work start/end times from Settings."
+                       FontSize="12"
+                       TextColor="#6B7280" />
+                <Label Grid.Row="7"
                        Text="Weekdays" />
-                <Grid Grid.Row="6"
+                <Grid Grid.Row="8"
                       RowDefinitions="Auto,Auto"
                       ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       ColumnSpacing="8">
