@@ -189,7 +189,8 @@
                         ItemsSource="{Binding TaskGroups}"
                         IsGrouped="True"
                         Margin="0"
-                        ItemsLayout="VerticalList">
+                        ItemsLayout="VerticalList"
+                        ItemTemplate="{StaticResource TaskItemTemplate}">
             <CollectionView.GroupHeaderTemplate>
                 <DataTemplate x:DataType="vm:TaskGroup">
                     <VerticalStackLayout Spacing="12"
@@ -204,9 +205,6 @@
                     </VerticalStackLayout>
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
-            <CollectionView.ItemTemplate>
-                <StaticResource ResourceKey="TaskItemTemplate" />
-            </CollectionView.ItemTemplate>
         </CollectionView>
         <Grid IsVisible="False">
             <Grid.Triggers>
