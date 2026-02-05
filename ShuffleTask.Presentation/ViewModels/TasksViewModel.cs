@@ -27,6 +27,12 @@ public partial class TasksViewModel : ObservableObject
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
+    public ObservableCollection<TaskListItem> ActiveTasks { get; } = [];
+    public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
+
+    public bool HasActiveTasks => ActiveTasks.Count > 0;
+    public bool HasDoneTasks => DoneTasks.Count > 0;
+    public bool HasTasks => HasActiveTasks || HasDoneTasks;
 
     [ObservableProperty]
     private bool isBusy;
@@ -49,12 +55,26 @@ public partial class TasksViewModel : ObservableObject
             DateTimeOffset now = _clock.GetUtcNow();
 
             Tasks.Clear();
+            ActiveTasks.Clear();
+            DoneTasks.Clear();
             foreach (TaskListItem? entry in items
                 .Select(task => TaskListItem.From(task, settings, now))
                 .OrderByDescending(x => x.PriorityScore))
             {
                 Tasks.Add(entry);
+                if (entry.Task.Status == TaskLifecycleStatus.Completed)
+                {
+                    DoneTasks.Add(entry);
+                }
+                else
+                {
+                    ActiveTasks.Add(entry);
+                }
             }
+
+            OnPropertyChanged(nameof(HasActiveTasks));
+            OnPropertyChanged(nameof(HasDoneTasks));
+            OnPropertyChanged(nameof(HasTasks));
         }
         finally
         {

@@ -6,6 +6,177 @@
             x:Class="ShuffleTask.Views.TasksPage"
             x:DataType="vm:TasksViewModel"
              Title="Tasks">
+    <ContentPage.Resources>
+        <DataTemplate x:Key="TaskItemTemplate" x:DataType="vm:TaskListItem">
+            <SwipeView>
+                <SwipeView.RightItems>
+                    <SwipeItems Mode="Reveal">
+                        <SwipeItem Text="Edit"
+                                   BackgroundColor="#2d9cdb"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnEditSwipe" />
+                        <SwipeItem Text="Toggle Pause"
+                                   BackgroundColor="#f2c94c"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnTogglePauseSwipe" />
+                        <SwipeItem Text="Cut-In Once"
+                                   BackgroundColor="#38b2ac"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnCutInOnceSwipe" />
+                        <SwipeItem Text="Cut-In Until Done"
+                                   BackgroundColor="#f59e0b"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnCutInUntilDoneSwipe" />
+                        <SwipeItem Text="Clear Cut-In"
+                                   BackgroundColor="#9ca3af"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnClearCutInSwipe" />
+                        <SwipeItem Text="Delete"
+                                   BackgroundColor="#eb5757"
+                                   CommandParameter="{Binding Task}"
+                                   Invoked="OnDeleteSwipe" />
+                    </SwipeItems>
+                </SwipeView.RightItems>
+
+                <Border StrokeShape="RoundRectangle 12"
+                        Padding="16"
+                        Margin="12,8"
+                        BackgroundColor="{AppThemeBinding Light=#ffffff, Dark=#1f1f1f}"
+                        Stroke="{AppThemeBinding Light=#e0e0e0, Dark=#2c2c2c}"
+                        StrokeThickness="1">
+                    <Grid RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0"
+                              ColumnDefinitions="*,Auto"
+                              ColumnSpacing="8">
+                            <Label Text="{Binding Title}"
+                                   FontSize="18"
+                                   FontAttributes="Bold" />
+                            <Border Grid.Column="1"
+                                    Padding="8,4"
+                                    StrokeThickness="0"
+                                    BackgroundColor="{Binding CutInLineBadgeBackgroundColor}"
+                                    StrokeShape="RoundRectangle 8"
+                                    IsVisible="{Binding HasCutInLineBadge}">
+                                <Label Text="{Binding CutInLineBadgeText}"
+                                       FontSize="12"
+                                       TextColor="{Binding CutInLineBadgeTextColor}" />
+                            </Border>
+                        </Grid>
+
+                        <Label Grid.Row="1"
+                               Text="{Binding Description}"
+                               FontSize="14"
+                               TextColor="{AppThemeBinding Light=#4f4f4f, Dark=#d0d0d0}"
+                               LineBreakMode="WordWrap" />
+
+                        <Grid Grid.Row="2"
+                              ColumnDefinitions="*,Auto"
+                              ColumnSpacing="12">
+                            <Grid Grid.Column="0"
+                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                  RowSpacing="2">
+                                <Label Grid.Row="0"
+                                       Text="{Binding RepeatText}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                <Label Grid.Row="1"
+                                       Text="{Binding ScheduleText}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                <Label Grid.Row="2"
+                                       Text="{Binding ImportanceText}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                <Label Grid.Row="3"
+                                       Text="{Binding AllowedPeriodText}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
+                                <Label Grid.Row="4"
+                                       Text="{Binding ScoreText}"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
+                            </Grid>
+
+                            <VerticalStackLayout Grid.Column="1"
+                                                 Spacing="6"
+                                                 HorizontalOptions="End"
+                                                 VerticalOptions="Start">
+                                <Button Text="Mark Done"
+                                        FontSize="12"
+                                        Padding="12,4"
+                                        BackgroundColor="#2f855a"
+                                        TextColor="White"
+                                        BorderColor="#2f855a"
+                                        CornerRadius="8"
+                                        HorizontalOptions="End"
+                                        Clicked="OnMarkDoneButtonClicked"
+                                        CommandParameter="{Binding Task}"
+                                        SemanticProperties.Description="{Binding Title, StringFormat='Mark task {0} as done'}" />
+                                <Button Text="Edit"
+                                        FontSize="12"
+                                        Padding="12,4"
+                                        BackgroundColor="Transparent"
+                                        TextColor="#2d9cdb"
+                                        BorderColor="Transparent"
+                                        HorizontalOptions="End"
+                                        Clicked="OnEditButtonClicked"
+                                        CommandParameter="{Binding Task}" />
+                                <Button Text="Delete"
+                                        FontSize="12"
+                                        Padding="12,4"
+                                        BackgroundColor="#eb5757"
+                                        TextColor="White"
+                                        BorderColor="#eb5757"
+                                        CornerRadius="8"
+                                        HorizontalOptions="End"
+                                        Clicked="OnDeleteSwipe"
+                                        CommandParameter="{Binding Task}"
+                                        SemanticProperties.Description="{Binding Title, StringFormat='Delete task {0}'}" />
+                                <Label Text="{Binding StatusText}"
+                                       FontSize="12"
+                                       HorizontalOptions="End"
+                                       TextColor="{AppThemeBinding Light=#2f855a, Dark=#9ae6b4}">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label"
+                                                    Binding="{Binding Task.Paused}"
+                                                    Value="True">
+                                            <Setter Property="TextColor" Value="#c53030" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
+                                <Button Text="Resume"
+                                        FontSize="12"
+                                        Padding="12,4"
+                                        BackgroundColor="Transparent"
+                                        TextColor="#2f855a"
+                                        BorderColor="Transparent"
+                                        HorizontalOptions="End"
+                                        IsVisible="{Binding CanResume}"
+                                        Clicked="OnResumeButtonClicked"
+                                        CommandParameter="{Binding Task}" />
+                                <Border StrokeThickness="0"
+                                        Padding="8,4"
+                                        StrokeShape="RoundRectangle 8"
+                                        BackgroundColor="{Binding StatusBackgroundColor}"
+                                        IsVisible="{Binding HasStatusBadge}"
+                                        HorizontalOptions="End">
+                                    <Label Text="{Binding StatusText}"
+                                           FontSize="12"
+                                           TextColor="{Binding StatusTextColor}" />
+                                </Border>
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </SwipeView>
+        </DataTemplate>
+    </ContentPage.Resources>
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="+"
                      Priority="0"
@@ -13,9 +184,41 @@
                      Clicked="OnAddClicked" />
     </ContentPage.ToolbarItems>
 
-    <CollectionView ItemsSource="{Binding Tasks}"
-                    SelectionMode="None">
-        <CollectionView.EmptyView>
+    <Grid>
+        <ScrollView IsVisible="{Binding HasTasks}">
+            <VerticalStackLayout Spacing="12"
+                                 Padding="12,8">
+                <Label Text="Active Tasks"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light=#2d3748, Dark=#e2e8f0}"
+                       IsVisible="{Binding HasActiveTasks}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ActiveTasks}"
+                                     BindableLayout.ItemTemplate="{StaticResource TaskItemTemplate}"
+                                     IsVisible="{Binding HasActiveTasks}" />
+                <BoxView HeightRequest="1"
+                         BackgroundColor="{AppThemeBinding Light=#e2e8f0, Dark=#2d3748}"
+                         Margin="0,4"
+                         IsVisible="{Binding HasDoneTasks}" />
+                <Label Text="Done Tasks"
+                       FontSize="16"
+                       FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light=#2d3748, Dark=#e2e8f0}"
+                       IsVisible="{Binding HasDoneTasks}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding DoneTasks}"
+                                     BindableLayout.ItemTemplate="{StaticResource TaskItemTemplate}"
+                                     IsVisible="{Binding HasDoneTasks}" />
+            </VerticalStackLayout>
+        </ScrollView>
+        <Grid IsVisible="False">
+            <Grid.Triggers>
+                <DataTrigger TargetType="Grid"
+                             Binding="{Binding HasTasks}"
+                             Value="False">
+                    <Setter Property="IsVisible" Value="True" />
+                </DataTrigger>
+            </Grid.Triggers>
+
             <Grid Padding="32"
                   RowSpacing="8"
                   HorizontalOptions="Center"
@@ -35,178 +238,6 @@
                        HorizontalTextAlignment="Center"
                        TextColor="Gray" />
             </Grid>
-        </CollectionView.EmptyView>
-
-        <CollectionView.ItemTemplate>
-            <DataTemplate x:DataType="vm:TaskListItem">
-                <SwipeView>
-                    <SwipeView.RightItems>
-                        <SwipeItems Mode="Reveal">
-                            <SwipeItem Text="Edit"
-                                       BackgroundColor="#2d9cdb"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnEditSwipe" />
-                            <SwipeItem Text="Toggle Pause"
-                                       BackgroundColor="#f2c94c"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnTogglePauseSwipe" />
-                            <SwipeItem Text="Cut-In Once"
-                                       BackgroundColor="#38b2ac"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnCutInOnceSwipe" />
-                            <SwipeItem Text="Cut-In Until Done"
-                                       BackgroundColor="#f59e0b"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnCutInUntilDoneSwipe" />
-                            <SwipeItem Text="Clear Cut-In"
-                                       BackgroundColor="#9ca3af"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnClearCutInSwipe" />
-                            <SwipeItem Text="Delete"
-                                       BackgroundColor="#eb5757"
-                                       CommandParameter="{Binding Task}"
-                                       Invoked="OnDeleteSwipe" />
-                        </SwipeItems>
-                    </SwipeView.RightItems>
-
-                    <Border StrokeShape="RoundRectangle 12"
-                            Padding="16"
-                            Margin="12,8"
-                            BackgroundColor="{AppThemeBinding Light=#ffffff, Dark=#1f1f1f}"
-                            Stroke="{AppThemeBinding Light=#e0e0e0, Dark=#2c2c2c}"
-                            StrokeThickness="1">
-                        <Grid RowSpacing="8">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <Grid Grid.Row="0"
-                                  ColumnDefinitions="*,Auto"
-                                  ColumnSpacing="8">
-                                <Label Text="{Binding Title}"
-                                       FontSize="18"
-                                       FontAttributes="Bold" />
-                                <Border Grid.Column="1"
-                                        Padding="8,4"
-                                        StrokeThickness="0"
-                                        BackgroundColor="{Binding CutInLineBadgeBackgroundColor}"
-                                        StrokeShape="RoundRectangle 8"
-                                        IsVisible="{Binding HasCutInLineBadge}">
-                                    <Label Text="{Binding CutInLineBadgeText}"
-                                           FontSize="12"
-                                           TextColor="{Binding CutInLineBadgeTextColor}" />
-                                </Border>
-                            </Grid>
-
-                            <Label Grid.Row="1"
-                                   Text="{Binding Description}"
-                                   FontSize="14"
-                                   TextColor="{AppThemeBinding Light=#4f4f4f, Dark=#d0d0d0}"
-                                   LineBreakMode="WordWrap" />
-
-                            <Grid Grid.Row="2"
-                                  ColumnDefinitions="*,Auto"
-                                  ColumnSpacing="12">
-                                <Grid Grid.Column="0"
-                                      RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                                      RowSpacing="2">
-                                    <Label Grid.Row="0"
-                                           Text="{Binding RepeatText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
-                                    <Label Grid.Row="1"
-                                           Text="{Binding ScheduleText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
-                                    <Label Grid.Row="2"
-                                           Text="{Binding ImportanceText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
-                                    <Label Grid.Row="3"
-                                           Text="{Binding AllowedPeriodText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#6e6e6e, Dark=#b0b0b0}" />
-                                    <Label Grid.Row="4"
-                                           Text="{Binding ScoreText}"
-                                           FontSize="12"
-                                           TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
-                                </Grid>
-
-                                <VerticalStackLayout Grid.Column="1"
-                                                     Spacing="6"
-                                                     HorizontalOptions="End"
-                                                     VerticalOptions="Start">
-                                    <Button Text="Mark Done"
-                                            FontSize="12"
-                                            Padding="12,4"
-                                            BackgroundColor="#2f855a"
-                                            TextColor="White"
-                                            BorderColor="#2f855a"
-                                            CornerRadius="8"
-                                            HorizontalOptions="End"
-                                            Clicked="OnMarkDoneButtonClicked"
-                                            CommandParameter="{Binding Task}"
-                                            SemanticProperties.Description="{Binding Title, StringFormat='Mark task {0} as done'}" />
-                                    <Button Text="Edit"
-                                            FontSize="12"
-                                            Padding="12,4"
-                                            BackgroundColor="Transparent"
-                                            TextColor="#2d9cdb"
-                                            BorderColor="Transparent"
-                                            HorizontalOptions="End"
-                                            Clicked="OnEditButtonClicked"
-                                            CommandParameter="{Binding Task}" />
-                                    <Button Text="Delete"
-                                            FontSize="12"
-                                            Padding="12,4"
-                                            BackgroundColor="#eb5757"
-                                            TextColor="White"
-                                            BorderColor="#eb5757"
-                                            CornerRadius="8"
-                                            HorizontalOptions="End"
-                                            Clicked="OnDeleteSwipe"
-                                            CommandParameter="{Binding Task}"
-                                            SemanticProperties.Description="{Binding Title, StringFormat='Delete task {0}'}" />
-                                    <Label Text="{Binding StatusText}"
-                                           FontSize="12"
-                                           HorizontalOptions="End"
-                                           TextColor="{AppThemeBinding Light=#2f855a, Dark=#9ae6b4}">
-                                        <Label.Triggers>
-                                            <DataTrigger TargetType="Label"
-                                                        Binding="{Binding Task.Paused}"
-                                                        Value="True">
-                                                <Setter Property="TextColor" Value="#c53030" />
-                                            </DataTrigger>
-                                        </Label.Triggers>
-                                    </Label>
-                                    <Button Text="Resume"
-                                            FontSize="12"
-                                            Padding="12,4"
-                                            BackgroundColor="Transparent"
-                                            TextColor="#2f855a"
-                                            BorderColor="Transparent"
-                                            HorizontalOptions="End"
-                                            IsVisible="{Binding CanResume}"
-                                            Clicked="OnResumeButtonClicked"
-                                            CommandParameter="{Binding Task}" />
-                                    <Border StrokeThickness="0"
-                                            Padding="8,4"
-                                            StrokeShape="RoundRectangle 8"
-                                            BackgroundColor="{Binding StatusBackgroundColor}"
-                                            IsVisible="{Binding HasStatusBadge}"
-                                            HorizontalOptions="End">
-                                        <Label Text="{Binding StatusText}"
-                                               FontSize="12"
-                                               TextColor="{Binding StatusTextColor}" />
-                                    </Border>
-                                </VerticalStackLayout>
-                            </Grid>
-                        </Grid>
-                    </Border>
-                </SwipeView>
-            </DataTemplate>
-        </CollectionView.ItemTemplate>
-    </CollectionView>
+        </Grid>
+    </Grid>
 </ContentPage>
