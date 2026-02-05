@@ -185,31 +185,29 @@
     </ContentPage.ToolbarItems>
 
     <Grid>
-        <ScrollView IsVisible="{Binding HasTasks}">
-            <VerticalStackLayout Spacing="12"
-                                 Padding="12,8">
-                <Label Text="Active Tasks"
-                       FontSize="16"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light=#2d3748, Dark=#e2e8f0}"
-                       IsVisible="{Binding HasActiveTasks}" />
-                <VerticalStackLayout BindableLayout.ItemsSource="{Binding ActiveTasks}"
-                                     BindableLayout.ItemTemplate="{StaticResource TaskItemTemplate}"
-                                     IsVisible="{Binding HasActiveTasks}" />
-                <BoxView HeightRequest="1"
-                         BackgroundColor="{AppThemeBinding Light=#e2e8f0, Dark=#2d3748}"
-                         Margin="0,4"
-                         IsVisible="{Binding HasDoneTasks}" />
-                <Label Text="Done Tasks"
-                       FontSize="16"
-                       FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light=#2d3748, Dark=#e2e8f0}"
-                       IsVisible="{Binding HasDoneTasks}" />
-                <VerticalStackLayout BindableLayout.ItemsSource="{Binding DoneTasks}"
-                                     BindableLayout.ItemTemplate="{StaticResource TaskItemTemplate}"
-                                     IsVisible="{Binding HasDoneTasks}" />
-            </VerticalStackLayout>
-        </ScrollView>
+        <CollectionView IsVisible="{Binding HasTasks}"
+                        ItemsSource="{Binding TaskGroups}"
+                        IsGrouped="True"
+                        Margin="0"
+                        ItemsLayout="VerticalList">
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate x:DataType="vm:TaskGroup">
+                    <VerticalStackLayout Spacing="12"
+                                         Padding="12,8">
+                        <BoxView HeightRequest="1"
+                                 BackgroundColor="{AppThemeBinding Light=#e2e8f0, Dark=#2d3748}"
+                                 IsVisible="{Binding ShowDivider}" />
+                        <Label Text="{Binding Title}"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#2d3748, Dark=#e2e8f0}" />
+                    </VerticalStackLayout>
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+            <CollectionView.ItemTemplate>
+                <StaticResource ResourceKey="TaskItemTemplate" />
+            </CollectionView.ItemTemplate>
+        </CollectionView>
         <Grid IsVisible="False">
             <Grid.Triggers>
                 <DataTrigger TargetType="Grid"
