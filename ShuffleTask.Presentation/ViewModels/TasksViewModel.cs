@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -27,6 +28,13 @@ public partial class TasksViewModel : ObservableObject
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
+    public ObservableCollection<TaskListItem> ActiveTasks { get; } = [];
+    public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
+    public ObservableCollection<TaskGroup> TaskGroups { get; } = [];
+
+    public bool HasActiveTasks => ActiveTasks.Count > 0;
+    public bool HasDoneTasks => DoneTasks.Count > 0;
+    public bool HasTasks => HasActiveTasks || HasDoneTasks;
 
     [ObservableProperty]
     private bool isBusy;
@@ -49,12 +57,37 @@ public partial class TasksViewModel : ObservableObject
             DateTimeOffset now = _clock.GetUtcNow();
 
             Tasks.Clear();
+            ActiveTasks.Clear();
+            DoneTasks.Clear();
+            TaskGroups.Clear();
             foreach (TaskListItem? entry in items
                 .Select(task => TaskListItem.From(task, settings, now))
                 .OrderByDescending(x => x.PriorityScore))
             {
                 Tasks.Add(entry);
+                if (entry.Task.Status == TaskLifecycleStatus.Completed)
+                {
+                    DoneTasks.Add(entry);
+                }
+                else
+                {
+                    ActiveTasks.Add(entry);
+                }
             }
+
+            if (ActiveTasks.Count > 0)
+            {
+                TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
+            }
+
+            if (DoneTasks.Count > 0)
+            {
+                TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
+            }
+
+            OnPropertyChanged(nameof(HasActiveTasks));
+            OnPropertyChanged(nameof(HasDoneTasks));
+            OnPropertyChanged(nameof(HasTasks));
         }
         finally
         {
@@ -375,4 +408,18 @@ public class TaskListItem
     {
         public static TaskStatusPresentation Active { get; } = new("Active", false, "#E2E8F0", "#2D3748", false);
     }
+}
+
+public class TaskGroup : ObservableCollection<TaskListItem>
+{
+    public TaskGroup(string title, bool showDivider, IEnumerable<TaskListItem> items)
+        : base(items)
+    {
+        Title = title;
+        ShowDivider = showDivider;
+    }
+
+    public string Title { get; }
+
+    public bool ShowDivider { get; }
 }
