@@ -11,6 +11,11 @@ public interface IStorageService
     Task AddTaskAsync(TaskItem item);
     Task UpdateTaskAsync(TaskItem item);
     Task DeleteTaskAsync(string id);
+    Task<List<PeriodDefinition>> GetPeriodDefinitionsAsync();
+    Task<PeriodDefinition?> GetPeriodDefinitionAsync(string id);
+    Task AddPeriodDefinitionAsync(PeriodDefinition definition);
+    Task UpdatePeriodDefinitionAsync(PeriodDefinition definition);
+    Task DeletePeriodDefinitionAsync(string id);
     Task<TaskItem?> MarkTaskDoneAsync(string id);
     Task<TaskItem?> SnoozeTaskAsync(string id, TimeSpan duration);
     Task<TaskItem?> ResumeTaskAsync(string id);

@@ -54,6 +54,8 @@ internal sealed class TaskItemRecord : TaskItemData
             AllowedPeriod = AllowedPeriod.OffWork;
         }
 
+        TaskItemPeriodDefinitionHelper.NormalizeLegacyPeriodDefinition(this);
+
         if (UpdatedAt == default)
         {
             UpdatedAt = CreatedAt;
@@ -61,4 +63,5 @@ internal sealed class TaskItemRecord : TaskItemData
 
         return TaskItem.FromData(this);
     }
+
 }

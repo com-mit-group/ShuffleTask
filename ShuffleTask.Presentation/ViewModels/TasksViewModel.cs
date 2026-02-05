@@ -4,7 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
@@ -223,14 +225,7 @@ public class TaskListItem
         string importanceStars = new string('★', importance).PadRight(5, '☆');
         string importanceText = $"Importance: {importanceStars} ({importance}/5)";
 
-        string allowedPeriodText = task.AllowedPeriod switch
-        {
-            AllowedPeriod.Any => "Auto shuffle: Any time",
-            AllowedPeriod.Work => "Auto shuffle: Work hours (Mon–Fri)",
-            AllowedPeriod.OffWork => "Auto shuffle: Off hours (includes weekends)",
-            AllowedPeriod.Custom => "Auto shuffle: Custom hours",
-            _ => "Auto shuffle: Any time"
-        };
+        string allowedPeriodText = $"Auto shuffle: {PeriodDefinitionFormatter.FormatAllowedPeriodLabel(task)}";
 
         TaskStatusPresentation status = BuildStatusPresentation(task, now);
         ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(task, now, settings);

@@ -11,6 +11,7 @@ public class StorageService : IStorageService
 {
     private const string SettingsKey = "app_settings";
     private const string IntegerSqlType = "INTEGER";
+    private readonly record struct SchemaColumn(string Name, string SqlType, string DefaultSql);
 
     private readonly TimeProvider _clock;
     private readonly string _dbPath;
@@ -40,56 +41,134 @@ public class StorageService : IStorageService
         _db = new SQLiteAsyncConnection(_dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
 
         await _db.CreateTableAsync<TaskItemRecord>();
+        await _db.CreateTableAsync<PeriodDefinitionRecord>();
         await _db.CreateTableAsync<KeyValueEntity>();
 
         // Ensure schema has all columns; add columns if missing with sensible defaults.
         await EnsureTaskSchemaAsync();
+        await EnsurePeriodDefinitionSchemaAsync();
+        await EnsurePresetPeriodDefinitionsAsync();
     }
 
     private async Task EnsureTaskSchemaAsync()
     {
-        try
-        {
-            var infos = await Db.QueryAsync<TableInfo>("PRAGMA table_info(TaskItem);");
-            var cols = new HashSet<string>(infos.Select(i => i.name), StringComparer.OrdinalIgnoreCase);
-            async Task AddCol(string name, string sqlType, string defaultSql)
+        await EnsureSchemaAsync(
+            "TaskItem",
+            new[]
             {
-                if (!cols.Contains(name))
+                new SchemaColumn("Title", "TEXT", "''"),
+                new SchemaColumn("Importance", IntegerSqlType, "1"),
+                new SchemaColumn("SizePoints", "REAL", "3"),
+                new SchemaColumn("Deadline", "TEXT", "NULL"),
+                new SchemaColumn("Repeat", IntegerSqlType, "0"),
+                new SchemaColumn("Weekdays", IntegerSqlType, "0"),
+                new SchemaColumn("IntervalDays", IntegerSqlType, "0"),
+                new SchemaColumn("LastDoneAt", "TEXT", "NULL"),
+                new SchemaColumn("AllowedPeriod", IntegerSqlType, "0"),
+                new SchemaColumn("PeriodDefinitionId", "TEXT", "NULL"),
+                new SchemaColumn("AdHocStartTime", "TEXT", "NULL"),
+                new SchemaColumn("AdHocEndTime", "TEXT", "NULL"),
+                new SchemaColumn("AdHocWeekdays", IntegerSqlType, "NULL"),
+                new SchemaColumn("AdHocIsAllDay", IntegerSqlType, "0"),
+                new SchemaColumn("AdHocMode", IntegerSqlType, "0"),
+                new SchemaColumn("AutoShuffleAllowed", IntegerSqlType, "1"),
+                new SchemaColumn("CustomStartTime", "TEXT", "NULL"),
+                new SchemaColumn("CustomEndTime", "TEXT", "NULL"),
+                new SchemaColumn("CustomWeekdays", IntegerSqlType, "NULL"),
+                new SchemaColumn("Paused", IntegerSqlType, "0"),
+                new SchemaColumn("CreatedAt", "TEXT", "CURRENT_TIMESTAMP"),
+                new SchemaColumn("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP"),
+                new SchemaColumn("Description", "TEXT", "''"),
+                new SchemaColumn("Status", IntegerSqlType, "0"),
+                new SchemaColumn("SnoozedUntil", "TEXT", "NULL"),
+                new SchemaColumn("CompletedAt", "TEXT", "NULL"),
+                new SchemaColumn("NextEligibleAt", "TEXT", "NULL"),
+                new SchemaColumn("CustomTimerMode", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomReminderMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomFocusMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomBreakMinutes", IntegerSqlType, "NULL"),
+                new SchemaColumn("CustomPomodoroCycles", IntegerSqlType, "NULL"),
+                new SchemaColumn("CutInLineMode", IntegerSqlType, "0"),
+                new SchemaColumn("EventVersion", IntegerSqlType, "0"),
+                new SchemaColumn("DeviceId", "TEXT", "''"),
+                new SchemaColumn("UserId", "TEXT", "NULL")
+            });
+    }
+
+    private async Task EnsurePresetPeriodDefinitionsAsync()
+    {
+        var presets = PeriodDefinitionCatalog.CreatePresetDefinitions();
+        var presetIds = presets.Select(preset => preset.Id).ToList();
+        if (presetIds.Count == 0)
+        {
+            return;
+        }
+
+        var existing = await Db.Table<PeriodDefinitionRecord>()
+            .Where(record => presetIds.Contains(record.Id))
+            .ToListAsync();
+        var existingIds = new HashSet<string>(existing.Select(record => record.Id), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var preset in presets)
+        {
+            var record = PeriodDefinitionRecord.FromDomain(preset);
+
+            if (existingIds.Contains(preset.Id))
+            {
+                var existingRecord = existing.First(existingItem =>
+                    string.Equals(existingItem.Id, preset.Id, StringComparison.OrdinalIgnoreCase));
+
+                bool needsUpdate = existingRecord.Mode != record.Mode;
+                bool shouldClearTimes = record.StartTime is null && record.EndTime is null
+                    && (existingRecord.StartTime.HasValue || existingRecord.EndTime.HasValue);
+
+                if (needsUpdate || shouldClearTimes)
                 {
-                    string alter = $"ALTER TABLE TaskItem ADD COLUMN {name} {sqlType} DEFAULT {defaultSql}";
-                    await Db.ExecuteAsync(alter);
+                    existingRecord.Mode = record.Mode;
+                    existingRecord.StartTime = record.StartTime;
+                    existingRecord.EndTime = record.EndTime;
+                    await Db.UpdateAsync(existingRecord);
                 }
+
+                continue;
             }
 
-            await AddCol("Title", "TEXT", "''");
-            await AddCol("Importance", IntegerSqlType, "1");
-            await AddCol("SizePoints", "REAL", "3");
-            await AddCol("Deadline", "TEXT", "NULL");
-            await AddCol("Repeat", IntegerSqlType, "0");
-            await AddCol("Weekdays", IntegerSqlType, "0");
-            await AddCol("IntervalDays", IntegerSqlType, "0");
-            await AddCol("LastDoneAt", "TEXT", "NULL");
-            await AddCol("AllowedPeriod", IntegerSqlType, "0");
-            await AddCol("AutoShuffleAllowed", IntegerSqlType, "1");
-            await AddCol("CustomStartTime", "TEXT", "NULL");
-            await AddCol("CustomEndTime", "TEXT", "NULL");
-            await AddCol("Paused", IntegerSqlType, "0");
-            await AddCol("CreatedAt", "TEXT", "CURRENT_TIMESTAMP");
-            await AddCol("UpdatedAt", "TEXT", "CURRENT_TIMESTAMP");
-            await AddCol("Description", "TEXT", "''");
-            await AddCol("Status", IntegerSqlType, "0");
-            await AddCol("SnoozedUntil", "TEXT", "NULL");
-            await AddCol("CompletedAt", "TEXT", "NULL");
-            await AddCol("NextEligibleAt", "TEXT", "NULL");
-            await AddCol("CustomTimerMode", IntegerSqlType, "NULL");
-            await AddCol("CustomReminderMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomFocusMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomBreakMinutes", IntegerSqlType, "NULL");
-            await AddCol("CustomPomodoroCycles", IntegerSqlType, "NULL");
-            await AddCol("CutInLineMode", IntegerSqlType, "0");
-            await AddCol("EventVersion", IntegerSqlType, "0");
-            await AddCol("DeviceId", "TEXT", "''");
-            await AddCol("UserId", "TEXT", "NULL");
+            await Db.InsertAsync(record);
+        }
+    }
+
+    private async Task EnsurePeriodDefinitionSchemaAsync()
+    {
+        await EnsureSchemaAsync(
+            "PeriodDefinition",
+            new[]
+            {
+                new SchemaColumn("Name", "TEXT", "''"),
+                new SchemaColumn("Weekdays", IntegerSqlType, "0"),
+                new SchemaColumn("StartTime", "TEXT", "NULL"),
+                new SchemaColumn("EndTime", "TEXT", "NULL"),
+                new SchemaColumn("IsAllDay", IntegerSqlType, "0"),
+                new SchemaColumn("Mode", IntegerSqlType, "0")
+            });
+    }
+
+    private async Task EnsureSchemaAsync(string tableName, IReadOnlyCollection<SchemaColumn> columns)
+    {
+        try
+        {
+            var infos = await Db.QueryAsync<TableInfo>($"PRAGMA table_info({tableName});");
+            var cols = new HashSet<string>(infos.Select(i => i.name), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var column in columns)
+            {
+                if (cols.Contains(column.Name))
+                {
+                    continue;
+                }
+
+                string alter = $"ALTER TABLE {tableName} ADD COLUMN {column.Name} {column.SqlType} DEFAULT {column.DefaultSql}";
+                await Db.ExecuteAsync(alter);
+            }
         }
         catch
         {
@@ -154,7 +233,9 @@ public class StorageService : IStorageService
         var records = await query
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
-        return records.Select(r => r.ToDomain()).ToList();
+        var tasks = records.Select(r => r.ToDomain()).ToList();
+        await ApplyPeriodDefinitionsAsync(tasks);
+        return tasks;
     }
 
     public async Task<TaskItem?> GetTaskAsync(string id)
@@ -164,7 +245,9 @@ public class StorageService : IStorageService
         var record = await Db.Table<TaskItemRecord>()
                              .Where(t => t.Id == id)
                              .FirstOrDefaultAsync();
-        return record?.ToDomain();
+        var task = record?.ToDomain();
+        await ApplyPeriodDefinitionAsync(task);
+        return task;
     }
 
     public async Task AddTaskAsync(TaskItem item)
@@ -182,7 +265,7 @@ public class StorageService : IStorageService
 
         EnsureMetadata(item, null, bumpVersion: true);
 
-        var record = TaskItemRecord.FromDomain(item);
+        var record = BuildTaskRecord(item);
         await Db.InsertAsync(record);
     }
 
@@ -202,7 +285,7 @@ public class StorageService : IStorageService
 
         EnsureMetadata(item, existing, bumpVersion: true);
 
-        var record = TaskItemRecord.FromDomain(item);
+        var record = BuildTaskRecord(item);
         if (existing == null)
         {
             await Db.InsertAsync(record);
@@ -216,6 +299,68 @@ public class StorageService : IStorageService
     {
         await AutoResumeDueTasksAsync();
         await Db.DeleteAsync<TaskItemRecord>(id);
+    }
+
+    // Period definitions CRUD
+    public async Task<List<PeriodDefinition>> GetPeriodDefinitionsAsync()
+    {
+        var records = await Db.Table<PeriodDefinitionRecord>()
+                              .OrderBy(r => r.Name)
+                              .ToListAsync();
+        return records.Select(r => r.ToDomain()).ToList();
+    }
+
+    public async Task<PeriodDefinition?> GetPeriodDefinitionAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        var record = await Db.Table<PeriodDefinitionRecord>()
+                              .Where(r => r.Id == id)
+                              .FirstOrDefaultAsync();
+        return record?.ToDomain();
+    }
+
+    public async Task AddPeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        var record = PeriodDefinitionRecord.FromDomain(definition);
+        await Db.InsertAsync(record);
+    }
+
+    public async Task UpdatePeriodDefinitionAsync(PeriodDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (string.IsNullOrWhiteSpace(definition.Id))
+        {
+            definition.Id = Guid.NewGuid().ToString("n");
+        }
+
+        var record = PeriodDefinitionRecord.FromDomain(definition);
+        int updated = await Db.UpdateAsync(record);
+        if (updated == 0)
+        {
+            await Db.InsertAsync(record);
+        }
+    }
+
+    public async Task DeletePeriodDefinitionAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return;
+        }
+
+        await Db.DeleteAsync<PeriodDefinitionRecord>(id);
     }
 
     public async Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId)
@@ -281,6 +426,8 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
+        await ApplyPeriodDefinitionAsync(updated);
+
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
@@ -325,6 +472,8 @@ public class StorageService : IStorageService
             updated = existing.ToDomain();
         });
 
+        await ApplyPeriodDefinitionAsync(updated);
+
         if (updated != null && originalStatus != null)
         {
             _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
@@ -356,6 +505,8 @@ public class StorageService : IStorageService
             conn.Update(existing);
             updated = existing.ToDomain();
         });
+
+        await ApplyPeriodDefinitionAsync(updated);
 
         if (updated != null && originalStatus != null)
         {
@@ -467,6 +618,94 @@ public class StorageService : IStorageService
             DateTimeKind.Local => value.ToUniversalTime(),
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
+    }
+
+    private static TaskItemRecord BuildTaskRecord(TaskItem item)
+    {
+        var record = TaskItemRecord.FromDomain(item);
+        NormalizePeriodDefinition(record);
+        return record;
+    }
+
+    private static void NormalizePeriodDefinition(TaskItemData item)
+    {
+        if (string.IsNullOrWhiteSpace(item.PeriodDefinitionId))
+        {
+            return;
+        }
+
+        if (IsCustomPeriodDefinitionId(item.PeriodDefinitionId))
+        {
+            return;
+        }
+
+        item.AdHocStartTime = null;
+        item.AdHocEndTime = null;
+        item.AdHocWeekdays = null;
+        item.AdHocIsAllDay = false;
+        item.AdHocMode = PeriodDefinitionMode.None;
+    }
+
+    private async Task ApplyPeriodDefinitionsAsync(IReadOnlyList<TaskItem> tasks)
+    {
+        if (tasks.Count == 0)
+        {
+            return;
+        }
+
+        var ids = tasks.Select(t => t.PeriodDefinitionId)
+            .Where(IsCustomPeriodDefinitionId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var records = await Db.Table<PeriodDefinitionRecord>()
+                              .Where(r => ids.Contains(r.Id))
+                              .ToListAsync();
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var map = records.ToDictionary(r => r.Id, r => r.ToDomain(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var task in tasks)
+        {
+            if (task.PeriodDefinitionId != null && map.TryGetValue(task.PeriodDefinitionId, out PeriodDefinition? definition))
+            {
+                ApplyPeriodDefinition(task, definition);
+            }
+        }
+    }
+
+    private async Task ApplyPeriodDefinitionAsync(TaskItem? task)
+    {
+        if (task == null)
+        {
+            return;
+        }
+
+        await ApplyPeriodDefinitionsAsync(new[] { task });
+    }
+
+    private static void ApplyPeriodDefinition(TaskItem task, PeriodDefinition definition)
+    {
+        task.AdHocStartTime = definition.StartTime;
+        task.AdHocEndTime = definition.EndTime;
+        task.AdHocWeekdays = definition.Weekdays;
+        task.AdHocIsAllDay = definition.IsAllDay;
+        task.AdHocMode = definition.Mode;
+    }
+
+    private static bool IsCustomPeriodDefinitionId(string? id)
+    {
+        return !string.IsNullOrWhiteSpace(id)
+            && !PeriodDefinitionCatalog.TryGet(id, out _);
     }
 
     // Settings

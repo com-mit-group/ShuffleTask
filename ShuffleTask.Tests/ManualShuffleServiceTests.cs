@@ -43,7 +43,8 @@ public class ManualShuffleServiceTests
             AllowedPeriod = AllowedPeriod.Custom,
             AutoShuffleAllowed = false,
             CustomStartTime = TimeSpan.FromHours(8),
-            CustomEndTime = TimeSpan.FromHours(12)
+            CustomEndTime = TimeSpan.FromHours(12),
+            CustomWeekdays = Weekdays.Mon | Weekdays.Tue
         };
 
         var settings = new AppSettings
@@ -58,6 +59,7 @@ public class ManualShuffleServiceTests
         Assert.That(candidate.AllowedPeriod, Is.EqualTo(AllowedPeriod.Any), "Allowed period should be cleared when ignoring time windows.");
         Assert.IsNull(candidate.CustomStartTime, "Custom start time should be cleared when ignoring the window.");
         Assert.IsNull(candidate.CustomEndTime, "Custom end time should be cleared when ignoring the window.");
+        Assert.IsNull(candidate.CustomWeekdays, "Custom weekdays should be cleared when ignoring the window.");
         Assert.That(candidate.AutoShuffleAllowed, Is.True, "Manual shuffle should bypass AutoShuffleAllowed flag.");
 
         Assert.That(original.AllowedPeriod, Is.EqualTo(AllowedPeriod.Custom), "Original task should not be mutated.");

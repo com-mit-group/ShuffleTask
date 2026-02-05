@@ -818,10 +818,10 @@ public class ShuffleCoordinatorService : IDisposable
             return false;
         }
 
-        return TimeWindowService.AllowedNow(task.AllowedPeriod, when, settings);
+        return TimeWindowService.AllowedNow(task, when, settings);
     }
 
-    private static bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
+    private bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
     {
         if (!TimeWindowService.IsWeekend(target))
         {
@@ -846,20 +846,12 @@ public class ShuffleCoordinatorService : IDisposable
                 continue;
             }
 
-            if (task.AllowedPeriod is AllowedPeriod.Any or AllowedPeriod.OffWork)
+            if (TimeWindowService.AllowsWeekend(task, _settings))
             {
                 return false;
             }
 
-            if (task.AllowedPeriod is AllowedPeriod.Custom)
-            {
-                return false;
-            }
-
-            if (task.AllowedPeriod is AllowedPeriod.Work)
-            {
-                hasWeekendBlocked = true;
-            }
+            hasWeekendBlocked = true;
         }
 
         return hasWeekendBlocked;

@@ -27,8 +27,15 @@ public static class ManualShuffleService
             if (!settings.ManualShuffleRespectsAllowedPeriod)
             {
                 clone.AllowedPeriod = AllowedPeriod.Any;
+                clone.PeriodDefinitionId = PeriodDefinitionCatalog.AnyId;
+                clone.AdHocStartTime = null;
+                clone.AdHocEndTime = null;
+                clone.AdHocWeekdays = null;
+                clone.AdHocIsAllDay = false;
+                clone.AdHocMode = PeriodDefinitionMode.None;
                 clone.CustomStartTime = null;
                 clone.CustomEndTime = null;
+                clone.CustomWeekdays = null;
             }
 
             clones.Add(clone);
