@@ -508,11 +508,24 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
         }
 
         task.PeriodDefinitionId = SelectedPeriodDefinition?.Id;
-        task.AdHocStartTime = null;
-        task.AdHocEndTime = null;
-        task.AdHocWeekdays = null;
-        task.AdHocIsAllDay = false;
-        task.AdHocMode = PeriodDefinitionMode.None;
+
+        if (SelectedPeriodDefinition?.Definition != null && !SelectedPeriodDefinition.IsCoreBuiltIn)
+        {
+            PeriodDefinition definition = SelectedPeriodDefinition.Definition;
+            task.AdHocStartTime = definition.StartTime;
+            task.AdHocEndTime = definition.EndTime;
+            task.AdHocWeekdays = definition.Weekdays;
+            task.AdHocIsAllDay = definition.IsAllDay;
+            task.AdHocMode = definition.Mode;
+        }
+        else
+        {
+            task.AdHocStartTime = null;
+            task.AdHocEndTime = null;
+            task.AdHocWeekdays = null;
+            task.AdHocIsAllDay = false;
+            task.AdHocMode = PeriodDefinitionMode.None;
+        }
 
         task.AllowedPeriod = SelectedPeriodDefinition?.Id switch
         {
