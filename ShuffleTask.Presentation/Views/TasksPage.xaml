@@ -184,8 +184,21 @@
                      Clicked="OnAddClicked" />
     </ContentPage.ToolbarItems>
 
-    <Grid>
-        <CollectionView IsVisible="{Binding HasTasks}"
+    <Grid RowDefinitions="Auto,*">
+        <HorizontalStackLayout Padding="12,8"
+                               Spacing="12">
+            <Label Text="Sort by"
+                   FontSize="14"
+                   VerticalOptions="Center"
+                   TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
+            <Picker ItemsSource="{Binding SortOptions}"
+                    SelectedItem="{Binding SelectedSort}"
+                    Title="Sort"
+                    HorizontalOptions="EndAndExpand" />
+        </HorizontalStackLayout>
+
+        <CollectionView Grid.Row="1"
+                        IsVisible="{Binding HasTasks}"
                         ItemsSource="{Binding TaskGroups}"
                         IsGrouped="True"
                         Margin="0"
@@ -206,7 +219,8 @@
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
         </CollectionView>
-        <Grid IsVisible="False">
+        <Grid Grid.Row="1"
+              IsVisible="False">
             <Grid.Triggers>
                 <DataTrigger TargetType="Grid"
                              Binding="{Binding HasTasks}"

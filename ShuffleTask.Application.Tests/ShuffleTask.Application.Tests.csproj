@@ -18,4 +18,8 @@
     <ProjectReference Include="..\ShuffleTask.Application\ShuffleTask.Application.csproj" />
     <ProjectReference Include="..\ShuffleTask.Domain\ShuffleTask.Domain.csproj" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);TEST</DefineConstants>
+  </PropertyGroup>
 </Project>
