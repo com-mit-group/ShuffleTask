@@ -70,36 +70,33 @@ public partial class TasksViewModel : ObservableObject
             TaskGroups.Clear();
             IEnumerable<TaskListItem> sortedItems = ApplySort(items
                 .Select(task => TaskListItem.From(task, settings, now)));
-            foreach (TaskListItem? entry in sortedItems)
-            {
-                Tasks.Add(entry);
-                if (entry.Task.Status == TaskLifecycleStatus.Completed)
-                {
-                    DoneTasks.Add(entry);
-                }
-                else
-                {
-                    ActiveTasks.Add(entry);
-                }
-            }
-
-            if (ActiveTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
-            }
-
-            if (DoneTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
-            }
-
-            OnPropertyChanged(nameof(HasActiveTasks));
-            OnPropertyChanged(nameof(HasDoneTasks));
-            OnPropertyChanged(nameof(HasTasks));
+            SeparateTasksToActiveAndDone(sortedItems);
+            AddAppropriateTaskGroups();
+            OnTaskBooleansChanged();
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private void OnTaskBooleansChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveTasks));
+        OnPropertyChanged(nameof(HasDoneTasks));
+        OnPropertyChanged(nameof(HasTasks));
+    }
+
+    private void AddAppropriateTaskGroups()
+    {
+        if (ActiveTasks.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
+        }
+
+        if (DoneTasks.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
         }
     }
 
@@ -110,7 +107,7 @@ public partial class TasksViewModel : ObservableObject
             return;
         }
 
-        _ = LoadAsync();
+        ApplySortToCollections();
     }
 
     private IEnumerable<TaskListItem> ApplySort(IEnumerable<TaskListItem> items)
@@ -127,6 +124,36 @@ public partial class TasksViewModel : ObservableObject
                 .ThenByDescending(item => item.PriorityScore),
             _ => items.OrderByDescending(item => item.PriorityScore)
         };
+    }
+
+    private void ApplySortToCollections()
+    {
+        List<TaskListItem> items = Tasks.ToList();
+        Tasks.Clear();
+        ActiveTasks.Clear();
+        DoneTasks.Clear();
+        TaskGroups.Clear();
+
+        IEnumerable<TaskListItem> sortedItems = ApplySort(items);
+        SeparateTasksToActiveAndDone(sortedItems);
+        AddAppropriateTaskGroups();
+        OnTaskBooleansChanged();
+    }
+
+    private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
+    {
+        foreach (TaskListItem entry in sortedItems)
+        {
+            Tasks.Add(entry);
+            if (entry.Task.Status == TaskLifecycleStatus.Completed)
+            {
+                DoneTasks.Add(entry);
+            }
+            else
+            {
+                ActiveTasks.Add(entry);
+            }
+        }
     }
 
     public async Task TogglePauseAsync(TaskItem task)
