@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Maui.ApplicationModel;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
@@ -35,7 +36,7 @@ public partial class TasksViewModel : ObservableObject
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
     public ObservableCollection<TaskListItem> ActiveTasks { get; } = [];
     public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
-    public ObservableCollection<TaskGroup> TaskGroups { get; } = [];
+    public ObservableCollection<TaskGroup> TaskGroups { get; private set; } = [];
     public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
 
     public bool HasActiveTasks => ActiveTasks.Count > 0;
@@ -65,15 +66,17 @@ public partial class TasksViewModel : ObservableObject
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
-            Tasks.Clear();
-            ActiveTasks.Clear();
-            DoneTasks.Clear();
-            TaskGroups.Clear();
             IEnumerable<TaskListItem> sortedItems = ApplySort(items
                 .Select(task => TaskListItem.From(task, settings, now)));
-            SeparateTasksToActiveAndDone(sortedItems);
-            AddAppropriateTaskGroups();
-            OnTaskBooleansChanged();
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                Tasks.Clear();
+                ActiveTasks.Clear();
+                DoneTasks.Clear();
+                SeparateTasksToActiveAndDone(sortedItems);
+                AddAppropriateTaskGroups();
+                OnTaskBooleansChanged();
+            });
         }
         finally
         {
@@ -115,11 +118,16 @@ public partial class TasksViewModel : ObservableObject
 
     private void ApplySortToCollections()
     {
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(ApplySortToCollections);
+            return;
+        }
+
         List<TaskListItem> items = Tasks.ToList();
         Tasks.Clear();
         ActiveTasks.Clear();
         DoneTasks.Clear();
-        TaskGroups.Clear();
 
         SeparateTasksToActiveAndDone(ApplySort(items));
         AddAppropriateTaskGroups();
@@ -146,16 +154,27 @@ public partial class TasksViewModel : ObservableObject
     {
         List<TaskListItem> activeItems = ActiveTasks.ToList();
         List<TaskListItem> doneItems = DoneTasks.ToList();
+        List<TaskGroup> taskGroups = [];
 
         if (activeItems.Count > 0)
         {
-            TaskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
+            taskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
         }
 
         if (doneItems.Count > 0)
         {
-            TaskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
+            taskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
         }
+
+        TaskGroups = new ObservableCollection<TaskGroup>(taskGroups);
+        OnPropertyChanged(nameof(TaskGroups));
+    }
+
+    private void OnTaskBooleansChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveTasks));
+        OnPropertyChanged(nameof(HasDoneTasks));
+        OnPropertyChanged(nameof(HasTasks));
     }
 
     private void OnTaskBooleansChanged()
