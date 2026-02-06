@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Maui.ApplicationModel;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
@@ -13,6 +14,10 @@ namespace ShuffleTask.ViewModels;
 
 public partial class TasksViewModel : ObservableObject
 {
+    private const string SortScore = "Score";
+    private const string SortImportance = "Importance";
+    private const string SortDeadline = "Deadline";
+
     private readonly IStorageService _storage;
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
@@ -30,7 +35,8 @@ public partial class TasksViewModel : ObservableObject
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
     public ObservableCollection<TaskListItem> ActiveTasks { get; } = [];
     public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
-    public ObservableCollection<TaskGroup> TaskGroups { get; } = [];
+    public ObservableCollection<TaskGroup> TaskGroups { get; private set; } = [];
+    public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
 
     public bool HasActiveTasks => ActiveTasks.Count > 0;
     public bool HasDoneTasks => DoneTasks.Count > 0;
@@ -38,6 +44,9 @@ public partial class TasksViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isBusy;
+
+    [ObservableProperty]
+    private string selectedSort = SortScore;
 
     public async Task LoadAsync(string? userId = null, string? deviceId = null)
     {
@@ -56,43 +65,109 @@ public partial class TasksViewModel : ObservableObject
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
-            Tasks.Clear();
-            ActiveTasks.Clear();
-            DoneTasks.Clear();
-            TaskGroups.Clear();
-            foreach (TaskListItem? entry in items
-                .Select(task => TaskListItem.From(task, settings, now))
-                .OrderByDescending(x => x.PriorityScore))
+            IEnumerable<TaskListItem> sortedItems = ApplySort(items
+                .Select(task => TaskListItem.From(task, settings, now)));
+            await MainThread.InvokeOnMainThreadAsync(() =>
             {
-                Tasks.Add(entry);
-                if (entry.Task.Status == TaskLifecycleStatus.Completed)
-                {
-                    DoneTasks.Add(entry);
-                }
-                else
-                {
-                    ActiveTasks.Add(entry);
-                }
-            }
-
-            if (ActiveTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
-            }
-
-            if (DoneTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
-            }
-
-            OnPropertyChanged(nameof(HasActiveTasks));
-            OnPropertyChanged(nameof(HasDoneTasks));
-            OnPropertyChanged(nameof(HasTasks));
+                Tasks.Clear();
+                ActiveTasks.Clear();
+                DoneTasks.Clear();
+                TaskGroups = new ObservableCollection<TaskGroup>();
+                OnPropertyChanged(nameof(TaskGroups));
+                SeparateTasksToActiveAndDone(sortedItems);
+                AddAppropriateTaskGroups();
+                OnTaskBooleansChanged();
+            });
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    partial void OnSelectedSortChanged(string value)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        ApplySortToCollections();
+    }
+
+    private IEnumerable<TaskListItem> ApplySort(IEnumerable<TaskListItem> items)
+    {
+        return SelectedSort switch
+        {
+            SortImportance => items
+                .OrderByDescending(item => item.Task.Importance)
+                .ThenByDescending(item => item.PriorityScore)
+                .ThenBy(item => item.Task.Deadline ?? DateTime.MaxValue),
+            SortDeadline => items
+                .OrderBy(item => item.Task.Deadline ?? DateTime.MaxValue)
+                .ThenByDescending(item => item.Task.Importance)
+                .ThenByDescending(item => item.PriorityScore),
+            _ => items.OrderByDescending(item => item.PriorityScore)
+        };
+    }
+
+    private void ApplySortToCollections()
+    {
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(ApplySortToCollections);
+            return;
+        }
+
+        List<TaskListItem> items = Tasks.ToList();
+        Tasks.Clear();
+        ActiveTasks.Clear();
+        DoneTasks.Clear();
+        TaskGroups = new ObservableCollection<TaskGroup>();
+        OnPropertyChanged(nameof(TaskGroups));
+
+        SeparateTasksToActiveAndDone(ApplySort(items));
+        AddAppropriateTaskGroups();
+        OnTaskBooleansChanged();
+    }
+
+    private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
+    {
+        foreach (TaskListItem entry in sortedItems)
+        {
+            Tasks.Add(entry);
+            if (entry.Task.Status == TaskLifecycleStatus.Completed)
+            {
+                DoneTasks.Add(entry);
+            }
+            else
+            {
+                ActiveTasks.Add(entry);
+            }
+        }
+    }
+
+    private void AddAppropriateTaskGroups()
+    {
+        List<TaskListItem> activeItems = ActiveTasks.ToList();
+        List<TaskListItem> doneItems = DoneTasks.ToList();
+
+        if (activeItems.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
+        }
+
+        if (doneItems.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
+        }
+    }
+
+    private void OnTaskBooleansChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveTasks));
+        OnPropertyChanged(nameof(HasDoneTasks));
+        OnPropertyChanged(nameof(HasTasks));
     }
 
     public async Task TogglePauseAsync(TaskItem task)
