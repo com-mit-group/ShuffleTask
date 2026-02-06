@@ -33,4 +33,7 @@
     <ProjectReference Include="..\ShuffleTask.Tests\ShuffleTask.Tests.csproj" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);TEST</DefineConstants>
+  </PropertyGroup>
 </Project>

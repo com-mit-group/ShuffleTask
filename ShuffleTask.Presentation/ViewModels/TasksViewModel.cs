@@ -68,7 +68,7 @@ public partial class TasksViewModel : ObservableObject
 
             IEnumerable<TaskListItem> sortedItems = ApplySort(items
                 .Select(task => TaskListItem.From(task, settings, now)));
-            await MainThread.InvokeOnMainThreadAsync(() =>
+            await MainThread.InvokeOnMainThreadAsync(() => Task.Run(() =>
             {
                 Tasks.Clear();
                 ActiveTasks.Clear();
@@ -76,7 +76,7 @@ public partial class TasksViewModel : ObservableObject
                 SeparateTasksToActiveAndDone(sortedItems);
                 AddAppropriateTaskGroups();
                 OnTaskBooleansChanged();
-            });
+            }));
         }
         finally
         {
@@ -118,11 +118,13 @@ public partial class TasksViewModel : ObservableObject
 
     private void ApplySortToCollections()
     {
+#if !TEST
         if (!MainThread.IsMainThread)
         {
             MainThread.BeginInvokeOnMainThread(ApplySortToCollections);
             return;
         }
+#endif
 
         List<TaskListItem> items = Tasks.ToList();
         Tasks.Clear();
@@ -168,13 +170,6 @@ public partial class TasksViewModel : ObservableObject
 
         TaskGroups = new ObservableCollection<TaskGroup>(taskGroups);
         OnPropertyChanged(nameof(TaskGroups));
-    }
-
-    private void OnTaskBooleansChanged()
-    {
-        OnPropertyChanged(nameof(HasActiveTasks));
-        OnPropertyChanged(nameof(HasDoneTasks));
-        OnPropertyChanged(nameof(HasTasks));
     }
 
     private void OnTaskBooleansChanged()
