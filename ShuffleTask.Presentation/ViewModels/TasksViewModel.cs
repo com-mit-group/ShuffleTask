@@ -151,16 +151,20 @@ public partial class TasksViewModel : ObservableObject
     {
         List<TaskListItem> activeItems = ActiveTasks.ToList();
         List<TaskListItem> doneItems = DoneTasks.ToList();
+        List<TaskGroup> taskGroups = [];
 
         if (activeItems.Count > 0)
         {
-            TaskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
+            taskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
         }
 
         if (doneItems.Count > 0)
         {
-            TaskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
+            taskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
         }
+
+        TaskGroups = new ObservableCollection<TaskGroup>(taskGroups);
+        OnPropertyChanged(nameof(TaskGroups));
     }
 
     private void OnTaskBooleansChanged()
