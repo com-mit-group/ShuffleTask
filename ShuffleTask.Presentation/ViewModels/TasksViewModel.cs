@@ -21,6 +21,7 @@ public partial class TasksViewModel : ObservableObject
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
+    private bool _pendingSort;
 
     public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
@@ -77,6 +78,11 @@ public partial class TasksViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            if (_pendingSort)
+            {
+                _pendingSort = false;
+                ApplySortToCollections();
+            }
         }
     }
 
@@ -84,6 +90,7 @@ public partial class TasksViewModel : ObservableObject
     {
         if (IsBusy)
         {
+            _pendingSort = true;
             return;
         }
 
