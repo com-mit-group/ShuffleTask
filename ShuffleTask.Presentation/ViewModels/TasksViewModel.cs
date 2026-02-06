@@ -70,32 +70,9 @@ public partial class TasksViewModel : ObservableObject
             TaskGroups.Clear();
             IEnumerable<TaskListItem> sortedItems = ApplySort(items
                 .Select(task => TaskListItem.From(task, settings, now)));
-            foreach (TaskListItem? entry in sortedItems)
-            {
-                Tasks.Add(entry);
-                if (entry.Task.Status == TaskLifecycleStatus.Completed)
-                {
-                    DoneTasks.Add(entry);
-                }
-                else
-                {
-                    ActiveTasks.Add(entry);
-                }
-            }
-
-            if (ActiveTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
-            }
-
-            if (DoneTasks.Count > 0)
-            {
-                TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
-            }
-
-            OnPropertyChanged(nameof(HasActiveTasks));
-            OnPropertyChanged(nameof(HasDoneTasks));
-            OnPropertyChanged(nameof(HasTasks));
+            SeparateTasksToActiveAndDone(sortedItems);
+            AddAppropriateTaskGroups();
+            OnTaskBooleansChanged();
         }
         finally
         {
@@ -132,27 +109,36 @@ public partial class TasksViewModel : ObservableObject
     private void ApplySortToCollections()
     {
         List<TaskListItem> items = Tasks.ToList();
-        List<TaskListItem> activeItems = [];
-        List<TaskListItem> doneItems = [];
         Tasks.Clear();
         ActiveTasks.Clear();
         DoneTasks.Clear();
         TaskGroups.Clear();
 
-        foreach (TaskListItem entry in ApplySort(items))
+        SeparateTasksToActiveAndDone(ApplySort(items));
+        AddAppropriateTaskGroups();
+        OnTaskBooleansChanged();
+    }
+
+    private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
+    {
+        foreach (TaskListItem entry in sortedItems)
         {
             Tasks.Add(entry);
             if (entry.Task.Status == TaskLifecycleStatus.Completed)
             {
                 DoneTasks.Add(entry);
-                doneItems.Add(entry);
             }
             else
             {
                 ActiveTasks.Add(entry);
-                activeItems.Add(entry);
             }
         }
+    }
+
+    private void AddAppropriateTaskGroups()
+    {
+        List<TaskListItem> activeItems = ActiveTasks.ToList();
+        List<TaskListItem> doneItems = DoneTasks.ToList();
 
         if (activeItems.Count > 0)
         {
@@ -163,7 +149,10 @@ public partial class TasksViewModel : ObservableObject
         {
             TaskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
         }
+    }
 
+    private void OnTaskBooleansChanged()
+    {
         OnPropertyChanged(nameof(HasActiveTasks));
         OnPropertyChanged(nameof(HasDoneTasks));
         OnPropertyChanged(nameof(HasTasks));
