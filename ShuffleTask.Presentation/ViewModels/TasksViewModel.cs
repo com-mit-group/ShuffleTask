@@ -21,6 +21,7 @@ public partial class TasksViewModel : ObservableObject
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
+    private bool _pendingSort;
 
     public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
@@ -77,26 +78,11 @@ public partial class TasksViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-        }
-    }
-
-    private void OnTaskBooleansChanged()
-    {
-        OnPropertyChanged(nameof(HasActiveTasks));
-        OnPropertyChanged(nameof(HasDoneTasks));
-        OnPropertyChanged(nameof(HasTasks));
-    }
-
-    private void AddAppropriateTaskGroups()
-    {
-        if (ActiveTasks.Count > 0)
-        {
-            TaskGroups.Add(new TaskGroup("Active Tasks", false, ActiveTasks));
-        }
-
-        if (DoneTasks.Count > 0)
-        {
-            TaskGroups.Add(new TaskGroup("Done Tasks", ActiveTasks.Count > 0, DoneTasks));
+            if (_pendingSort)
+            {
+                _pendingSort = false;
+                ApplySortToCollections();
+            }
         }
     }
 
@@ -104,6 +90,7 @@ public partial class TasksViewModel : ObservableObject
     {
         if (IsBusy)
         {
+            _pendingSort = true;
             return;
         }
 
@@ -134,8 +121,7 @@ public partial class TasksViewModel : ObservableObject
         DoneTasks.Clear();
         TaskGroups.Clear();
 
-        IEnumerable<TaskListItem> sortedItems = ApplySort(items);
-        SeparateTasksToActiveAndDone(sortedItems);
+        SeparateTasksToActiveAndDone(ApplySort(items));
         AddAppropriateTaskGroups();
         OnTaskBooleansChanged();
     }
@@ -154,6 +140,29 @@ public partial class TasksViewModel : ObservableObject
                 ActiveTasks.Add(entry);
             }
         }
+    }
+
+    private void AddAppropriateTaskGroups()
+    {
+        List<TaskListItem> activeItems = ActiveTasks.ToList();
+        List<TaskListItem> doneItems = DoneTasks.ToList();
+
+        if (activeItems.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
+        }
+
+        if (doneItems.Count > 0)
+        {
+            TaskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
+        }
+    }
+
+    private void OnTaskBooleansChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveTasks));
+        OnPropertyChanged(nameof(HasDoneTasks));
+        OnPropertyChanged(nameof(HasTasks));
     }
 
     public async Task TogglePauseAsync(TaskItem task)
