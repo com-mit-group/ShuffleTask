@@ -68,7 +68,7 @@ public partial class TasksViewModel : ObservableObject
 
             IEnumerable<TaskListItem> sortedItems = ApplySort(items
                 .Select(task => TaskListItem.From(task, settings, now)));
-            await MainThread.InvokeOnMainThreadAsync(() => Task.Run(() =>
+            await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 Tasks.Clear();
                 ActiveTasks.Clear();
@@ -76,7 +76,8 @@ public partial class TasksViewModel : ObservableObject
                 SeparateTasksToActiveAndDone(sortedItems);
                 AddAppropriateTaskGroups();
                 OnTaskBooleansChanged();
-            }));
+                return Task.CompletedTask;
+            });
         }
         finally
         {
