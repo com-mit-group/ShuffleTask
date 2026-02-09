@@ -115,6 +115,11 @@ public partial class TasksPage : ContentPage
         await _vm.DeleteAsync(task);
     }
 
+    private void OnResetFiltersClicked(object sender, EventArgs e)
+    {
+        _vm.ResetFilters();
+    }
+
     private async Task OpenEditorAsync(TaskItem? task)
     {
         var page = _services.GetRequiredService<EditTaskPage>();

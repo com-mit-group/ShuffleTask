@@ -17,12 +17,18 @@ public partial class TasksViewModel : ObservableObject
     private const string SortScore = "Score";
     private const string SortImportance = "Importance";
     private const string SortDeadline = "Deadline";
+    private const string RepeatFilterAll = "All";
+    private const string RepeatFilterRepeating = "Repeating";
+    private const string RepeatFilterNonRepeating = "One-off";
 
     private readonly IStorageService _storage;
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
     private bool _pendingSort;
+    private bool _pendingRefresh;
+    private bool _suppressRefresh;
+    private List<TaskListItem> _allTasks = [];
 
     public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
     {
@@ -38,6 +44,7 @@ public partial class TasksViewModel : ObservableObject
     public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
     public ObservableCollection<TaskGroup> TaskGroups { get; private set; } = [];
     public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
+    public IReadOnlyList<string> RepeatFilterOptions { get; } = new[] { RepeatFilterAll, RepeatFilterRepeating, RepeatFilterNonRepeating };
 
     public bool HasActiveTasks => ActiveTasks.Count > 0;
     public bool HasDoneTasks => DoneTasks.Count > 0;
@@ -48,6 +55,21 @@ public partial class TasksViewModel : ObservableObject
 
     [ObservableProperty]
     private string selectedSort = SortScore;
+
+    [ObservableProperty]
+    private bool filterAllowedNow;
+
+    [ObservableProperty]
+    private bool filterAllowedMorning;
+
+    [ObservableProperty]
+    private bool filterAllowedAfternoon;
+
+    [ObservableProperty]
+    private bool filterAllowedEvening;
+
+    [ObservableProperty]
+    private string selectedRepeatFilter = RepeatFilterAll;
 
     public async Task LoadAsync(string? userId = null, string? deviceId = null)
     {
@@ -66,25 +88,22 @@ public partial class TasksViewModel : ObservableObject
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
-            IEnumerable<TaskListItem> sortedItems = ApplySort(items
-                .Select(task => TaskListItem.From(task, settings, now)));
+            _allTasks = items
+                .Select(task => TaskListItem.From(task, settings, now))
+                .ToList();
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
-                Tasks.Clear();
-                ActiveTasks.Clear();
-                DoneTasks.Clear();
-                SeparateTasksToActiveAndDone(sortedItems);
-                AddAppropriateTaskGroups();
-                OnTaskBooleansChanged();
+                ApplySortToCollections();
                 return Task.CompletedTask;
             });
         }
         finally
         {
             IsBusy = false;
-            if (_pendingSort)
+            if (_pendingSort || _pendingRefresh)
             {
                 _pendingSort = false;
+                _pendingRefresh = false;
                 ApplySortToCollections();
             }
         }
@@ -92,9 +111,61 @@ public partial class TasksViewModel : ObservableObject
 
     partial void OnSelectedSortChanged(string value)
     {
+        RequestRefresh(true);
+    }
+
+    partial void OnFilterAllowedNowChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedMorningChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedAfternoonChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedEveningChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnSelectedRepeatFilterChanged(string value)
+    {
+        RequestRefresh();
+    }
+
+    public void ResetFilters()
+    {
+        _suppressRefresh = true;
+        FilterAllowedNow = false;
+        FilterAllowedMorning = false;
+        FilterAllowedAfternoon = false;
+        FilterAllowedEvening = false;
+        SelectedRepeatFilter = RepeatFilterAll;
+        _suppressRefresh = false;
+        ApplySortToCollections();
+    }
+
+    private void RequestRefresh(bool isSortChange = false)
+    {
+        if (_suppressRefresh)
+        {
+            return;
+        }
+
         if (IsBusy)
         {
-            _pendingSort = true;
+            if (isSortChange)
+            {
+                _pendingSort = true;
+            }
+
+            _pendingRefresh = true;
             return;
         }
 
@@ -127,14 +198,84 @@ public partial class TasksViewModel : ObservableObject
         }
 #endif
 
-        List<TaskListItem> items = Tasks.ToList();
+        List<TaskListItem> items = _allTasks.ToList();
         Tasks.Clear();
         ActiveTasks.Clear();
         DoneTasks.Clear();
 
-        SeparateTasksToActiveAndDone(ApplySort(items));
+        IEnumerable<TaskListItem> filteredItems = ApplyFilters(items);
+        SeparateTasksToActiveAndDone(ApplySort(filteredItems));
         AddAppropriateTaskGroups();
         OnTaskBooleansChanged();
+    }
+
+    private IEnumerable<TaskListItem> ApplyFilters(IEnumerable<TaskListItem> items)
+    {
+        IEnumerable<TaskListItem> filteredItems = items;
+
+        if (FilterAllowedNow || FilterAllowedMorning || FilterAllowedAfternoon || FilterAllowedEvening)
+        {
+            DateTimeOffset now = _clock.GetUtcNow();
+            filteredItems = filteredItems.Where(item => MatchesAllowedTimeFilter(item.Task, now));
+        }
+
+        filteredItems = SelectedRepeatFilter switch
+        {
+            RepeatFilterRepeating => filteredItems.Where(item => item.Task.Repeat != RepeatType.None),
+            RepeatFilterNonRepeating => filteredItems.Where(item => item.Task.Repeat == RepeatType.None),
+            _ => filteredItems
+        };
+
+        return filteredItems;
+    }
+
+    private bool MatchesAllowedTimeFilter(TaskItem task, DateTimeOffset now)
+    {
+        if (FilterAllowedNow && TimeWindowService.AllowedNow(task, now, _settings))
+        {
+            return true;
+        }
+
+        DateTimeOffset localNow = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+
+        if (FilterAllowedMorning && IsAllowedDuringWindow(task, localNow, _settings.MorningStart, _settings.MorningEnd))
+        {
+            return true;
+        }
+
+        if (FilterAllowedAfternoon && IsAllowedDuringWindow(task, localNow, _settings.LunchEnd, _settings.EveningStart))
+        {
+            return true;
+        }
+
+        if (FilterAllowedEvening && IsAllowedDuringWindow(task, localNow, _settings.EveningStart, _settings.EveningEnd))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsAllowedDuringWindow(TaskItem task, DateTimeOffset localNow, TimeSpan start, TimeSpan end)
+    {
+        if (start == end)
+        {
+            return TimeWindowService.AllowedNow(task, localNow.ToOffset(TimeSpan.Zero), _settings);
+        }
+
+        TimeSpan sample;
+        if (start < end)
+        {
+            sample = start + TimeSpan.FromTicks((end - start).Ticks / 2);
+        }
+        else
+        {
+            sample = start;
+        }
+
+        DateTimeOffset sampleLocal = new(localNow.Date + sample, localNow.Offset);
+        DateTimeOffset sampleUtc = sampleLocal.ToOffset(TimeSpan.Zero);
+        return TimeWindowService.AllowedNow(task, sampleUtc, _settings);
     }
 
     private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
