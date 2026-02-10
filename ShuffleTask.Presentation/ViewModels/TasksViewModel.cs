@@ -258,24 +258,23 @@ public partial class TasksViewModel : ObservableObject
 
     private bool IsAllowedDuringWindow(TaskItem task, DateTimeOffset localNow, TimeSpan start, TimeSpan end)
     {
-        if (start == end)
+        DateTimeOffset windowStartLocal = new(localNow.Date + start, localNow.Offset);
+        DateTimeOffset windowEndLocal = start == end
+            ? windowStartLocal.AddDays(1)
+            : (start < end
+                ? new DateTimeOffset(localNow.Date + end, localNow.Offset)
+                : new DateTimeOffset(localNow.Date + end, localNow.Offset).AddDays(1));
+
+        for (DateTimeOffset cursorLocal = windowStartLocal; cursorLocal < windowEndLocal; cursorLocal = cursorLocal.AddMinutes(1))
         {
-            return TimeWindowService.AllowedNow(task, localNow.ToOffset(TimeSpan.Zero), _settings);
+            if (TimeWindowService.AllowedNow(task, cursorLocal.ToOffset(TimeSpan.Zero), _settings))
+            {
+                return true;
+            }
         }
 
-        TimeSpan sample;
-        if (start < end)
-        {
-            sample = start + TimeSpan.FromTicks((end - start).Ticks / 2);
-        }
-        else
-        {
-            sample = start;
-        }
-
-        DateTimeOffset sampleLocal = new(localNow.Date + sample, localNow.Offset);
-        DateTimeOffset sampleUtc = sampleLocal.ToOffset(TimeSpan.Zero);
-        return TimeWindowService.AllowedNow(task, sampleUtc, _settings);
+        // AllowedNow treats the end as exclusive, so explicitly probe just before the window end.
+        return TimeWindowService.AllowedNow(task, windowEndLocal.AddTicks(-1).ToOffset(TimeSpan.Zero), _settings);
     }
 
     private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
