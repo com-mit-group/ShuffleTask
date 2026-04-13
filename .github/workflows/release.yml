@@ -12,13 +12,12 @@ on:
         type: string
         required: false
 
-permissions:
-  contents: write
-  actions: read
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     outputs:
       version: ${{ github.event.inputs.version }}
       release-status: ${{ steps.release-status.outputs.status }}
