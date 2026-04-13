@@ -185,17 +185,69 @@
     </ContentPage.ToolbarItems>
 
     <Grid RowDefinitions="Auto,*">
-        <HorizontalStackLayout Padding="12,8"
-                               Spacing="12">
-            <Label Text="Sort by"
-                   FontSize="14"
-                   VerticalOptions="Center"
-                   TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
-            <Picker ItemsSource="{Binding SortOptions}"
-                    SelectedItem="{Binding SelectedSort}"
-                    Title="Sort"
-                    HorizontalOptions="EndAndExpand" />
-        </HorizontalStackLayout>
+        <VerticalStackLayout Padding="12,8"
+                             Spacing="8">
+            <HorizontalStackLayout Spacing="12">
+                <Label Text="Sort by"
+                       FontSize="14"
+                       VerticalOptions="Center"
+                       TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
+                <Picker ItemsSource="{Binding SortOptions}"
+                        SelectedItem="{Binding SelectedSort}"
+                        Title="Sort"
+                        HorizontalOptions="EndAndExpand" />
+            </HorizontalStackLayout>
+
+            <VerticalStackLayout Spacing="6">
+                <HorizontalStackLayout Spacing="8">
+                    <Label Text="Allowed time"
+                           FontSize="13"
+                           VerticalOptions="Center"
+                           TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
+                    <HorizontalStackLayout Spacing="6">
+                        <CheckBox IsChecked="{Binding FilterAllowedNow}" />
+                        <Label Text="Now"
+                               FontSize="13"
+                               VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    <HorizontalStackLayout Spacing="6">
+                        <CheckBox IsChecked="{Binding FilterAllowedMorning}" />
+                        <Label Text="Morning"
+                               FontSize="13"
+                               VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    <HorizontalStackLayout Spacing="6">
+                        <CheckBox IsChecked="{Binding FilterAllowedAfternoon}" />
+                        <Label Text="Afternoon"
+                               FontSize="13"
+                               VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    <HorizontalStackLayout Spacing="6">
+                        <CheckBox IsChecked="{Binding FilterAllowedEvening}" />
+                        <Label Text="Evening"
+                               FontSize="13"
+                               VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </HorizontalStackLayout>
+
+                <HorizontalStackLayout Spacing="12">
+                    <Label Text="Repeating"
+                           FontSize="13"
+                           VerticalOptions="Center"
+                           TextColor="{AppThemeBinding Light=#4a5568, Dark=#cbd5f5}" />
+                    <Picker ItemsSource="{Binding RepeatFilterOptions}"
+                            SelectedItem="{Binding SelectedRepeatFilter}"
+                            Title="Repeat"
+                            HorizontalOptions="StartAndExpand" />
+                    <Button Text="Reset filters"
+                            FontSize="12"
+                            Padding="12,6"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#2d9cdb, Dark=#90cdf4}"
+                            Clicked="OnResetFiltersClicked" />
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+        </VerticalStackLayout>
 
         <CollectionView Grid.Row="1"
                         IsVisible="{Binding HasTasks}"
