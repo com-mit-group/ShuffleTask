@@ -265,16 +265,142 @@ public partial class TasksViewModel : ObservableObject
                 ? new DateTimeOffset(localNow.Date + end, localNow.Offset)
                 : new DateTimeOffset(localNow.Date + end, localNow.Offset).AddDays(1));
 
-        for (DateTimeOffset cursorLocal = windowStartLocal; cursorLocal < windowEndLocal; cursorLocal = cursorLocal.AddMinutes(1))
+        if (windowEndLocal <= windowStartLocal)
         {
-            if (TimeWindowService.AllowedNow(task, cursorLocal.ToOffset(TimeSpan.Zero), _settings))
+            return false;
+        }
+
+        HashSet<DateTimeOffset> probes = BuildAllowedWindowProbes(task, windowStartLocal, windowEndLocal);
+        foreach (DateTimeOffset probe in probes.OrderBy(value => value))
+        {
+            if (TimeWindowService.AllowedNow(task, probe.ToOffset(TimeSpan.Zero), _settings))
             {
                 return true;
             }
         }
 
-        // AllowedNow treats the end as exclusive, so explicitly probe just before the window end.
-        return TimeWindowService.AllowedNow(task, windowEndLocal.AddTicks(-1).ToOffset(TimeSpan.Zero), _settings);
+        return false;
+    }
+
+    private HashSet<DateTimeOffset> BuildAllowedWindowProbes(TaskItem task, DateTimeOffset windowStartLocal, DateTimeOffset windowEndLocal)
+    {
+        HashSet<DateTimeOffset> probes = [];
+
+        void AddProbe(DateTimeOffset localProbe)
+        {
+            if (localProbe >= windowStartLocal && localProbe < windowEndLocal)
+            {
+                probes.Add(localProbe);
+            }
+        }
+
+        AddProbe(windowStartLocal);
+        AddProbe(windowStartLocal.AddTicks(1));
+        AddProbe(windowEndLocal.AddTicks(-1));
+
+        foreach (TimeSpan boundary in GetTransitionBoundaries(task))
+        {
+            DateTime startDate = windowStartLocal.Date.AddDays(-1);
+            DateTime endDate = windowEndLocal.Date.AddDays(1);
+
+            for (DateTime day = startDate; day <= endDate; day = day.AddDays(1))
+            {
+                DateTimeOffset boundaryLocal = new(day + boundary, windowStartLocal.Offset);
+                AddProbe(boundaryLocal.AddTicks(-1));
+                AddProbe(boundaryLocal);
+                AddProbe(boundaryLocal.AddTicks(1));
+            }
+        }
+
+        for (DateTime day = windowStartLocal.Date.AddDays(-1); day <= windowEndLocal.Date.AddDays(1); day = day.AddDays(1))
+        {
+            DateTimeOffset midnight = new(day, windowStartLocal.Offset);
+            AddProbe(midnight.AddTicks(-1));
+            AddProbe(midnight);
+            AddProbe(midnight.AddTicks(1));
+        }
+
+        return probes;
+    }
+
+    private IReadOnlyCollection<TimeSpan> GetTransitionBoundaries(TaskItem task)
+    {
+        HashSet<TimeSpan> boundaries =
+        [
+            _settings.WorkStart,
+            _settings.WorkEnd,
+            _settings.MorningStart,
+            _settings.MorningEnd,
+            _settings.LunchStart,
+            _settings.LunchEnd,
+            _settings.EveningStart,
+            _settings.EveningEnd
+        ];
+
+        PeriodDefinition definition = ResolvePeriodDefinition(task);
+        (TimeSpan definitionStart, TimeSpan definitionEnd) = ResolveTimeWindow(definition);
+        boundaries.Add(definitionStart);
+        boundaries.Add(definitionEnd);
+
+        return boundaries;
+    }
+
+    private PeriodDefinition ResolvePeriodDefinition(TaskItem task)
+    {
+        if (PeriodDefinitionCatalog.TryGet(task.PeriodDefinitionId, out PeriodDefinition catalogDefinition))
+        {
+            return catalogDefinition;
+        }
+
+        if (TaskItemPeriodDefinitionHelper.TryBuildAdHocDefinition(task, out PeriodDefinition adHocDefinition))
+        {
+            return adHocDefinition;
+        }
+
+        return task.AllowedPeriod switch
+        {
+            AllowedPeriod.Work => PeriodDefinitionCatalog.Work,
+            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWork,
+            AllowedPeriod.Custom => new PeriodDefinition
+            {
+                Id = string.Empty,
+                Name = "Legacy custom",
+                StartTime = task.CustomStartTime,
+                EndTime = task.CustomEndTime,
+                Weekdays = task.CustomWeekdays ?? PeriodDefinitionCatalog.AllWeekdays,
+                IsAllDay = !task.CustomStartTime.HasValue || !task.CustomEndTime.HasValue,
+                Mode = PeriodDefinitionMode.None
+            },
+            _ => PeriodDefinitionCatalog.Any
+        };
+    }
+
+    private (TimeSpan Start, TimeSpan End) ResolveTimeWindow(PeriodDefinition definition)
+    {
+        bool alignsWithWorkHours = definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours)
+            || definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours);
+
+        if (alignsWithWorkHours)
+        {
+            return (_settings.WorkStart, _settings.WorkEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Morning))
+        {
+            return (_settings.MorningStart, _settings.MorningEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Lunch))
+        {
+            return (_settings.LunchStart, _settings.LunchEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Evening))
+        {
+            return (_settings.EveningStart, _settings.EveningEnd);
+        }
+
+        return (definition.StartTime ?? TimeSpan.Zero, definition.EndTime ?? TimeSpan.Zero);
     }
 
     private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
