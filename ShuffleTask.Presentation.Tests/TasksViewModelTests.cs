@@ -1,5 +1,6 @@
 using NSubstitute;
 using NUnit.Framework;
+using NUnit.Framework.Legacy;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
