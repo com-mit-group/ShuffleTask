@@ -113,11 +113,11 @@ internal class SettingsUpdatedAsyncHandler : IAsyncEventHandler<SettingsUpdatedE
 
         if (!string.IsNullOrWhiteSpace(normalized.Network?.UserId))
         {
-            normalized.Network.DeviceId = null;
+            normalized.Network.DeviceId = string.Empty;
         }
         else
         {
-            normalized.Network.UserId = existing?.Network?.UserId;
+            normalized!.Network?.UserId = existing?.Network?.UserId;
         }
 
         if (existing is null)

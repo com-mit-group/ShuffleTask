@@ -5,6 +5,7 @@
              xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
              xmlns:controls="clr-namespace:ShuffleTask.Controls"
              xmlns:converters="clr-namespace:ShuffleTask.Presentation.Converters"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="ShuffleTask.Views.SettingsPage"
              x:DataType="vm:SettingsViewModel"
              Title="Settings">
@@ -16,12 +17,12 @@
 
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="12">
-            <Expander IsExpanded="True">
-                <Expander.Header>
+            <toolkit:Expander IsExpanded="True">
+                <toolkit:Expander.Header>
                     <Label Text="General"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       RowSpacing="12"
@@ -75,14 +76,14 @@
                            FontSize="12"
                            TextColor="#6B7280" />
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
-            <Expander>
-                <Expander.Header>
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Notifications"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                       RowSpacing="12"
@@ -127,14 +128,14 @@
                                              Value="{Binding Settings.ReminderMinutes}"
                                              HorizontalOptions="Start" />
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
-            <Expander>
-                <Expander.Header>
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Shuffle behavior"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       RowSpacing="12"
@@ -275,14 +276,14 @@
                                VerticalOptions="Center" />
                     </Grid>
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
-            <Expander>
-                <Expander.Header>
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Pomodoro"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto"
                       RowSpacing="12"
@@ -334,14 +335,14 @@
                                              HorizontalOptions="Start"
                                              IsVisible="{Binding UsePomodoro}" />
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
-            <Expander>
-                <Expander.Header>
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Sync &amp; account"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto"
                       RowSpacing="12"
@@ -376,14 +377,14 @@
                                 IsVisible="{Binding IsLoggedIn}" />
                     </Grid>
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
-            <Expander>
-                <Expander.Header>
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Day slots"
                            FontAttributes="Bold"
                            FontSize="16" />
-                </Expander.Header>
+                </toolkit:Expander.Header>
                 <Grid ColumnDefinitions="Auto,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                       RowSpacing="12"
@@ -431,7 +432,7 @@
                                 Grid.Column="1"
                                 Time="{Binding LunchEnd}" />
                 </Grid>
-            </Expander>
+            </toolkit:Expander>
 
             <Grid ColumnDefinitions="*,*"
                   ColumnSpacing="16"

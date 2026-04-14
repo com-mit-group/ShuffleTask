@@ -1,4 +1,5 @@
-﻿using ShuffleTask.Application.Abstractions;
+using CommunityToolkit.Maui;
+using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Application.Utilities;
@@ -43,7 +44,8 @@ public static partial class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
         builder
-            .UseMauiApp<App>();
+            .UseMauiApp<App>()
+            .UseMauiCommunityToolkit();
 
         ConfigurePlatform(builder);
 
