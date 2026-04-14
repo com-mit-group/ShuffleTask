@@ -6,6 +6,7 @@ namespace ShuffleTask.Application.Abstractions;
 public interface INotificationService
 {
     Task InitializeAsync();
+    Task CancelAllAsync();
     Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings);
     Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings);
 

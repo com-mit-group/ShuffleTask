@@ -31,6 +31,13 @@ public partial class NotificationService
         public Task ShowToastAsync(string title, string message, bool playSound)
             => ScheduleAsync(title, message, TimeSpan.Zero, playSound);
 
+        public Task CancelAllAsync()
+        {
+            UNUserNotificationCenter.Current.RemoveAllPendingNotificationRequests();
+            UNUserNotificationCenter.Current.RemoveAllDeliveredNotifications();
+            return Task.CompletedTask;
+        }
+
         private const double MinimumTriggerDelaySeconds = 0.1;
 
         private static async Task ScheduleAsync(string title, string message, TimeSpan delay, bool playSound)

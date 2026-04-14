@@ -162,6 +162,7 @@ public class ShuffleCoordinatorServiceTests
     private sealed class NotificationStub : INotificationService
     {
         public Task InitializeAsync() => Task.CompletedTask;
+        public Task CancelAllAsync() => Task.CompletedTask;
 
         public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
         {
