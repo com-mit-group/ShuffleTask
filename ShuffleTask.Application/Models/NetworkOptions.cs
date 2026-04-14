@@ -12,7 +12,7 @@ public partial class NetworkOptions : ObservableObject
     private const int PortRange = MaxPort - MinPort;
     private const string LocalHostString = "127.0.0.1";
     [ObservableProperty]
-    private string host;
+    private string? host;
 
     [ObservableProperty]
     private int listeningPort;

@@ -11,7 +11,7 @@ using Yaref92.Events.Transport.Grpc;
 
 namespace ShuffleTask.Application.Services;
 
-public class NetworkSyncService : INetworkSyncService, IDisposable
+public sealed class NetworkSyncService : INetworkSyncService, IDisposable
 {
     private readonly IStorageService _storage;
     private readonly AppSettings _appSettings;
@@ -114,7 +114,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         {
             return;
         }
-        (_transport as GrpcEventTransport).TargetPlatform = UtilityMethods.ParsePlatform(selectedPeerPlatform);
+        (_transport as GrpcEventTransport)?.TargetPlatform = UtilityMethods.ParsePlatform(selectedPeerPlatform);
 
         if (!await ValidatePeerConnectionAsync(host, port).ConfigureAwait(false))
         {
@@ -299,7 +299,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
 
         SubscribeToInboundEvents();
 
-        await (_transport as GrpcEventTransport).StartListeningAsync(cancellationToken).ConfigureAwait(false);
+        await (_transport as GrpcEventTransport)!.StartListeningAsync(cancellationToken).ConfigureAwait(false);
         await DebugToastAsync("Transport", $"Listening on port {NetworkOptions.ListeningPort}.").ConfigureAwait(false);
     }
 
@@ -308,7 +308,7 @@ public class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator?.Dispose();
         if (_transport is not null)
         {
-            await (_transport as GrpcEventTransport).DisposeAsync().ConfigureAwait(false);
+            await (_transport as GrpcEventTransport)!.DisposeAsync().ConfigureAwait(false);
         }
         CancelConnections();
     }
