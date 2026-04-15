@@ -202,7 +202,7 @@ public partial class NotificationService
             var context = Android.App.Application.Context;
             if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
             {
-                foreach ((int notificationId, _) in ScheduledNotificationIds)
+                foreach (int notificationId in ScheduledNotificationIds.Keys)
                 {
                     var intent = new Intent(context, typeof(ReminderBroadcastReceiver))
                         .SetAction(AndroidNotificationAction);
