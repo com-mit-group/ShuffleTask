@@ -5,6 +5,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
@@ -152,21 +153,40 @@ public partial class NotificationService
 
         ScheduledNotificationIds[notificationId] = 0;
 
-        if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
+        if (context.GetSystemService(Context.AlarmService) is AlarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
-            {
-                alarmManager.SetExactAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
-            }
-            else
-            {
-                alarmManager.SetExact(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
-            }
+            ScheduleExactAlarm(context, AlarmType.ElapsedRealtimeWakeup, pendingIntent, triggerAt);
         }
         else
         {
             PostAndroidNotification(context, title, message, playSound, notificationId);
+        }
+    }
+
+    private static void ScheduleExactAlarm(Context ctx, AlarmType alarmType, PendingIntent pi, long triggerMillis)
+    {
+        var alarmManager = (AlarmManager)ctx.GetSystemService(Context.AlarmService);
+        if (alarmManager == null)
+        {
+            return;
+        }
+
+        if (!alarmManager.CanScheduleExactAlarms())
+        {
+            var intent = new Intent(Settings.ActionRequestScheduleExactAlarm);
+            intent.SetFlags(ActivityFlags.NewTask);
+            ctx.StartActivity(intent);
+            return;
+        }
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(23))
+        {
+            alarmManager.SetExactAndAllowWhileIdle(alarmType, triggerMillis, pi);
+        }
+        else
+        {
+            alarmManager.SetExact(alarmType, triggerMillis, pi);
         }
     }
 
