@@ -155,13 +155,27 @@ public partial class NotificationService
         if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
+            try
             {
-                alarmManager.SetExactAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                if (OperatingSystem.IsAndroidVersionAtLeast(23))
+                {
+                    alarmManager.SetExactAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                }
+                else
+                {
+                    alarmManager.SetExact(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                }
             }
-            else
+            catch (Java.Lang.SecurityException)
             {
-                alarmManager.SetExact(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                if (OperatingSystem.IsAndroidVersionAtLeast(23))
+                {
+                    alarmManager.SetAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                }
+                else
+                {
+                    alarmManager.Set(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
+                }
             }
         }
         else
@@ -202,7 +216,7 @@ public partial class NotificationService
             var context = Android.App.Application.Context;
             if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
             {
-                foreach ((int notificationId, _) in ScheduledNotificationIds)
+                foreach (int notificationId in ScheduledNotificationIds.Keys)
                 {
                     var intent = new Intent(context, typeof(ReminderBroadcastReceiver))
                         .SetAction(AndroidNotificationAction);
