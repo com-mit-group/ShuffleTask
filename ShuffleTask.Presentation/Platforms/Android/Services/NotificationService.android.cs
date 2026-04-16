@@ -5,6 +5,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
@@ -205,6 +206,28 @@ public partial class NotificationService
                 catch
                 {
                     // Ignore permission request failures. The OS dialog may not be available if called too early.
+                }
+            }
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            {
+                try
+                {
+                    if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager &&
+                        !alarmManager.CanScheduleExactAlarms())
+                    {
+                        var activity = Platform.CurrentActivity;
+                        if (activity != null)
+                        {
+                            var intent = new Intent(Settings.ActionRequestScheduleExactAlarm)
+                                .SetData(Android.Net.Uri.Parse($"package:{context.PackageName}"));
+                            activity.StartActivity(intent);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore permission request failures. The settings activity may not be available.
                 }
             }
 
