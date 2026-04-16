@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Threading;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
@@ -26,6 +28,7 @@ public partial class NotificationService
     private const int NotificationPermissionRequestCode = 0x42;
 
     private static int _nextAndroidNotificationId = 2000;
+    private static readonly ConcurrentDictionary<int, byte> ScheduledNotificationIds = new();
 
     partial void InitializePlatform(ref INotificationPlatform platform)
     {
@@ -148,21 +151,42 @@ public partial class NotificationService
             return;
         }
 
-        if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
+        ScheduledNotificationIds[notificationId] = 0;
+
+        if (context.GetSystemService(Context.AlarmService) is AlarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
-            if (OperatingSystem.IsAndroidVersionAtLeast(23))
-            {
-                alarmManager.SetExactAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
-            }
-            else
-            {
-                alarmManager.SetExact(AlarmType.ElapsedRealtimeWakeup, triggerAt, pendingIntent);
-            }
+            ScheduleExactAlarm(context, AlarmType.ElapsedRealtimeWakeup, pendingIntent, triggerAt);
         }
         else
         {
             PostAndroidNotification(context, title, message, playSound, notificationId);
+        }
+    }
+
+    private static void ScheduleExactAlarm(Context ctx, AlarmType alarmType, PendingIntent pi, long triggerMillis)
+    {
+        var alarmManager = (AlarmManager)ctx.GetSystemService(Context.AlarmService);
+        if (alarmManager == null)
+        {
+            return;
+        }
+
+        if (!alarmManager.CanScheduleExactAlarms())
+        {
+            var intent = new Intent(Settings.ActionRequestScheduleExactAlarm);
+            intent.SetFlags(ActivityFlags.NewTask);
+            ctx.StartActivity(intent);
+            return;
+        }
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(23))
+        {
+            alarmManager.SetExactAndAllowWhileIdle(alarmType, triggerMillis, pi);
+        }
+        else
+        {
+            alarmManager.SetExact(alarmType, triggerMillis, pi);
         }
     }
 
@@ -193,10 +217,42 @@ public partial class NotificationService
             return Task.CompletedTask;
         }
 
+        public Task CancelAllAsync()
+        {
+            var context = Android.App.Application.Context;
+            if (context.GetSystemService(Context.AlarmService) is AlarmManager alarmManager)
+            {
+                foreach (int notificationId in ScheduledNotificationIds.Keys)
+                {
+                    var intent = new Intent(context, typeof(ReminderBroadcastReceiver))
+                        .SetAction(AndroidNotificationAction);
+
+                    var flags = PendingIntentFlags.NoCreate;
+                    if (OperatingSystem.IsAndroidVersionAtLeast(23))
+                    {
+                        flags |= PendingIntentFlags.Immutable;
+                    }
+
+                    var pendingIntent = PendingIntent.GetBroadcast(context, notificationId, intent, flags);
+                    if (pendingIntent != null)
+                    {
+                        alarmManager.Cancel(pendingIntent);
+                        pendingIntent.Cancel();
+                    }
+
+                    ScheduledNotificationIds.TryRemove(notificationId, out _);
+                }
+            }
+
+            NotificationManagerCompat.From(context).CancelAll();
+            return Task.CompletedTask;
+        }
+
         public Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
         {
             var context = Android.App.Application.Context;
             int notificationId = GetNextAndroidNotificationId();
+            ScheduledNotificationIds[notificationId] = 0;
 
             if (delay <= TimeSpan.Zero)
             {

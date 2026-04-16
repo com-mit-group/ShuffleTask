@@ -28,6 +28,7 @@ public partial class NotificationService : INotificationService
     partial void InitializePlatform(ref INotificationPlatform platform);
 
     public Task InitializeAsync() => _platform.InitializeAsync();
+    public Task CancelAllAsync() => _platform.CancelAllAsync();
 
     public Task NotifyTaskAsync(TaskItem task, int minutes, AppSettings settings)
         => NotifyTaskAsync(task, minutes, settings, delay: TimeSpan.Zero);
@@ -92,6 +93,7 @@ public partial class NotificationService : INotificationService
     private interface INotificationPlatform
     {
         Task InitializeAsync();
+        Task CancelAllAsync();
 
         Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound);
 
@@ -108,6 +110,7 @@ public partial class NotificationService : INotificationService
         }
 
         public Task InitializeAsync() => Task.CompletedTask;
+        public Task CancelAllAsync() => Task.CompletedTask;
 
         public async Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
         {

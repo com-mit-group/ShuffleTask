@@ -32,6 +32,24 @@ public partial class NotificationService
         }
 
         public Task InitializeAsync() => Task.CompletedTask;
+        public Task CancelAllAsync()
+        {
+            try
+            {
+                foreach (var scheduled in _notifier.GetScheduledToastNotifications())
+                {
+                    _notifier.RemoveFromSchedule(scheduled);
+                }
+
+                ToastNotificationManager.History.Clear();
+            }
+            catch
+            {
+                // Ignore cancellation failures.
+            }
+
+            return Task.CompletedTask;
+        }
 
         public async Task NotifyAsync(string title, string message, TimeSpan delay, bool playSound)
         {

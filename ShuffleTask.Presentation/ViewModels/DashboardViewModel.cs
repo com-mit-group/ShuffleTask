@@ -227,6 +227,9 @@ public partial class DashboardViewModel : ObservableObject
             _activeTask = updated;
         }
 
+        await _notifications.CancelAllAsync();
+        _coordinator.SuspendInProcessTimer();
+
         var snapshot = _activeTask;
         ShowMessage("Task complete", "Shuffle another task when you're ready.");
         EmitTimerResetTelemetry("done", snapshot);
@@ -253,6 +256,9 @@ public partial class DashboardViewModel : ObservableObject
             _activeTask = updated;
             await _networkSyncService.PublishTaskUpsertAsync(_activeTask);
         }
+
+        await _notifications.CancelAllAsync();
+        _coordinator.SuspendInProcessTimer();
 
         var snapshot = _activeTask;
         ShowMessage("Task snoozed", "Shuffle another task when you're ready.");
