@@ -9,6 +9,7 @@ using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.Presentation.Services;
 
@@ -156,6 +157,8 @@ public partial class NotificationService
         if (context.GetSystemService(Context.AlarmService) is AlarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
+            DateTimeOffset scheduledFireAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): schedule id={notificationId}, delayMs={delayMs}, scheduledFireAtUtc={scheduledFireAtUtc:O}");
             ScheduleExactAlarm(context, AlarmType.ElapsedRealtimeWakeup, pendingIntent, triggerAt);
         }
         else
@@ -295,6 +298,22 @@ public partial class NotificationService
             bool playSound = intent.GetBooleanExtra(AndroidNotificationExtraSound, true);
             int notificationId = intent.GetIntExtra(AndroidNotificationExtraId, GetNextAndroidNotificationId());
 
+            if (PersistedTimerState.TryGetActiveTimer(
+                    out _,
+                    out TimeSpan remaining,
+                    out bool expired,
+                    out _,
+                    out DateTimeOffset expiresAt)
+                && !expired
+                && remaining > TimeSpan.Zero)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"NotificationService(Android): receive id={notificationId} before timer completion, remaining={remaining.TotalMilliseconds:F0}ms, expiresAtUtc={expiresAt:O}; rescheduling.");
+                ScheduleAndroidNotification(context, title, message, remaining, playSound, notificationId);
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): firing id={notificationId}, nowUtc={DateTimeOffset.UtcNow:O}");
             PostAndroidNotification(context, title, message, playSound, notificationId);
         }
     }
