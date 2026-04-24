@@ -9,7 +9,6 @@ using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
-using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.Presentation.Services;
 
@@ -20,6 +19,7 @@ public partial class NotificationService
     private const string AndroidNotificationExtraMessage = "ShuffleTask.Notification.TimeUpMessage";
     private const string AndroidNotificationExtraSound = "ShuffleTask.Notification.Sound";
     private const string AndroidNotificationExtraId = "ShuffleTask.Notification.Id";
+    private const string AndroidNotificationExtraScheduledFireUnixMs = "ShuffleTask.Notification.ScheduledFireUnixMs";
 
     private const string SoundChannelId = "shuffletask.reminders.sound";
     private const string SilentChannelId = "shuffletask.reminders.silent";
@@ -127,12 +127,15 @@ public partial class NotificationService
             return;
         }
 
+        DateTimeOffset scheduledFireAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+
         var intent = new Intent(context, typeof(ReminderBroadcastReceiver))
             .SetAction(AndroidNotificationAction)
             .PutExtra(AndroidNotificationExtraTitle, title)
             .PutExtra(AndroidNotificationExtraMessage, message)
             .PutExtra(AndroidNotificationExtraSound, playSound)
-            .PutExtra(AndroidNotificationExtraId, notificationId);
+            .PutExtra(AndroidNotificationExtraId, notificationId)
+            .PutExtra(AndroidNotificationExtraScheduledFireUnixMs, scheduledFireAtUtc.ToUnixTimeMilliseconds());
 
         var flags = PendingIntentFlags.UpdateCurrent;
         if (OperatingSystem.IsAndroidVersionAtLeast(23))
@@ -157,7 +160,6 @@ public partial class NotificationService
         if (context.GetSystemService(Context.AlarmService) is AlarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
-            DateTimeOffset scheduledFireAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
             System.Diagnostics.Debug.WriteLine($"NotificationService(Android): schedule id={notificationId}, delayMs={delayMs}, scheduledFireAtUtc={scheduledFireAtUtc:O}");
             ScheduleExactAlarm(context, AlarmType.ElapsedRealtimeWakeup, pendingIntent, triggerAt);
         }
@@ -297,23 +299,23 @@ public partial class NotificationService
             string message = intent.GetStringExtra(AndroidNotificationExtraMessage) ?? string.Empty;
             bool playSound = intent.GetBooleanExtra(AndroidNotificationExtraSound, true);
             int notificationId = intent.GetIntExtra(AndroidNotificationExtraId, GetNextAndroidNotificationId());
+            long scheduledFireUnixMs = intent.GetLongExtra(AndroidNotificationExtraScheduledFireUnixMs, 0);
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
 
-            if (PersistedTimerState.TryGetActiveTimer(
-                    out _,
-                    out TimeSpan remaining,
-                    out bool expired,
-                    out _,
-                    out DateTimeOffset expiresAt)
-                && !expired
-                && remaining > TimeSpan.Zero)
+            if (scheduledFireUnixMs > 0)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"NotificationService(Android): receive id={notificationId} before timer completion, remaining={remaining.TotalMilliseconds:F0}ms, expiresAtUtc={expiresAt:O}; rescheduling.");
-                ScheduleAndroidNotification(context, title, message, remaining, playSound, notificationId);
-                return;
+                DateTimeOffset scheduledFireAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(scheduledFireUnixMs);
+                TimeSpan remaining = scheduledFireAtUtc - nowUtc;
+                if (remaining > TimeSpan.Zero)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"NotificationService(Android): receive id={notificationId} before scheduled fire time, remaining={remaining.TotalMilliseconds:F0}ms, scheduledFireAtUtc={scheduledFireAtUtc:O}; rescheduling.");
+                    ScheduleAndroidNotification(context, title, message, remaining, playSound, notificationId);
+                    return;
+                }
             }
 
-            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): firing id={notificationId}, nowUtc={DateTimeOffset.UtcNow:O}");
+            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): firing id={notificationId}, nowUtc={nowUtc:O}");
             PostAndroidNotification(context, title, message, playSound, notificationId);
         }
     }
