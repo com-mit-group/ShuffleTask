@@ -357,8 +357,7 @@ public partial class NotificationService
                     out DateTimeOffset activeExpiresAt)
                 && !expired
                 && remaining > TimeSpan.Zero
-                && string.Equals(activeTaskId, alignedTimerTaskId, StringComparison.Ordinal)
-                && activeExpiresAt.Equals(alignedTimerExpiresAt))
+                && string.Equals(activeTaskId, alignedTimerTaskId, StringComparison.Ordinal))
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"NotificationService(Android): receive id={notificationId} before timer completion, remaining={remaining.TotalMilliseconds:F0}ms, expiresAtUtc={activeExpiresAt:O}; rescheduling.");
