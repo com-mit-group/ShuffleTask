@@ -31,6 +31,7 @@ public partial class NotificationService
     private const string SilentChannelName = "ShuffleTask silent reminders";
     private const string ChannelDescription = "Task reminders and timer alerts.";
     private const int NotificationPermissionRequestCode = 0x42;
+    private const int TimerAlignmentToleranceSeconds = 5;
 
     private static int _nextAndroidNotificationId = 2000;
     private static readonly ConcurrentDictionary<int, byte> ScheduledNotificationIds = new();
@@ -358,7 +359,9 @@ public partial class NotificationService
                 && !expired
                 && remaining > TimeSpan.Zero
                 && string.Equals(activeTaskId, alignedTimerTaskId, StringComparison.Ordinal)
-                && activeExpiresAt.Equals(alignedTimerExpiresAt))
+                // Persisted expiry can drift by a few seconds as the UI updates timer state once per tick.
+                // Keep early-fire protection active when both expirations are still effectively the same timer.
+                && Math.Abs((activeExpiresAt - alignedTimerExpiresAt).TotalSeconds) <= TimerAlignmentToleranceSeconds)
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"NotificationService(Android): receive id={notificationId} before timer completion, remaining={remaining.TotalMilliseconds:F0}ms, expiresAtUtc={activeExpiresAt:O}; rescheduling.");
