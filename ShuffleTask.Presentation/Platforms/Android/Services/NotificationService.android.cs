@@ -128,6 +128,8 @@ public partial class NotificationService
             return;
         }
 
+        DateTimeOffset scheduledFireAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+
         var intent = new Intent(context, typeof(ReminderBroadcastReceiver))
             .SetAction(AndroidNotificationAction)
             .PutExtra(AndroidNotificationExtraTitle, title)
