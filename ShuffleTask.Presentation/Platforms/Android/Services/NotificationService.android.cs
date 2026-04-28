@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Threading;
 using Android.App;
 using Android.Content;
@@ -9,6 +10,7 @@ using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Microsoft.Maui.ApplicationModel;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.Presentation.Services;
 
@@ -19,6 +21,9 @@ public partial class NotificationService
     private const string AndroidNotificationExtraMessage = "ShuffleTask.Notification.TimeUpMessage";
     private const string AndroidNotificationExtraSound = "ShuffleTask.Notification.Sound";
     private const string AndroidNotificationExtraId = "ShuffleTask.Notification.Id";
+    private const string AndroidNotificationExtraAlignWithActiveTimer = "ShuffleTask.Notification.AlignWithActiveTimer";
+    private const string AndroidNotificationExtraAlignedTimerTaskId = "ShuffleTask.Notification.AlignedTimerTaskId";
+    private const string AndroidNotificationExtraAlignedTimerExpiresAtUtc = "ShuffleTask.Notification.AlignedTimerExpiresAtUtc";
 
     private const string SoundChannelId = "shuffletask.reminders.sound";
     private const string SilentChannelId = "shuffletask.reminders.silent";
@@ -26,6 +31,7 @@ public partial class NotificationService
     private const string SilentChannelName = "ShuffleTask silent reminders";
     private const string ChannelDescription = "Task reminders and timer alerts.";
     private const int NotificationPermissionRequestCode = 0x42;
+    private const int TimerAlignmentToleranceSeconds = 5;
 
     private static int _nextAndroidNotificationId = 2000;
     private static readonly ConcurrentDictionary<int, byte> ScheduledNotificationIds = new();
@@ -115,7 +121,16 @@ public partial class NotificationService
         NotificationManagerCompat.From(context).Notify(notificationId, builder.Build());
     }
 
-    private static void ScheduleAndroidNotification(Context context, string title, string message, TimeSpan delay, bool playSound, int notificationId)
+    private static void ScheduleAndroidNotification(
+        Context context,
+        string title,
+        string message,
+        TimeSpan delay,
+        bool playSound,
+        int notificationId,
+        bool alignWithActiveTimer,
+        string alignedTimerTaskId,
+        string alignedTimerExpiresAtUtc)
     {
         EnsureChannels(context);
 
@@ -131,7 +146,10 @@ public partial class NotificationService
             .PutExtra(AndroidNotificationExtraTitle, title)
             .PutExtra(AndroidNotificationExtraMessage, message)
             .PutExtra(AndroidNotificationExtraSound, playSound)
-            .PutExtra(AndroidNotificationExtraId, notificationId);
+            .PutExtra(AndroidNotificationExtraId, notificationId)
+            .PutExtra(AndroidNotificationExtraAlignWithActiveTimer, alignWithActiveTimer)
+            .PutExtra(AndroidNotificationExtraAlignedTimerTaskId, alignedTimerTaskId)
+            .PutExtra(AndroidNotificationExtraAlignedTimerExpiresAtUtc, alignedTimerExpiresAtUtc);
 
         var flags = PendingIntentFlags.UpdateCurrent;
         if (OperatingSystem.IsAndroidVersionAtLeast(23))
@@ -156,6 +174,8 @@ public partial class NotificationService
         if (context.GetSystemService(Context.AlarmService) is AlarmManager)
         {
             long triggerAt = SystemClock.ElapsedRealtime() + delayMs;
+            DateTimeOffset scheduledFireAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): schedule id={notificationId}, delayMs={delayMs}, scheduledFireAtUtc={scheduledFireAtUtc:O}");
             ScheduleExactAlarm(context, AlarmType.ElapsedRealtimeWakeup, pendingIntent, triggerAt);
         }
         else
@@ -253,6 +273,22 @@ public partial class NotificationService
             var context = Android.App.Application.Context;
             int notificationId = GetNextAndroidNotificationId();
             ScheduledNotificationIds[notificationId] = 0;
+            bool alignWithActiveTimer = false;
+            string alignedTimerTaskId = string.Empty;
+            string alignedTimerExpiresAtUtc = string.Empty;
+
+            if (delay > TimeSpan.Zero
+                && PersistedTimerState.TryGetActiveTimer(out string taskId, out TimeSpan remaining, out bool expired, out _, out DateTimeOffset expiresAt)
+                && !expired
+                && remaining > TimeSpan.Zero)
+            {
+                alignWithActiveTimer = Math.Abs((remaining - delay).TotalSeconds) <= 1;
+                if (alignWithActiveTimer)
+                {
+                    alignedTimerTaskId = taskId;
+                    alignedTimerExpiresAtUtc = expiresAt.ToString("O", CultureInfo.InvariantCulture);
+                }
+            }
 
             if (delay <= TimeSpan.Zero)
             {
@@ -260,7 +296,16 @@ public partial class NotificationService
             }
             else
             {
-                ScheduleAndroidNotification(context, title, message, delay, playSound, notificationId);
+                ScheduleAndroidNotification(
+                    context,
+                    title,
+                    message,
+                    delay,
+                    playSound,
+                    notificationId,
+                    alignWithActiveTimer,
+                    alignedTimerTaskId,
+                    alignedTimerExpiresAtUtc);
             }
 
             return Task.CompletedTask;
@@ -294,7 +339,46 @@ public partial class NotificationService
             string message = intent.GetStringExtra(AndroidNotificationExtraMessage) ?? string.Empty;
             bool playSound = intent.GetBooleanExtra(AndroidNotificationExtraSound, true);
             int notificationId = intent.GetIntExtra(AndroidNotificationExtraId, GetNextAndroidNotificationId());
+            bool alignWithActiveTimer = intent.GetBooleanExtra(AndroidNotificationExtraAlignWithActiveTimer, false);
+            string alignedTimerTaskId = intent.GetStringExtra(AndroidNotificationExtraAlignedTimerTaskId) ?? string.Empty;
+            string alignedTimerExpiresAtUtc = intent.GetStringExtra(AndroidNotificationExtraAlignedTimerExpiresAtUtc) ?? string.Empty;
 
+            if (alignWithActiveTimer
+                && !string.IsNullOrWhiteSpace(alignedTimerTaskId)
+                && DateTimeOffset.TryParse(
+                    alignedTimerExpiresAtUtc,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out DateTimeOffset alignedTimerExpiresAt)
+                && PersistedTimerState.TryGetActiveTimer(
+                    out string activeTaskId,
+                    out TimeSpan remaining,
+                    out bool expired,
+                    out _,
+                    out DateTimeOffset activeExpiresAt)
+                && !expired
+                && remaining > TimeSpan.Zero
+                && string.Equals(activeTaskId, alignedTimerTaskId, StringComparison.Ordinal)
+                // Persisted expiry can drift by a few seconds as the UI updates timer state once per tick.
+                // Keep early-fire protection active when both expirations are still effectively the same timer.
+                && Math.Abs((activeExpiresAt - alignedTimerExpiresAt).TotalSeconds) <= TimerAlignmentToleranceSeconds)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"NotificationService(Android): receive id={notificationId} before timer completion, remaining={remaining.TotalMilliseconds:F0}ms, expiresAtUtc={activeExpiresAt:O}; rescheduling.");
+                ScheduleAndroidNotification(
+                    context,
+                    title,
+                    message,
+                    remaining,
+                    playSound,
+                    notificationId,
+                    alignWithActiveTimer: true,
+                    alignedTimerTaskId,
+                    alignedTimerExpiresAtUtc);
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"NotificationService(Android): firing id={notificationId}, nowUtc={DateTimeOffset.UtcNow:O}");
             PostAndroidNotification(context, title, message, playSound, notificationId);
         }
     }
