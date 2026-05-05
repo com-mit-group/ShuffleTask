@@ -169,7 +169,7 @@
                     <controls:NumericStepper Grid.Row="2"
                                              Grid.Column="1"
                                              Minimum="0"
-                                             Maximum="24"
+                                             Maximum="288"
                                              Increment="1"
                                              Value="{Binding Settings.MaxDailyShuffles}"
                                              HorizontalOptions="Start" />

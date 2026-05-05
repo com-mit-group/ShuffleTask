@@ -771,7 +771,8 @@ public class StorageService : IStorageService
         settings.MinGapMinutes = Math.Clamp(settings.MinGapMinutes, 1, 24 * 60);
         settings.MaxGapMinutes = Math.Max(settings.MinGapMinutes, settings.MaxGapMinutes);
         settings.ReminderMinutes = Math.Clamp(settings.ReminderMinutes, 1, 6 * 60);
-        settings.MaxDailyShuffles = Math.Clamp(settings.MaxDailyShuffles, 1, 24);
+        int maxDailyShufflesUpperBound = (24 * 60) / settings.MinGapMinutes;
+        settings.MaxDailyShuffles = Math.Clamp(settings.MaxDailyShuffles, 0, maxDailyShufflesUpperBound);
         settings.FocusMinutes = Math.Clamp(settings.FocusMinutes, 5, 120);
         settings.BreakMinutes = Math.Clamp(settings.BreakMinutes, 1, 60);
         settings.PomodoroCycles = Math.Clamp(settings.PomodoroCycles, 1, 8);
