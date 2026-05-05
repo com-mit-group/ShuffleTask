@@ -528,10 +528,13 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             {
                 try
                 {
-                    int migrated = await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+                    string deviceId = string.IsNullOrWhiteSpace(Settings.Network.DeviceId)
+                        ? _networkSync.DeviceId
+                        : Settings.Network.DeviceId;
+                    int migrated = await _storage.MigrateDeviceTasksToUserAsync(deviceId, Settings.Network.UserId);
                     if (migrated <= 0)
                     {
-                        _logger?.LogWarning("No device tasks migrated for device '{DeviceId}' and user '{UserId}'.", Settings.Network.DeviceId, Settings.Network.UserId);
+                        _logger?.LogWarning("No device tasks migrated for device '{DeviceId}' and user '{UserId}'.", deviceId, Settings.Network.UserId);
                         await ShowMigrationResultAsync(success: false);
                     }
                     else
