@@ -475,6 +475,18 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "Yes", "No") ?? Task.FromResult(false));
     }
 
+    private static Task ShowMigrationResultAsync(bool success)
+    {
+        string title = success ? "Tasks synced" : "Task sync failed";
+        string message = success
+            ? "Device tasks are now attached to your account."
+            : "Could not move device tasks to your account. Please try again.";
+
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK")
+            ?? Task.CompletedTask);
+    }
+
     private async Task<string?> GetUsernameAsync(string? username)
     {
         string? candidate = username;
@@ -514,7 +526,24 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             bool migrate = await SettingsViewModel.PromptMigrateDeviceTasksAsync();
             if (migrate)
             {
-                await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+                try
+                {
+                    int migrated = await _storage.MigrateDeviceTasksToUserAsync(Settings.Network.DeviceId, Settings.Network.UserId);
+                    if (migrated <= 0)
+                    {
+                        _logger?.LogWarning("No device tasks migrated for device '{DeviceId}' and user '{UserId}'.", Settings.Network.DeviceId, Settings.Network.UserId);
+                        await ShowMigrationResultAsync(success: false);
+                    }
+                    else
+                    {
+                        await ShowMigrationResultAsync(success: true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Failed migrating device tasks for device '{DeviceId}' and user '{UserId}'.", Settings.Network.DeviceId, Settings.Network.UserId);
+                    await ShowMigrationResultAsync(success: false);
+                }
             }
         }
 
