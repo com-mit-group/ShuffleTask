@@ -25,8 +25,8 @@ public partial class App : MauiWinUIApplication
     /// </summary>
     public App()
     {
-        var currentInstance = AppInstance.GetCurrent();
-        var mainInstance = AppInstance.FindOrRegisterForKey(MainInstanceKey);
+        var currentInstance = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent();
+        var mainInstance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey(MainInstanceKey);
 
         if (!mainInstance.IsCurrent)
         {
@@ -64,7 +64,7 @@ public partial class App : MauiWinUIApplication
         Debug.WriteLine($"App(Windows): activated via {args.Kind}.");
         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
         {
-            if (Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView is Window window)
+            if (Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView is Microsoft.UI.Xaml.Window window)
             {
                 if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
                 {
