@@ -62,7 +62,7 @@ public partial class App : MauiWinUIApplication
     private static void OnAppInstanceActivated(object? sender, AppActivationArguments args)
     {
         Debug.WriteLine($"App(Windows): activated via {args.Kind}.");
-        (Microsoft.UI.Xaml.Application.Current as Application)?.DispatcherQueue.TryEnqueue(() =>
+        (Microsoft.UI.Xaml.Application.Current as Microsoft.UI.Xaml.Application)?.DispatcherQueue.TryEnqueue(() =>
         {
             if (Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView is Window window)
             {
