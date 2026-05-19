@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Threading;
 using Newtonsoft.Json;
 using SQLite;
 using ShuffleTask.Application.Abstractions;
@@ -10,6 +13,7 @@ namespace ShuffleTask.Persistence;
 public class StorageService : IStorageService
 {
     private const string SettingsKey = "app_settings";
+    private const int CurrentSettingsSchemaVersion = 2;
     private const string IntegerSqlType = "INTEGER";
     private readonly record struct SchemaColumn(string Name, string SqlType, string DefaultSql);
 
@@ -17,6 +21,7 @@ public class StorageService : IStorageService
     private readonly string _dbPath;
     private readonly IShuffleLogger? _logger;
     private SQLiteAsyncConnection? _db;
+    private readonly SemaphoreSlim _settingsLock = new(1, 1);
 
     public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null)
     {
@@ -711,27 +716,63 @@ public class StorageService : IStorageService
     // Settings
     public async Task<AppSettings> GetSettingsAsync()
     {
-        KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(SettingsKey);
-        if (kv == null || string.IsNullOrWhiteSpace(kv.Value))
-        {
-            var defaults = new AppSettings();
-            await SetSettingsAsync(defaults); // persist defaults once
-            return defaults;
-        }
+        await _settingsLock.WaitAsync().ConfigureAwait(false);
+        var stopwatch = Stopwatch.StartNew();
+        _logger?.LogSyncEvent("PersistenceLoadStarted", "Loading settings state");
 
         try
         {
-            AppSettings? settings = JsonConvert.DeserializeObject<AppSettings>(kv.Value!);
-            return NormalizeSettings(settings ?? new AppSettings());
+            KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
+            if (kv == null || string.IsNullOrWhiteSpace(kv.Value))
+            {
+                var defaults = new AppSettings();
+                await SetSettingsInternalAsync(defaults).ConfigureAwait(false);
+                _logger?.LogSyncEvent("PersistenceRecovery", "Settings missing. Persisted defaults.");
+                return defaults;
+            }
+
+            try
+            {
+                var payload = DeserializeSettingsPayload(kv.Value!);
+                var migrated = MigrateSettingsPayload(payload);
+                var normalized = NormalizeSettings(migrated.Data ?? new AppSettings());
+
+                _logger?.LogSyncEvent("PersistenceLoadCompleted", $"schema={migrated.SchemaVersion}; durationMs={stopwatch.ElapsedMilliseconds}");
+                return normalized;
+            }
+            catch (Exception ex)
+            {
+                await QuarantineSettingsValueAsync(kv.Value!, ex.Message).ConfigureAwait(false);
+                var defaults = new AppSettings();
+                await SetSettingsInternalAsync(defaults).ConfigureAwait(false);
+                _logger?.LogSyncEvent("PersistenceRecovery", $"Corrupted settings recovered with defaults; durationMs={stopwatch.ElapsedMilliseconds}");
+                return defaults;
+            }
         }
-        catch
+        finally
         {
-            // If parsing fails, return defaults
-            return new AppSettings();
+            _settingsLock.Release();
         }
     }
 
     public async Task SetSettingsAsync(AppSettings settings)
+    {
+        await _settingsLock.WaitAsync().ConfigureAwait(false);
+        _logger?.LogSyncEvent("PersistenceSaveStarted", "Saving settings state");
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            await SetSettingsInternalAsync(settings).ConfigureAwait(false);
+            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"durationMs={stopwatch.ElapsedMilliseconds}");
+        }
+        finally
+        {
+            _settingsLock.Release();
+        }
+    }
+
+    private async Task SetSettingsInternalAsync(AppSettings settings)
     {
         settings = NormalizeSettings(settings);
         var existingSettings = await GetExistingSettingsAsync().ConfigureAwait(false);
@@ -743,23 +784,78 @@ public class StorageService : IStorageService
 
         settings.EventVersion = NormalizeVersion(settings.EventVersion, existingSettings?.EventVersion);
         settings.UpdatedAt = NormalizeUpdatedAt(settings.UpdatedAt, existingSettings?.UpdatedAt);
-        string json = JsonConvert.SerializeObject(settings);
-        // Upsert
-        KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey);
+
+        var payload = new SettingsPayload
+        {
+            SchemaVersion = CurrentSettingsSchemaVersion,
+            AppVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown",
+            LastSuccessfulSaveUtc = _clock.GetUtcNow().UtcDateTime,
+            Data = settings
+        };
+
+        string json = JsonConvert.SerializeObject(payload);
+        KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
         if (existing == null)
         {
-            var kv = new KeyValueEntity
-            {
-                Key = SettingsKey,
-                Value = json
-            };
-            await Db.InsertAsync(kv);
+            await Db.InsertAsync(new KeyValueEntity { Key = SettingsKey, Value = json }).ConfigureAwait(false);
+            return;
         }
-        else
+
+        existing.Value = json;
+        await Db.UpdateAsync(existing).ConfigureAwait(false);
+    }
+
+
+    private SettingsPayload DeserializeSettingsPayload(string json)
+    {
+        var envelope = JsonConvert.DeserializeObject<SettingsPayload>(json);
+        if (envelope?.Data != null)
         {
-            existing.Value = json;
-            await Db.UpdateAsync(existing);
+            return envelope;
         }
+
+        var legacy = JsonConvert.DeserializeObject<AppSettings>(json);
+        if (legacy == null)
+        {
+            throw new InvalidOperationException("Settings payload is invalid.");
+        }
+
+        return new SettingsPayload
+        {
+            SchemaVersion = 1,
+            AppVersion = "legacy",
+            LastSuccessfulSaveUtc = _clock.GetUtcNow().UtcDateTime,
+            Data = legacy
+        };
+    }
+
+    private SettingsPayload MigrateSettingsPayload(SettingsPayload payload)
+    {
+        if (payload.SchemaVersion > CurrentSettingsSchemaVersion)
+        {
+            throw new InvalidOperationException($"Unsupported future settings schema version: {payload.SchemaVersion}");
+        }
+
+        if (payload.SchemaVersion <= 0)
+        {
+            payload.SchemaVersion = 1;
+        }
+
+        if (payload.SchemaVersion < CurrentSettingsSchemaVersion)
+        {
+            _logger?.LogSyncEvent("PersistenceMigration", $"Migrated settings schema {payload.SchemaVersion} -> {CurrentSettingsSchemaVersion}");
+            payload.SchemaVersion = CurrentSettingsSchemaVersion;
+        }
+
+        return payload;
+    }
+
+    private async Task QuarantineSettingsValueAsync(string value, string reason)
+    {
+        string suffix = _clock.GetUtcNow().UtcDateTime.ToString("yyyyMMddHHmmss");
+        string key = $"{SettingsKey}_quarantine_{suffix}";
+        await Db.InsertOrReplaceAsync(new KeyValueEntity { Key = key, Value = value }).ConfigureAwait(false);
+        _logger?.LogSyncEvent("PersistenceQuarantine", $"Stored corrupt settings as {key}; reason={reason}");
     }
 
     private static AppSettings NormalizeSettings(AppSettings settings)
@@ -794,8 +890,9 @@ public class StorageService : IStorageService
                 return null;
             }
 
-            AppSettings? parsed = JsonConvert.DeserializeObject<AppSettings>(kv.Value);
-            return parsed is null ? null : NormalizeSettings(parsed);
+            var payload = DeserializeSettingsPayload(kv.Value);
+            var migrated = MigrateSettingsPayload(payload);
+            return migrated.Data is null ? null : NormalizeSettings(migrated.Data);
         }
         catch
         {
@@ -846,6 +943,17 @@ public class StorageService : IStorageService
         }
 
         return DateTime.UtcNow;
+    }
+
+    private sealed class SettingsPayload
+    {
+        public int SchemaVersion { get; set; }
+
+        public string AppVersion { get; set; } = string.Empty;
+
+        public DateTime LastSuccessfulSaveUtc { get; set; }
+
+        public AppSettings? Data { get; set; }
     }
 
     private sealed class KeyValueEntity

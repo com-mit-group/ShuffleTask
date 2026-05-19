@@ -1,0 +1,100 @@
+using System.Reflection;
+using Newtonsoft.Json;
+using NUnit.Framework;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Persistence;
+
+namespace ShuffleTask.Tests;
+
+[TestFixture]
+public class StorageServicePersistenceTests
+{
+    private static string CreateDbPath() => Path.Combine(Path.GetTempPath(), $"shuffletask-test-{Guid.NewGuid():N}.db3");
+
+    [Test]
+    public async Task Settings_SaveAndReload_PersistsEnvelopeAndData()
+    {
+        var dbPath = CreateDbPath();
+        try
+        {
+            var storage = new StorageService(TimeProvider.System, dbPath);
+            await storage.InitializeAsync();
+
+            await storage.SetSettingsAsync(new AppSettings
+            {
+                FocusMinutes = 42,
+                BreakMinutes = 7,
+                PomodoroCycles = 5,
+                ImportanceWeight = 33
+            });
+
+            var reloaded = new StorageService(TimeProvider.System, dbPath);
+            await reloaded.InitializeAsync();
+
+            var loaded = await reloaded.GetSettingsAsync();
+            Assert.That(loaded.FocusMinutes, Is.EqualTo(42));
+            Assert.That(loaded.BreakMinutes, Is.EqualTo(7));
+            Assert.That(loaded.PomodoroCycles, Is.EqualTo(5));
+            Assert.That(loaded.ImportanceWeight, Is.EqualTo(33));
+        }
+        finally
+        {
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task Settings_LoadsLegacyPayload_AndMigrates()
+    {
+        var dbPath = CreateDbPath();
+        try
+        {
+            var storage = new StorageService(TimeProvider.System, dbPath);
+            await storage.InitializeAsync();
+            await WriteRawSettingsValueAsync(storage, JsonConvert.SerializeObject(new AppSettings { FocusMinutes = 55 }));
+
+            var loaded = await storage.GetSettingsAsync();
+            Assert.That(loaded.FocusMinutes, Is.EqualTo(55));
+        }
+        finally
+        {
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task Settings_Corruption_RecoversToDefaults_AndQuarantines()
+    {
+        var dbPath = CreateDbPath();
+        try
+        {
+            var storage = new StorageService(TimeProvider.System, dbPath);
+            await storage.InitializeAsync();
+            await WriteRawSettingsValueAsync(storage, "{bad json");
+
+            var loaded = await storage.GetSettingsAsync();
+            Assert.That(loaded.FocusMinutes, Is.EqualTo(new AppSettings().FocusMinutes));
+
+            var hasQuarantine = await HasQuarantineAsync(storage);
+            Assert.That(hasQuarantine, Is.True);
+        }
+        finally
+        {
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    private static async Task WriteRawSettingsValueAsync(StorageService storage, string json)
+    {
+        dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
+        string escaped = json.Replace("'", "''");
+        await db.ExecuteAsync($"INSERT OR REPLACE INTO KeyValueEntity(Key, Value) VALUES ('app_settings', '{escaped}')");
+    }
+
+    private static async Task<bool> HasQuarantineAsync(StorageService storage)
+    {
+        dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
+        var rows = await db.QueryAsync<dynamic>("SELECT Key FROM KeyValueEntity WHERE Key LIKE 'app_settings_quarantine_%'");
+        return rows.Count > 0;
+    }
+}
