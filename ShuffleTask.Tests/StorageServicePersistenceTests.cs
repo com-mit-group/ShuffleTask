@@ -39,7 +39,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
@@ -58,7 +57,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
@@ -80,7 +78,37 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task Settings_FutureSchemaVersion_ReturnsDefaults_WithoutMutatingStoredValue()
+    {
+        var dbPath = CreateDbPath();
+        try
+        {
+            var storage = new StorageService(TimeProvider.System, dbPath);
+            await storage.InitializeAsync();
+            var futurePayload = JsonConvert.SerializeObject(new
+            {
+                SchemaVersion = 99,
+                AppVersion = "future",
+                LastSuccessfulSaveUtc = DateTime.UtcNow,
+                Data = new AppSettings { FocusMinutes = 88 }
+            });
+            await WriteRawSettingsValueAsync(storage, futurePayload);
+
+            var loaded = await storage.GetSettingsAsync();
+            Assert.That(loaded.FocusMinutes, Is.EqualTo(new AppSettings().FocusMinutes));
+
+            var hasQuarantine = await HasQuarantineAsync(storage);
+            Assert.That(hasQuarantine, Is.False);
+
+            var rawAfterLoad = await ReadRawSettingsValueAsync(storage);
+            Assert.That(rawAfterLoad, Is.EqualTo(futurePayload));
+        }
+        finally
+        {
         }
     }
 
@@ -96,5 +124,12 @@ public class StorageServicePersistenceTests
         dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
         var rows = await db.QueryAsync<dynamic>("SELECT Key FROM KeyValueEntity WHERE Key LIKE 'app_settings_quarantine_%'");
         return rows.Count > 0;
+    }
+
+    private static async Task<string?> ReadRawSettingsValueAsync(StorageService storage)
+    {
+        dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
+        var rows = await db.QueryAsync<dynamic>("SELECT Value FROM KeyValueEntity WHERE Key = 'app_settings'");
+        return rows.Count > 0 ? (string?)rows[0].Value : null;
     }
 }
