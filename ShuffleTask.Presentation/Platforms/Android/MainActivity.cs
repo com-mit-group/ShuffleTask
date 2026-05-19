@@ -2,7 +2,6 @@
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
-using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.Presentation.Services;
 using System.Diagnostics;
 
@@ -42,6 +41,6 @@ public class MainActivity : MauiAppCompatActivity
 
     private static void LogActivationIntent(string source, Intent? intent)
     {
-        Debug.WriteLine($"MainActivity(Android): {source}, action={intent?.Action}, flags={intent?.Flags}");
+        System.Diagnostics.Debug.WriteLine($"MainActivity(Android): {source}, action={intent?.Action}, flags={intent?.Flags}");
     }
 }
