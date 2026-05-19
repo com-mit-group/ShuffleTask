@@ -740,6 +740,11 @@ public class StorageService : IStorageService
                 _logger?.LogSyncEvent("PersistenceLoadCompleted", $"schema={migrated.SchemaVersion}; durationMs={stopwatch.ElapsedMilliseconds}");
                 return normalized;
             }
+            catch (UnsupportedSettingsSchemaException ex)
+            {
+                _logger?.LogSyncEvent("PersistenceLoadUnsupportedSchema", $"schemaVersion={ex.SchemaVersion}; returning defaults read-only; durationMs={stopwatch.ElapsedMilliseconds}");
+                return new AppSettings();
+            }
             catch (Exception ex)
             {
                 await QuarantineSettingsValueAsync(kv.Value!, ex.Message).ConfigureAwait(false);
@@ -833,7 +838,7 @@ public class StorageService : IStorageService
     {
         if (payload.SchemaVersion > CurrentSettingsSchemaVersion)
         {
-            throw new InvalidOperationException($"Unsupported future settings schema version: {payload.SchemaVersion}");
+            throw new UnsupportedSettingsSchemaException(payload.SchemaVersion);
         }
 
         if (payload.SchemaVersion <= 0)
@@ -954,6 +959,17 @@ public class StorageService : IStorageService
         public DateTime LastSuccessfulSaveUtc { get; set; }
 
         public AppSettings? Data { get; set; }
+    }
+
+    private sealed class UnsupportedSettingsSchemaException : InvalidOperationException
+    {
+        public UnsupportedSettingsSchemaException(int schemaVersion)
+            : base($"Unsupported future settings schema version: {schemaVersion}")
+        {
+            SchemaVersion = schemaVersion;
+        }
+
+        public int SchemaVersion { get; }
     }
 
     private sealed class KeyValueEntity
