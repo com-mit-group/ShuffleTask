@@ -39,7 +39,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
@@ -58,7 +57,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
@@ -80,7 +78,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
@@ -112,7 +109,6 @@ public class StorageServicePersistenceTests
         }
         finally
         {
-            if (File.Exists(dbPath)) File.Delete(dbPath);
         }
     }
 
