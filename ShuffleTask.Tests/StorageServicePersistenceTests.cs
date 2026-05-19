@@ -122,14 +122,13 @@ public class StorageServicePersistenceTests
     private static async Task<bool> HasQuarantineAsync(StorageService storage)
     {
         dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
-        var rows = await db.QueryAsync<dynamic>("SELECT Key FROM KeyValueEntity WHERE Key LIKE 'app_settings_quarantine_%'");
-        return rows.Count > 0;
+        var count = await db.ExecuteScalarAsync<int>("SELECT COUNT(1) FROM KeyValueEntity WHERE Key LIKE 'app_settings_quarantine_%'");
+        return count > 0;
     }
 
     private static async Task<string?> ReadRawSettingsValueAsync(StorageService storage)
     {
         dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
-        var rows = await db.QueryAsync<dynamic>("SELECT Value FROM KeyValueEntity WHERE Key = 'app_settings'");
-        return rows.Count > 0 ? (string?)rows[0].Value : null;
+        return await db.ExecuteScalarAsync<string?>("SELECT Value FROM KeyValueEntity WHERE Key = 'app_settings' LIMIT 1");
     }
 }
