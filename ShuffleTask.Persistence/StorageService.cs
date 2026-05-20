@@ -76,7 +76,8 @@ public class StorageService : IStorageService
             return;
         }
 
-        if (!int.TryParse(row.Value, out int stored) || stored <= 0)
+        bool needsNormalization = !int.TryParse(row.Value, out int stored) || stored <= 0;
+        if (needsNormalization)
         {
             stored = 1;
         }
@@ -91,6 +92,13 @@ public class StorageService : IStorageService
         {
             _logger?.LogSyncEvent("PersistenceMigration", $"{key} migrated {stored}->{currentVersion}");
             row.Value = currentVersion.ToString();
+            await Db.UpdateAsync(row).ConfigureAwait(false);
+            return;
+        }
+
+        if (needsNormalization)
+        {
+            row.Value = stored.ToString();
             await Db.UpdateAsync(row).ConfigureAwait(false);
         }
     }
@@ -332,24 +340,24 @@ public class StorageService : IStorageService
     public async Task UpdateTaskAsync(TaskItem item)
     {
         await _taskLock.WaitAsync().ConfigureAwait(false);
-        _logger?.LogSyncEvent("PersistenceSaveStarted", $"Updating task id={item.Id}");
-        var existing = await Db.FindAsync<TaskItemRecord>(item.Id);
-
-        if (existing != null)
-        {
-            item.CreatedAt = existing.CreatedAt;
-        }
-
-        if (item.UpdatedAt == default)
-        {
-            item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
-        }
-
-        EnsureMetadata(item, existing, bumpVersion: true);
-
-        var record = BuildTaskRecord(item);
         try
         {
+            _logger?.LogSyncEvent("PersistenceSaveStarted", $"Updating task id={item.Id}");
+            var existing = await Db.FindAsync<TaskItemRecord>(item.Id).ConfigureAwait(false);
+
+            if (existing != null)
+            {
+                item.CreatedAt = existing.CreatedAt;
+            }
+
+            if (item.UpdatedAt == default)
+            {
+                item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+            }
+
+            EnsureMetadata(item, existing, bumpVersion: true);
+
+            var record = BuildTaskRecord(item);
             await Db.RunInTransactionAsync(conn =>
             {
                 if (existing == null)
