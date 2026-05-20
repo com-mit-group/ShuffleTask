@@ -54,7 +54,7 @@ public class StorageServicePersistenceTests
         {
             Title = "persist me",
             Importance = 5,
-            CutInLineMode = CutInLineMode.Now,
+            CutInLineMode = CutInLineMode.None,
             Deadline = DateTime.UtcNow.AddDays(1)
         };
 
