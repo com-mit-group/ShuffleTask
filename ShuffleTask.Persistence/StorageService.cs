@@ -13,7 +13,11 @@ namespace ShuffleTask.Persistence;
 public class StorageService : IStorageService
 {
     private const string SettingsKey = "app_settings";
+    private const string TaskSchemaVersionKey = "schema_tasks";
+    private const string PeriodSchemaVersionKey = "schema_periods";
     private const int CurrentSettingsSchemaVersion = 2;
+    private const int CurrentTaskSchemaVersion = 1;
+    private const int CurrentPeriodSchemaVersion = 1;
     private const string IntegerSqlType = "INTEGER";
     private readonly record struct SchemaColumn(string Name, string SqlType, string DefaultSql);
 
@@ -22,6 +26,7 @@ public class StorageService : IStorageService
     private readonly IShuffleLogger? _logger;
     private SQLiteAsyncConnection? _db;
     private readonly SemaphoreSlim _settingsLock = new(1, 1);
+    private readonly SemaphoreSlim _taskLock = new(1, 1);
 
     public StorageService(TimeProvider clock, string databasePath, IShuffleLogger? logger = null)
     {
@@ -52,7 +57,50 @@ public class StorageService : IStorageService
         // Ensure schema has all columns; add columns if missing with sensible defaults.
         await EnsureTaskSchemaAsync();
         await EnsurePeriodDefinitionSchemaAsync();
+        await EnsurePersistenceMetadataAsync();
         await EnsurePresetPeriodDefinitionsAsync();
+    }
+
+    private async Task EnsurePersistenceMetadataAsync()
+    {
+        await UpsertSchemaVersionKeyAsync(TaskSchemaVersionKey, CurrentTaskSchemaVersion).ConfigureAwait(false);
+        await UpsertSchemaVersionKeyAsync(PeriodSchemaVersionKey, CurrentPeriodSchemaVersion).ConfigureAwait(false);
+    }
+
+    private async Task UpsertSchemaVersionKeyAsync(string key, int currentVersion)
+    {
+        var row = await Db.FindAsync<KeyValueEntity>(key).ConfigureAwait(false);
+        if (row == null)
+        {
+            await Db.InsertAsync(new KeyValueEntity { Key = key, Value = currentVersion.ToString() }).ConfigureAwait(false);
+            return;
+        }
+
+        bool needsNormalization = !int.TryParse(row.Value, out int stored) || stored <= 0;
+        if (needsNormalization)
+        {
+            stored = 1;
+        }
+
+        if (stored > currentVersion)
+        {
+            _logger?.LogSyncEvent("PersistenceLoadUnsupportedSchema", $"{key}={stored}; supported={currentVersion}");
+            return;
+        }
+
+        if (stored < currentVersion)
+        {
+            _logger?.LogSyncEvent("PersistenceMigration", $"{key} migrated {stored}->{currentVersion}");
+            row.Value = currentVersion.ToString();
+            await Db.UpdateAsync(row).ConfigureAwait(false);
+            return;
+        }
+
+        if (needsNormalization)
+        {
+            row.Value = stored.ToString();
+            await Db.UpdateAsync(row).ConfigureAwait(false);
+        }
     }
 
     private async Task EnsureTaskSchemaAsync()
@@ -238,6 +286,7 @@ public class StorageService : IStorageService
         var records = await query
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
+        await ValidateAndRepairTaskRecordsAsync(records).ConfigureAwait(false);
         var tasks = records.Select(r => r.ToDomain()).ToList();
         await ApplyPeriodDefinitionsAsync(tasks);
         return tasks;
@@ -250,6 +299,10 @@ public class StorageService : IStorageService
         var record = await Db.Table<TaskItemRecord>()
                              .Where(t => t.Id == id)
                              .FirstOrDefaultAsync();
+        if (record != null)
+        {
+            await ValidateAndRepairTaskRecordsAsync(new[] { record }).ConfigureAwait(false);
+        }
         var task = record?.ToDomain();
         await ApplyPeriodDefinitionAsync(task);
         return task;
@@ -257,6 +310,8 @@ public class StorageService : IStorageService
 
     public async Task AddTaskAsync(TaskItem item)
     {
+        await _taskLock.WaitAsync().ConfigureAwait(false);
+        _logger?.LogSyncEvent("PersistenceSaveStarted", "Adding task");
         if (string.IsNullOrWhiteSpace(item.Id))
         {
             item.Id = Guid.NewGuid().ToString("n");
@@ -271,39 +326,69 @@ public class StorageService : IStorageService
         EnsureMetadata(item, null, bumpVersion: true);
 
         var record = BuildTaskRecord(item);
-        await Db.InsertAsync(record);
+        try
+        {
+            await Db.RunInTransactionAsync(conn => conn.Insert(record)).ConfigureAwait(false);
+            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"Task added id={record.Id}");
+        }
+        finally
+        {
+            _taskLock.Release();
+        }
     }
 
     public async Task UpdateTaskAsync(TaskItem item)
     {
-        var existing = await Db.FindAsync<TaskItemRecord>(item.Id);
-
-        if (existing != null)
+        await _taskLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            item.CreatedAt = existing.CreatedAt;
-        }
+            _logger?.LogSyncEvent("PersistenceSaveStarted", $"Updating task id={item.Id}");
+            var existing = await Db.FindAsync<TaskItemRecord>(item.Id).ConfigureAwait(false);
 
-        if (item.UpdatedAt == default)
+            if (existing != null)
+            {
+                item.CreatedAt = existing.CreatedAt;
+            }
+
+            if (item.UpdatedAt == default)
+            {
+                item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+            }
+
+            EnsureMetadata(item, existing, bumpVersion: true);
+
+            var record = BuildTaskRecord(item);
+            await Db.RunInTransactionAsync(conn =>
+            {
+                if (existing == null)
+                {
+                    conn.Insert(record);
+                    return;
+                }
+
+                conn.Update(record);
+            }).ConfigureAwait(false);
+            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"Task updated id={item.Id}");
+        }
+        finally
         {
-            item.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+            _taskLock.Release();
         }
-
-        EnsureMetadata(item, existing, bumpVersion: true);
-
-        var record = BuildTaskRecord(item);
-        if (existing == null)
-        {
-            await Db.InsertAsync(record);
-            return;
-        }
-
-        await Db.UpdateAsync(record);
     }
 
     public async Task DeleteTaskAsync(string id)
     {
         await AutoResumeDueTasksAsync();
-        await Db.DeleteAsync<TaskItemRecord>(id);
+        await _taskLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await Db.RunInTransactionAsync(conn => conn.Delete<TaskItemRecord>(id)).ConfigureAwait(false);
+            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"Task deleted id={id}");
+        }
+        finally
+        {
+            _taskLock.Release();
+        }
     }
 
     // Period definitions CRUD
@@ -555,6 +640,53 @@ public class StorageService : IStorageService
         {
             await Db.UpdateAllAsync(toUpdate);
             _logger?.LogSyncEvent("AutoResume", $"Resumed {toUpdate.Count} task(s)");
+        }
+    }
+
+    private async Task ValidateAndRepairTaskRecordsAsync(IEnumerable<TaskItemRecord> records)
+    {
+        foreach (var record in records)
+        {
+            bool dirty = false;
+            if (string.IsNullOrWhiteSpace(record.Id))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(record.Title))
+            {
+                record.Title = "Untitled";
+                dirty = true;
+            }
+
+            if (record.Status != TaskLifecycleStatus.Active &&
+                record.Status != TaskLifecycleStatus.Snoozed &&
+                record.Status != TaskLifecycleStatus.Completed)
+            {
+                record.Status = TaskLifecycleStatus.Active;
+                record.SnoozedUntil = null;
+                record.NextEligibleAt = null;
+                dirty = true;
+            }
+
+            if (record.Status == TaskLifecycleStatus.Completed && record.CompletedAt == null)
+            {
+                record.CompletedAt = record.UpdatedAt == default ? _clock.GetUtcNow().UtcDateTime : record.UpdatedAt;
+                dirty = true;
+            }
+
+            if (record.Status == TaskLifecycleStatus.Snoozed && record.SnoozedUntil == null)
+            {
+                record.Status = TaskLifecycleStatus.Active;
+                dirty = true;
+            }
+
+            EnsureOwnership(record, null);
+            if (dirty)
+            {
+                _logger?.LogSyncEvent("PersistenceRecovery", $"Repaired invalid task id={record.Id}");
+                await Db.UpdateAsync(record).ConfigureAwait(false);
+            }
         }
     }
 
