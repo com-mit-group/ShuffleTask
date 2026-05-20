@@ -931,15 +931,18 @@ public class StorageService : IStorageService
         };
 
         string json = JsonConvert.SerializeObject(payload);
-        KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
-        if (existing == null)
+        await Db.RunInTransactionAsync(conn =>
         {
-            await Db.InsertAsync(new KeyValueEntity { Key = SettingsKey, Value = json }).ConfigureAwait(false);
-            return;
-        }
+            var existing = conn.Find<KeyValueEntity>(SettingsKey);
+            if (existing == null)
+            {
+                conn.Insert(new KeyValueEntity { Key = SettingsKey, Value = json });
+                return;
+            }
 
-        existing.Value = json;
-        await Db.UpdateAsync(existing).ConfigureAwait(false);
+            existing.Value = json;
+            conn.Update(existing);
+        }).ConfigureAwait(false);
     }
 
 
@@ -991,7 +994,10 @@ public class StorageService : IStorageService
     {
         string suffix = _clock.GetUtcNow().UtcDateTime.ToString("yyyyMMddHHmmss");
         string key = $"{SettingsKey}_quarantine_{suffix}";
-        await Db.InsertOrReplaceAsync(new KeyValueEntity { Key = key, Value = value }).ConfigureAwait(false);
+        await Db.RunInTransactionAsync(conn =>
+        {
+            conn.InsertOrReplace(new KeyValueEntity { Key = key, Value = value });
+        }).ConfigureAwait(false);
         _logger?.LogSyncEvent("PersistenceQuarantine", $"Stored corrupt settings as {key}; reason={reason}");
     }
 
