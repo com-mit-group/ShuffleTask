@@ -912,6 +912,13 @@ public class StorageService : IStorageService
     private async Task SetSettingsInternalAsync(AppSettings settings)
     {
         settings = NormalizeSettings(settings);
+
+        if (await HasFutureSettingsSchemaAsync().ConfigureAwait(false))
+        {
+            _logger?.LogSyncEvent("PersistenceSaveSkipped", "Skipped settings save because stored schema version is newer than supported.");
+            return;
+        }
+
         var existingSettings = await GetExistingSettingsAsync().ConfigureAwait(false);
 
         if (IsStale(settings, existingSettings))
@@ -931,17 +938,49 @@ public class StorageService : IStorageService
         };
 
         string json = JsonConvert.SerializeObject(payload);
-        KeyValueEntity existing = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
-        if (existing == null)
+        await Db.RunInTransactionAsync(conn =>
         {
-            await Db.InsertAsync(new KeyValueEntity { Key = SettingsKey, Value = json }).ConfigureAwait(false);
-            return;
-        }
+            var existing = conn.Find<KeyValueEntity>(SettingsKey);
+            if (existing == null)
+            {
+                conn.Insert(new KeyValueEntity { Key = SettingsKey, Value = json });
+                return;
+            }
 
-        existing.Value = json;
-        await Db.UpdateAsync(existing).ConfigureAwait(false);
+            existing.Value = json;
+            conn.Update(existing);
+        }).ConfigureAwait(false);
     }
 
+
+
+    private async Task<bool> HasFutureSettingsSchemaAsync()
+    {
+        KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
+        if (kv == null || string.IsNullOrWhiteSpace(kv.Value))
+        {
+            return false;
+        }
+
+        try
+        {
+            var payload = DeserializeSettingsPayload(kv.Value);
+            if (payload.SchemaVersion > CurrentSettingsSchemaVersion)
+            {
+                return true;
+            }
+        }
+        catch (UnsupportedSettingsSchemaException)
+        {
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
 
     private SettingsPayload DeserializeSettingsPayload(string json)
     {
@@ -991,7 +1030,10 @@ public class StorageService : IStorageService
     {
         string suffix = _clock.GetUtcNow().UtcDateTime.ToString("yyyyMMddHHmmss");
         string key = $"{SettingsKey}_quarantine_{suffix}";
-        await Db.InsertOrReplaceAsync(new KeyValueEntity { Key = key, Value = value }).ConfigureAwait(false);
+        await Db.RunInTransactionAsync(conn =>
+        {
+            conn.InsertOrReplace(new KeyValueEntity { Key = key, Value = value });
+        }).ConfigureAwait(false);
         _logger?.LogSyncEvent("PersistenceQuarantine", $"Stored corrupt settings as {key}; reason={reason}");
     }
 
