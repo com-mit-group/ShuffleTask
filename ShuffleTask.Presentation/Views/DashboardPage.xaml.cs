@@ -1,4 +1,3 @@
-using System.Globalization;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation.Utilities;
@@ -43,17 +42,23 @@ public partial class DashboardPage : ContentPage
                 out TimeSpan remaining,
                 out bool expired,
                 out int durationSeconds,
-                out _))
+                out _,
+                out PersistedTimerState.TimerDetails? persistedDetails))
         {
             DashboardViewModel.TimerRequest? timerState = null;
 
+            if (persistedDetails != null)
+            {
+                mode = (TimerMode)Math.Clamp(persistedDetails.TimerMode, 0, 1);
+            }
+
             if (mode == TimerMode.Pomodoro)
             {
-                int phaseValue = Preferences.Default.Get(PrefPomodoroPhase, 0);
-                int cycle = Math.Max(1, Preferences.Default.Get(PrefPomodoroCycle, 1));
-                int total = Math.Max(1, Preferences.Default.Get(PrefPomodoroTotal, 1));
-                int focus = Math.Max(1, Preferences.Default.Get(PrefPomodoroFocus, 15));
-                int breakMinutes = Math.Max(1, Preferences.Default.Get(PrefPomodoroBreak, 5));
+                int phaseValue = persistedDetails?.PomodoroPhase ?? Preferences.Default.Get(PrefPomodoroPhase, 0);
+                int cycle = persistedDetails?.CycleIndex ?? Math.Max(1, Preferences.Default.Get(PrefPomodoroCycle, 1));
+                int total = persistedDetails?.CycleCount ?? Math.Max(1, Preferences.Default.Get(PrefPomodoroTotal, 1));
+                int focus = persistedDetails?.FocusMinutes ?? Math.Max(1, Preferences.Default.Get(PrefPomodoroFocus, 15));
+                int breakMinutes = persistedDetails?.BreakMinutes ?? Math.Max(1, Preferences.Default.Get(PrefPomodoroBreak, 5));
 
                 var phase = (DashboardViewModel.PomodoroPhase)Math.Clamp(phaseValue, 0, 1);
                 TimeSpan duration = phase == DashboardViewModel.PomodoroPhase.Break
@@ -141,13 +146,19 @@ public partial class DashboardPage : ContentPage
             return;
         }
 
-        Preferences.Default.Set(PreferenceKeys.CurrentTaskId, taskId);
-        Preferences.Default.Set(
-            PreferenceKeys.TimerDurationSeconds,
-            Math.Max(1, (int)Math.Ceiling(_currentRequest.Duration.TotalSeconds)));
-        Preferences.Default.Set(
-            PreferenceKeys.TimerExpiresAt,
-            DateTimeOffset.UtcNow.Add(_remaining).ToString("O", CultureInfo.InvariantCulture));
+        PersistedTimerState.SaveActiveTimer(
+            taskId,
+            Math.Max(1, (int)Math.Ceiling(_currentRequest.Duration.TotalSeconds)),
+            DateTimeOffset.UtcNow.Add(_remaining),
+            new PersistedTimerState.TimerDetails(
+                (int)_currentRequest.Mode,
+                _currentRequest.Phase.HasValue
+                    ? (_currentRequest.Phase.Value == DashboardViewModel.PomodoroPhase.Break ? 1 : 0)
+                    : null,
+                _currentRequest.CycleIndex,
+                _currentRequest.CycleCount,
+                _currentRequest.FocusMinutes,
+                _currentRequest.BreakMinutes));
         Preferences.Default.Set(PrefTimerMode, (int)_currentRequest.Mode);
 
         if (_currentRequest.Mode == TimerMode.Pomodoro && _currentRequest.Phase.HasValue)

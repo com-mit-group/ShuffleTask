@@ -275,7 +275,7 @@ public partial class DashboardViewModel : ObservableObject
 
         await InitializeAsync();
         var task = await _storage.GetTaskAsync(taskId);
-        if (task == null)
+        if (task == null || task.Status == TaskLifecycleStatus.Completed || task.Status == TaskLifecycleStatus.Snoozed)
         {
             ShowDefaultState();
             return false;

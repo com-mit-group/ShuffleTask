@@ -3,6 +3,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.Views;
 
 namespace ShuffleTask;
@@ -13,8 +14,9 @@ public partial class App : Microsoft.Maui.Controls.Application
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
+    private readonly IShuffleLogger? _logger;
 
-    public App(MainPage mainPage, IStorageService storage, ShuffleCoordinatorService coordinator, TimeProvider clock, AppSettings settings)
+    public App(MainPage mainPage, IStorageService storage, ShuffleCoordinatorService coordinator, TimeProvider clock, AppSettings settings, IShuffleLogger? logger = null)
     {
         InitializeComponent();
         MainPage = mainPage;
@@ -22,6 +24,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         _coordinator = coordinator;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger;
         RequestedThemeChanged += (_, __) => { };
     }
 
@@ -29,6 +32,7 @@ public partial class App : Microsoft.Maui.Controls.Application
     {
         base.OnStart();
         await EnsureSeedDataAsync();
+        await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
         if (!_settings.BackgroundActivityEnabled)
         {
             return;
@@ -45,6 +49,7 @@ public partial class App : Microsoft.Maui.Controls.Application
             return;
         }
 
+        await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
         await _coordinator.ResumeAsync();
     }
 
@@ -94,12 +99,8 @@ public partial class App : Microsoft.Maui.Controls.Application
         _settings.Touch(_clock);
         await _storage.SetSettingsAsync(_settings);
 
-        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
-        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
-        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
-        Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
-        Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
-        Preferences.Default.Remove(PreferenceKeys.ShuffleCount);
-        Preferences.Default.Remove(PreferenceKeys.ShuffleCountDate);
+        PersistedTimerState.Clear(_logger);
+        PersistedSchedulerState.ClearPendingShuffle(_logger);
+        PersistedSchedulerState.SaveDailyCount(new DateTimeOffset(nowUtc.Date, TimeSpan.Zero), 0, _logger);
     }
 }

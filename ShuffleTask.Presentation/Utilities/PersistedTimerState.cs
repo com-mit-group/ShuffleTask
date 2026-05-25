@@ -1,24 +1,56 @@
 using Microsoft.Maui.Storage;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Domain.Entities;
 using System.Globalization;
+using System.Text.Json;
 
 namespace ShuffleTask.Presentation.Utilities;
 
 internal static class PersistedTimerState
 {
-    private const string TimerEnvelopeKey = "pref.timerEnvelope";
+    internal const string TimerEnvelopeKey = "pref.timerEnvelope";
+    internal const string TimerQuarantinePrefix = "pref.timerEnvelope.quarantine.";
     private const int CurrentSchemaVersion = 1;
+
+#if TEST
+    internal static Action<string>? FaultInjector { get; set; }
+#endif
+
     public static bool TryGetActiveTimer(
         out string taskId,
         out TimeSpan remaining,
         out bool expired,
         out int durationSeconds,
-        out DateTimeOffset expiresAt)
+        out DateTimeOffset expiresAt,
+        IShuffleLogger? logger = null)
+        => TryGetActiveTimer(
+            out taskId,
+            out remaining,
+            out expired,
+            out durationSeconds,
+            out expiresAt,
+            out _,
+            logger);
+
+    public static bool TryGetActiveTimer(
+        out string taskId,
+        out TimeSpan remaining,
+        out bool expired,
+        out int durationSeconds,
+        out DateTimeOffset expiresAt,
+        out TimerDetails? details,
+        IShuffleLogger? logger = null)
     {
-        if (TryReadEnvelope(out TimerEnvelope? envelope))
+        details = null;
+        var started = DateTimeOffset.UtcNow;
+        logger?.LogSyncEvent("PersistenceLoadStarted", "domain=timer; operation=get-active");
+
+        if (TryReadEnvelope(out TimerEnvelope? envelope, logger))
         {
-            taskId = envelope.TaskId;
-            durationSeconds = envelope.DurationSeconds;
-            expiresAt = envelope.ExpiresAt;
+            var activeEnvelope = envelope!;
+            taskId = activeEnvelope.TaskId;
+            durationSeconds = activeEnvelope.DurationSeconds;
+            expiresAt = activeEnvelope.ExpiresAt;
             remaining = expiresAt - DateTimeOffset.UtcNow;
             expired = remaining <= TimeSpan.Zero;
             if (expired) remaining = TimeSpan.Zero;
@@ -27,6 +59,8 @@ internal static class PersistedTimerState
                 durationSeconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
             }
 
+            details = activeEnvelope.ToDetails();
+            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=canonical; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return !string.IsNullOrWhiteSpace(taskId);
         }
 
@@ -40,12 +74,15 @@ internal static class PersistedTimerState
 
         if (string.IsNullOrEmpty(taskId))
         {
+            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=empty; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return false;
         }
 
         string expiresIso = Preferences.Default.Get(PreferenceKeys.TimerExpiresAt, string.Empty);
         if (!TryGetExpiration(expiresIso, out expiresAt))
         {
+            QuarantineLegacyTimerState("invalid-legacy-expiration", logger);
+            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=invalid-legacy; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return false;
         }
 
@@ -61,6 +98,7 @@ internal static class PersistedTimerState
             durationSeconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
         }
 
+        logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=legacy; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
         return true;
     }
 
@@ -81,12 +119,19 @@ internal static class PersistedTimerState
     }
 
 
-    public static void SaveActiveTimer(string taskId, int durationSeconds, DateTimeOffset expiresAt)
+    public static void SaveActiveTimer(
+        string taskId,
+        int durationSeconds,
+        DateTimeOffset expiresAt,
+        TimerDetails? details = null,
+        IShuffleLogger? logger = null)
     {
+        var started = DateTimeOffset.UtcNow;
+        logger?.LogSyncEvent("PersistenceSaveStarted", "domain=timer; operation=save-active");
         var normalizedTaskId = taskId?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(normalizedTaskId) || durationSeconds <= 0)
         {
-            Clear();
+            Clear(logger);
             return;
         }
 
@@ -96,17 +141,67 @@ internal static class PersistedTimerState
             TaskId = normalizedTaskId,
             DurationSeconds = durationSeconds,
             ExpiresAt = expiresAt,
-            SavedAtUtc = DateTimeOffset.UtcNow
+            SavedAtUtc = DateTimeOffset.UtcNow,
+            TimerMode = details?.TimerMode,
+            PomodoroPhase = details?.PomodoroPhase,
+            CycleIndex = details?.CycleIndex,
+            CycleCount = details?.CycleCount,
+            FocusMinutes = details?.FocusMinutes,
+            BreakMinutes = details?.BreakMinutes
         };
 
-        string json = System.Text.Json.JsonSerializer.Serialize(envelope);
+        string json = JsonSerializer.Serialize(envelope);
         Preferences.Default.Set(TimerEnvelopeKey, json);
+#if TEST
+        FaultInjector?.Invoke("timer.after-canonical-write");
+#endif
         Preferences.Default.Set(PreferenceKeys.CurrentTaskId, normalizedTaskId);
         Preferences.Default.Set(PreferenceKeys.TimerDurationSeconds, durationSeconds);
         Preferences.Default.Set(PreferenceKeys.TimerExpiresAt, expiresAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=timer; operation=save-active; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
     }
 
-    private static bool TryReadEnvelope(out TimerEnvelope? envelope)
+    public static async Task<bool> RecoverAgainstStorageAsync(IStorageService storage, IShuffleLogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+
+        if (!TryGetActiveTimer(
+                out string taskId,
+                out _,
+                out _,
+                out _,
+                out _,
+                logger))
+        {
+            return true;
+        }
+
+        TaskItem? task = await storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (task == null)
+        {
+            QuarantineActiveTimer("missing-task", logger);
+            Clear(logger);
+            return false;
+        }
+
+        if (task.Status == TaskLifecycleStatus.Completed)
+        {
+            QuarantineActiveTimer("completed-task", logger);
+            Clear(logger);
+            return false;
+        }
+
+        if (task.Status == TaskLifecycleStatus.Snoozed)
+        {
+            QuarantineActiveTimer("snoozed-task", logger);
+            Clear(logger);
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryReadEnvelope(out TimerEnvelope? envelope, IShuffleLogger? logger)
     {
         envelope = null;
         string json = Preferences.Default.Get(TimerEnvelopeKey, string.Empty);
@@ -117,28 +212,96 @@ internal static class PersistedTimerState
 
         try
         {
-            var candidate = System.Text.Json.JsonSerializer.Deserialize<TimerEnvelope>(json);
-            if (candidate == null || candidate.SchemaVersion > CurrentSchemaVersion || string.IsNullOrWhiteSpace(candidate.TaskId))
+            var candidate = JsonSerializer.Deserialize<TimerEnvelope>(json);
+            if (candidate == null || string.IsNullOrWhiteSpace(candidate.TaskId))
             {
+                QuarantineTimerEnvelope(json, "invalid-envelope", logger);
+                return false;
+            }
+
+            if (candidate.SchemaVersion > CurrentSchemaVersion)
+            {
+                logger?.LogSyncEvent("PersistenceLoadUnsupportedSchema", $"domain=timer; schemaVersion={candidate.SchemaVersion}");
+                return false;
+            }
+
+            if (candidate.DurationSeconds <= 0 || candidate.ExpiresAt == default)
+            {
+                QuarantineTimerEnvelope(json, "invalid-envelope-values", logger);
                 return false;
             }
 
             envelope = candidate;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            QuarantineTimerEnvelope(json, "corrupt-envelope", logger, ex);
             return false;
         }
     }
 
-    public static void Clear()
+    public static void Clear(IShuffleLogger? logger = null)
     {
+        logger?.LogSyncEvent("PersistenceSaveStarted", "domain=timer; operation=clear");
         Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
         Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
         Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
         Preferences.Default.Remove(TimerEnvelopeKey);
+        logger?.LogSyncEvent("PersistenceSaveCompleted", "domain=timer; operation=clear");
     }
+
+    private static void QuarantineActiveTimer(string reason, IShuffleLogger? logger)
+    {
+        string json = Preferences.Default.Get(TimerEnvelopeKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            QuarantineTimerEnvelope(json, reason, logger);
+            return;
+        }
+
+        QuarantineLegacyTimerState(reason, logger);
+    }
+
+    private static void QuarantineTimerEnvelope(string json, string reason, IShuffleLogger? logger, Exception? exception = null)
+    {
+        string key = TimerQuarantinePrefix + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfffffff", CultureInfo.InvariantCulture);
+        Preferences.Default.Set(key, json);
+        Preferences.Default.Remove(TimerEnvelopeKey);
+        logger?.LogSyncEvent("PersistenceQuarantine", $"domain=timer; reason={reason}; artifact={key}", exception);
+    }
+
+    private static void QuarantineLegacyTimerState(string reason, IShuffleLogger? logger)
+    {
+        string taskId = Preferences.Default.Get(PreferenceKeys.CurrentTaskId, string.Empty);
+        string expiresAt = Preferences.Default.Get(PreferenceKeys.TimerExpiresAt, string.Empty);
+        int durationSeconds = Preferences.Default.Get(PreferenceKeys.TimerDurationSeconds, -1);
+        if (string.IsNullOrEmpty(taskId) && string.IsNullOrEmpty(expiresAt) && durationSeconds <= 0)
+        {
+            return;
+        }
+
+        var legacy = new
+        {
+            TaskId = taskId,
+            ExpiresAt = expiresAt,
+            DurationSeconds = durationSeconds
+        };
+        string key = TimerQuarantinePrefix + "legacy." + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfffffff", CultureInfo.InvariantCulture);
+        Preferences.Default.Set(key, JsonSerializer.Serialize(legacy));
+        Preferences.Default.Remove(PreferenceKeys.CurrentTaskId);
+        Preferences.Default.Remove(PreferenceKeys.TimerDurationSeconds);
+        Preferences.Default.Remove(PreferenceKeys.TimerExpiresAt);
+        logger?.LogSyncEvent("PersistenceQuarantine", $"domain=timer; reason={reason}; artifact={key}");
+    }
+
+    public sealed record TimerDetails(
+        int TimerMode,
+        int? PomodoroPhase,
+        int CycleIndex,
+        int CycleCount,
+        int FocusMinutes,
+        int BreakMinutes);
 
     private sealed class TimerEnvelope
     {
@@ -147,5 +310,27 @@ internal static class PersistedTimerState
         public int DurationSeconds { get; set; }
         public DateTimeOffset ExpiresAt { get; set; }
         public DateTimeOffset SavedAtUtc { get; set; }
+        public int? TimerMode { get; set; }
+        public int? PomodoroPhase { get; set; }
+        public int? CycleIndex { get; set; }
+        public int? CycleCount { get; set; }
+        public int? FocusMinutes { get; set; }
+        public int? BreakMinutes { get; set; }
+
+        public TimerDetails? ToDetails()
+        {
+            if (!TimerMode.HasValue)
+            {
+                return null;
+            }
+
+            return new TimerDetails(
+                TimerMode.Value,
+                PomodoroPhase,
+                Math.Max(1, CycleIndex ?? 1),
+                Math.Max(1, CycleCount ?? 1),
+                Math.Max(1, FocusMinutes ?? 15),
+                Math.Max(1, BreakMinutes ?? 5));
+        }
     }
 }
