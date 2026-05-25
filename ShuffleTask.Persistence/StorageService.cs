@@ -912,6 +912,13 @@ public class StorageService : IStorageService
     private async Task SetSettingsInternalAsync(AppSettings settings)
     {
         settings = NormalizeSettings(settings);
+
+        if (await HasFutureSettingsSchemaAsync().ConfigureAwait(false))
+        {
+            _logger?.LogSyncEvent("PersistenceSaveSkipped", "Skipped settings save because stored schema version is newer than supported.");
+            return;
+        }
+
         var existingSettings = await GetExistingSettingsAsync().ConfigureAwait(false);
 
         if (IsStale(settings, existingSettings))
@@ -945,6 +952,35 @@ public class StorageService : IStorageService
         }).ConfigureAwait(false);
     }
 
+
+
+    private async Task<bool> HasFutureSettingsSchemaAsync()
+    {
+        KeyValueEntity kv = await Db.FindAsync<KeyValueEntity>(SettingsKey).ConfigureAwait(false);
+        if (kv == null || string.IsNullOrWhiteSpace(kv.Value))
+        {
+            return false;
+        }
+
+        try
+        {
+            var payload = DeserializeSettingsPayload(kv.Value);
+            if (payload.SchemaVersion > CurrentSettingsSchemaVersion)
+            {
+                return true;
+            }
+        }
+        catch (UnsupportedSettingsSchemaException)
+        {
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
 
     private SettingsPayload DeserializeSettingsPayload(string json)
     {
