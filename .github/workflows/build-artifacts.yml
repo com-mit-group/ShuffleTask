@@ -105,7 +105,7 @@ jobs:
         id: setup-dotnet
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Restore cached .NET workloads
         if: steps.check-artifacts.outputs.exists == 'false'
@@ -169,6 +169,17 @@ jobs:
             ${{ env.ANDROID_SDK_ROOT }}
             C:\\Users\\runneradmin\\.android
           key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
+
+      - name: Ensure GitHub NuGet Source
+        shell: pwsh
+        env:
+          NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
+        run: |
+          dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
+            -n github `
+            -u Yaron-E92 `
+            -p $env:NUGET_TOKEN `
+            --store-password-in-clear-text
 
       - name: Restore dependencies
         if: steps.check-artifacts.outputs.exists == 'false'
