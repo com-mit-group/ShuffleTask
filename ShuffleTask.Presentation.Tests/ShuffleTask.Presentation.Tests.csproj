@@ -14,6 +14,7 @@
     <Compile Include="../ShuffleTask.Presentation/Services/ShuffleCoordinatorService.cs" Link="Services/ShuffleCoordinatorService.cs" />
     <Compile Include="../ShuffleTask.Presentation/Services/IPersistentBackgroundService.cs" Link="Services/IPersistentBackgroundService.cs" />
     <Compile Include="../ShuffleTask.Presentation/Utilities/PersistedTimerState.cs" Link="Utilities/PersistedTimerState.cs" />
+    <Compile Include="../ShuffleTask.Presentation/Utilities/PersistedSchedulerState.cs" Link="Utilities/PersistedSchedulerState.cs" />
     <Compile Include="../ShuffleTask.Presentation/Utilities/TaskTimerSettings.cs" Link="Utilities/TaskTimerSettings.cs" />
     <Compile Include="../ShuffleTask.Presentation/PreferenceKeys.cs" Link="PreferenceKeys.cs" />
   </ItemGroup>

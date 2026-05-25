@@ -1,0 +1,992 @@
+{
+  "version": "prototype3",
+  "type": "architecture+roadmap",
+  "timestamp": "2026-02-02T00:00:00.000Z",
+  "changeTracking": {},
+  "kiMarkedNodes": [],
+  "nodes": [
+    {
+      "id": "legend",
+      "title": "📋 Legend - Color Coding",
+      "subtitle": "How to read this board",
+      "x": 50,
+      "y": 50,
+      "descriptions": [
+        {
+          "id": "legend-arch",
+          "title": "Architecture layers",
+          "text": "Nodes with outlineColorKey=primary represent core architecture layers (Presentation, Application, Domain, Persistence).",
+          "tag": "legend",
+          "weight": 5
+        },
+        {
+          "id": "legend-services",
+          "title": "Key services & flows",
+          "text": "Nodes with outlineColorKey=info represent key services and cross-layer flows (SchedulerService, StorageService, ShuffleCoordinatorService, NotificationService, Network/Sync, flows).",
+          "tag": "legend",
+          "weight": 5
+        },
+        {
+          "id": "legend-roadmap",
+          "title": "Roadmap items",
+          "text": "Nodes with outlineColorKey=warning represent roadmap clusters grouped by feature area. Individual GitHub issues are listed as descriptions with weights (1–10).",
+          "tag": "legend",
+          "weight": 5
+        },
+        {
+          "id": "legend-priority",
+          "title": "Priority weights",
+          "text": "description.weight uses 1–10 where 10 is highest priority. Issue #72 is currently in progress (weight=10). Issue #68 is postponed (low weight).",
+          "tag": "legend",
+          "weight": 6
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "layer-presentation",
+      "title": "Presentation Layer",
+      "subtitle": "MAUI UI, Views, ViewModels, Presentation services",
+      "x": 300,
+      "y": 80,
+      "descriptions": [
+        {
+          "id": "desc-layer-presentation",
+          "title": "UI + UX surface",
+          "text": "MAUI views, pages, and view models (Tasks, Settings, Dashboard) plus ShuffleCoordinatorService and NotificationService orchestration running in the app shell.",
+          "tag": "architecture",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "primary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "layer-application",
+      "title": "Application Layer",
+      "subtitle": "Scheduling, scoring, coordination, sync abstractions",
+      "x": 550,
+      "y": 80,
+      "descriptions": [
+        {
+          "id": "desc-layer-application",
+          "title": "Use-case orchestration",
+          "text": "SchedulerService, ImportanceUrgencyCalculator, sync coordinators, and application-level services implement the task selection, lifecycle orchestration, and cross-device sync.",
+          "tag": "architecture",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "primary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "layer-domain",
+      "title": "Domain Layer",
+      "subtitle": "Task entities, enums, allowed period logic",
+      "x": 800,
+      "y": 80,
+      "descriptions": [
+        {
+          "id": "desc-layer-domain",
+          "title": "Core domain model",
+          "text": "TaskItem, TaskItemData, enums (TaskLifecycleStatus, RepeatType, AllowedPeriod, Weekdays) and helpers encapsulate task lifecycle and allowed time windows.",
+          "tag": "architecture",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "primary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "layer-persistence",
+      "title": "Persistence Layer",
+      "subtitle": "StorageService, SQLite, records",
+      "x": 1050,
+      "y": 80,
+      "descriptions": [
+        {
+          "id": "desc-layer-persistence",
+          "title": "Local data store",
+          "text": "StorageService and record types (TaskItemRecord, PeriodDefinitionRecord) manage durable storage in SQLite and settings persistence.",
+          "tag": "architecture",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "primary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "svc-shuffle-coordinator",
+      "title": "ShuffleCoordinatorService",
+      "subtitle": "Presentation service: timers & shuffle flow",
+      "x": 300,
+      "y": 250,
+      "descriptions": [
+        {
+          "id": "desc-svc-shuffle-coordinator",
+          "title": "Timer + notification orchestration",
+          "text": "Coordinates the per-task timer, triggers SchedulerService to pick the next task, and invokes NotificationService when timers elapse.",
+          "tag": "service",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "svc-notification",
+      "title": "NotificationService",
+      "subtitle": "Platform notifications & fallbacks",
+      "x": 300,
+      "y": 380,
+      "descriptions": [
+        {
+          "id": "desc-svc-notification",
+          "title": "Cross-platform notifications",
+          "text": "Sends platform-native notifications on Android/iOS/macOS/Windows and falls back to in-app alerts; impacted by issues about tap behavior and multiple app instances.",
+          "tag": "service",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "svc-scheduler",
+      "title": "SchedulerService",
+      "subtitle": "Task selection & shuffle",
+      "x": 550,
+      "y": 250,
+      "descriptions": [
+        {
+          "id": "desc-svc-scheduler",
+          "title": "Auto + manual shuffle",
+          "text": "Filters tasks by lifecycle, allowed periods, and flags; scores via ImportanceUrgencyCalculator; selects next task for timers and notifications.",
+          "tag": "service",
+          "weight": 9
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "svc-scoring",
+      "title": "ImportanceUrgencyCalculator",
+      "subtitle": "Scoring formula",
+      "x": 550,
+      "y": 380,
+      "descriptions": [
+        {
+          "id": "desc-svc-scoring",
+          "title": "Task score computation",
+          "text": "Combines importance, urgency (deadlines and repeats), and size multiplier into a final task score, tunable via Settings → Weighting.",
+          "tag": "service",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "svc-storage",
+      "title": "StorageService",
+      "subtitle": "SQLite & state transitions",
+      "x": 800,
+      "y": 250,
+      "descriptions": [
+        {
+          "id": "desc-svc-storage",
+          "title": "Durable task state",
+          "text": "Persists tasks, period definitions, settings, and handles transactional state updates (including auto-resume logic for snoozed/repeating tasks).",
+          "tag": "service",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "svc-network-sync",
+      "title": "Network & Peer Sync",
+      "subtitle": "NetworkSyncService & PeerSyncCoordinator",
+      "x": 1050,
+      "y": 250,
+      "descriptions": [
+        {
+          "id": "desc-svc-network-sync",
+          "title": "Cross-device coordination",
+          "text": "NetworkSyncService and PeerSyncCoordinator manage manifest announcements, diffs, and synchronization of tasks across devices.",
+          "tag": "service",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "info",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "flow-task-lifecycle",
+      "title": "Flow: Task Lifecycle",
+      "subtitle": "Active ↔ Snoozed ↔ Completed",
+      "x": 550,
+      "y": 520,
+      "descriptions": [
+        {
+          "id": "desc-flow-task-lifecycle",
+          "title": "Lifecycle states",
+          "text": "Tasks move between Active, Snoozed, and Completed with auto-resume for repeating tasks, driven by SchedulerService and StorageService.",
+          "tag": "flow",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "flow-task-selection",
+      "title": "Flow: Task Selection",
+      "subtitle": "Filter → Score → Select",
+      "x": 800,
+      "y": 520,
+      "descriptions": [
+        {
+          "id": "desc-flow-task-selection",
+          "title": "Selection pipeline",
+          "text": "Filters tasks by eligibility and allowed period, computes scores, and selects the next task for the timer and notification pipeline.",
+          "tag": "flow",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "flow-notification",
+      "title": "Flow: Notification",
+      "subtitle": "Timer → Notification → Tap behavior",
+      "x": 300,
+      "y": 520,
+      "descriptions": [
+        {
+          "id": "desc-flow-notification",
+          "title": "Notification pipeline",
+          "text": "When timers elapse, ShuffleCoordinatorService triggers NotificationService which uses platform APIs and handles edge cases like tap behavior and multiple instances.",
+          "tag": "flow",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "flow-sync",
+      "title": "Flow: Manifest Sync",
+      "subtitle": "Manifest announce → Diff → Apply",
+      "x": 1050,
+      "y": 520,
+      "descriptions": [
+        {
+          "id": "desc-flow-sync",
+          "title": "Sync and diff flow",
+          "text": "NetworkSyncService and PeerSyncCoordinator exchange manifests, compute diffs, and apply changes; comparisons may need recomputation when local tasks change.",
+          "tag": "flow",
+          "weight": 6
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "ux-settings",
+      "title": "UX: Settings",
+      "subtitle": "Settings pages & weighting controls",
+      "x": 300,
+      "y": 650,
+      "descriptions": [
+        {
+          "id": "desc-ux-settings",
+          "title": "Settings UX surface",
+          "text": "Settings screens configure weighting, allowed periods, and behavior flags; targeted by the settings UX redesign feature.",
+          "tag": "ux",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "ux-tasks-page",
+      "title": "UX: Tasks Page",
+      "subtitle": "Task list sorting, filters, completed section",
+      "x": 550,
+      "y": 650,
+      "descriptions": [
+        {
+          "id": "desc-ux-tasks-page",
+          "title": "Tasks page UX",
+          "text": "Tasks tab UI for listing tasks, potential filters (allowed time, repeating vs non-repeating), and moving completed tasks to the bottom.",
+          "tag": "ux",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "secondary",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+
+    {
+      "id": "roadmap-allowed-period",
+      "title": "Roadmap: Allowed Period",
+      "subtitle": "Weekend logic & flexible categories",
+      "x": 1350,
+      "y": 80,
+      "descriptions": [
+        {
+          "id": "issue-73",
+          "title": "Allowed Period 2.0 — Weekend Logic & New Period Categories (#73)",
+          "text": "Improve allowed period logic with richer weekend handling and new period categories. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/73",
+          "tag": "feature,allowed-period",
+          "weight": 9
+        },
+        {
+          "id": "issue-72",
+          "title": "Add More Flexible \"Allowed Period\" Categories (e.g., Weekends, Weekdays) (#72)",
+          "text": "Introduce more flexible allowed period categories (weekends, weekdays, etc.). Currently being actively worked on. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/72",
+          "tag": "feature,allowed-period,in-progress",
+          "weight": 10
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "roadmap-tasks-page-ux",
+      "title": "Roadmap: Tasks Page UX",
+      "subtitle": "Sorting, filters, completed section",
+      "x": 1350,
+      "y": 250,
+      "descriptions": [
+        {
+          "id": "issue-220",
+          "title": "Add Sorting Options on Task Page (Importance, Deadline, Score) (#220)",
+          "text": "Add sorting controls on the task page for importance, deadline, and combined score. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/220",
+          "tag": "feature,ux-tasks",
+          "weight": 8
+        },
+        {
+          "id": "issue-219",
+          "title": "Add Filters on Task Page (Allowed Time, Repeating vs Non-Repeating, etc.) (#219)",
+          "text": "Introduce filters on the task page for allowed periods, repeating vs non-repeating tasks, and similar constraints. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/219",
+          "tag": "feature,ux-tasks",
+          "weight": 8
+        },
+        {
+          "id": "issue-205",
+          "title": "Move Completed Tasks to Bottom of Tasks Tab (Sorted by Score) (#205)",
+          "text": "Adjust the tasks tab so completed tasks are moved to the bottom, possibly sorted by score. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/205",
+          "tag": "feature,ux-tasks",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "roadmap-settings-ux",
+      "title": "Roadmap: Settings UX",
+      "subtitle": "Reduce scroll, better navigation",
+      "x": 1350,
+      "y": 420,
+      "descriptions": [
+        {
+          "id": "issue-221",
+          "title": "Redesign Settings UX to Reduce Scroll (Collapsible Sections or Platform-Native Settings Navigation) (#221)",
+          "text": "Redesign settings UX to reduce scroll, potentially using collapsible sections or platform-native settings navigation patterns. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/221",
+          "tag": "feature,ux-settings",
+          "weight": 8
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "roadmap-sync-manifest",
+      "title": "Roadmap: Sync & Manifest",
+      "subtitle": "Cross-device sync & recomputation",
+      "x": 1350,
+      "y": 590,
+      "descriptions": [
+        {
+          "id": "issue-211",
+          "title": "Recompute Manifest Comparisons When Local Tasks Change (Avoid Stale Cached Comparison) (#211)",
+          "text": "Ensure manifest comparisons are recomputed when local tasks change to avoid stale cached comparisons. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/211",
+          "tag": "feature,sync,manifest",
+          "weight": 7
+        },
+        {
+          "id": "issue-68",
+          "title": "Enable Cross-Device Synchronization of Tasks & Notifications (#68)",
+          "text": "Full cross-device synchronization of tasks and notifications. Currently postponed until further notice. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/68",
+          "tag": "feature,sync,postponed",
+          "weight": 3
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "roadmap-shuffle-limits",
+      "title": "Roadmap: Shuffle Limits & Completed",
+      "subtitle": "Unlimited shuffles per day",
+      "x": 1350,
+      "y": 760,
+      "descriptions": [
+        {
+          "id": "issue-210",
+          "title": "Add Ability for Unlimited Shuffles per Day (#210)",
+          "text": "Remove or relax limits on the number of shuffles per day so users can shuffle as much as needed. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/210",
+          "tag": "feature,shuffle",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    },
+    {
+      "id": "roadmap-notification-ux",
+      "title": "Roadmap: Notification UX",
+      "subtitle": "Tap opens multiple instances",
+      "x": 1350,
+      "y": 930,
+      "descriptions": [
+        {
+          "id": "issue-49",
+          "title": "Fix Notification Tap Opening Multiple App Instances (#49)",
+          "text": "Notification tap behavior should not create multiple app instances; ensure a single focused instance is used. GitHub: https://github.com/com-mit-group/ShuffleTask/issues/49",
+          "tag": "feature,notifications",
+          "weight": 7
+        }
+      ],
+      "factors": [],
+      "conditions": [],
+      "outlineColorKey": "warning",
+      "contentVisibility": {
+        "descriptions": true,
+        "factors": true,
+        "conditions": true
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-presentation-application",
+      "sourceId": "layer-presentation",
+      "targetId": "layer-application",
+      "direction": "forward",
+      "colorKey": "primary"
+    },
+    {
+      "id": "conn-application-domain",
+      "sourceId": "layer-application",
+      "targetId": "layer-domain",
+      "direction": "forward",
+      "colorKey": "primary"
+    },
+    {
+      "id": "conn-domain-persistence",
+      "sourceId": "layer-domain",
+      "targetId": "layer-persistence",
+      "direction": "forward",
+      "colorKey": "primary"
+    },
+
+    {
+      "id": "conn-shufflecoordinator-scheduler",
+      "sourceId": "svc-shuffle-coordinator",
+      "targetId": "svc-scheduler",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-scheduler-scoring",
+      "sourceId": "svc-scheduler",
+      "targetId": "svc-scoring",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-scheduler-storage",
+      "sourceId": "svc-scheduler",
+      "targetId": "svc-storage",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-storage-domain",
+      "sourceId": "svc-storage",
+      "targetId": "layer-domain",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-sync-persistence",
+      "sourceId": "svc-network-sync",
+      "targetId": "layer-persistence",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-sync-application",
+      "sourceId": "svc-network-sync",
+      "targetId": "layer-application",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+
+    {
+      "id": "conn-flow-selection-scheduler",
+      "sourceId": "flow-task-selection",
+      "targetId": "svc-scheduler",
+      "direction": "forward",
+      "colorKey": "secondary"
+    },
+    {
+      "id": "conn-flow-lifecycle-storage",
+      "sourceId": "flow-task-lifecycle",
+      "targetId": "svc-storage",
+      "direction": "forward",
+      "colorKey": "secondary"
+    },
+    {
+      "id": "conn-flow-notification-notification",
+      "sourceId": "flow-notification",
+      "targetId": "svc-notification",
+      "direction": "forward",
+      "colorKey": "secondary"
+    },
+    {
+      "id": "conn-flow-sync-network",
+      "sourceId": "flow-sync",
+      "targetId": "svc-network-sync",
+      "direction": "forward",
+      "colorKey": "secondary"
+    },
+
+    {
+      "id": "conn-ux-settings-presentation",
+      "sourceId": "ux-settings",
+      "targetId": "layer-presentation",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+    {
+      "id": "conn-ux-tasks-presentation",
+      "sourceId": "ux-tasks-page",
+      "targetId": "layer-presentation",
+      "direction": "forward",
+      "colorKey": "info"
+    },
+
+    {
+      "id": "conn-roadmap-allowedperiod-domain",
+      "sourceId": "roadmap-allowed-period",
+      "targetId": "layer-domain",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-allowedperiod-application",
+      "sourceId": "roadmap-allowed-period",
+      "targetId": "layer-application",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-tasks-ux-presentation",
+      "sourceId": "roadmap-tasks-page-ux",
+      "targetId": "layer-presentation",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-tasks-ux-flowselection",
+      "sourceId": "roadmap-tasks-page-ux",
+      "targetId": "flow-task-selection",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-settings-ux-settings",
+      "sourceId": "roadmap-settings-ux",
+      "targetId": "ux-settings",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-settings-ux-presentation",
+      "sourceId": "roadmap-settings-ux",
+      "targetId": "layer-presentation",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-sync-manifest-syncsvc",
+      "sourceId": "roadmap-sync-manifest",
+      "targetId": "svc-network-sync",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-sync-manifest-flow-sync",
+      "sourceId": "roadmap-sync-manifest",
+      "targetId": "flow-sync",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-shuffle-limits-scheduler",
+      "sourceId": "roadmap-shuffle-limits",
+      "targetId": "svc-scheduler",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-shuffle-limits-flow-selection",
+      "sourceId": "roadmap-shuffle-limits",
+      "targetId": "flow-task-selection",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-notification-ux-notification",
+      "sourceId": "roadmap-notification-ux",
+      "targetId": "svc-notification",
+      "direction": "forward",
+      "colorKey": "warning"
+    },
+    {
+      "id": "conn-roadmap-notification-ux-flow-notification",
+      "sourceId": "roadmap-notification-ux",
+      "targetId": "flow-notification",
+      "direction": "forward",
+      "colorKey": "warning"
+    }
+  ],
+  "metadata": {
+    "backupFolder": "backups",
+    "panX": 0,
+    "panY": 0,
+    "zoom": 1
+  },
+  "globalSettings": {
+    "colors": {
+      "primary": "#007bff",
+      "secondary": "#6c757d",
+      "success": "#28a745",
+      "danger": "#dc3545",
+      "warning": "#ffc107",
+      "info": "#17a2b8",
+      "light": "#f8f9fa",
+      "dark": "#343a40",
+      "text": "#212529",
+      "textMuted": "#6c757d",
+      "background": "#ffffff",
+      "border": "#dee2e6",
+      "tagBug": "#e55353",
+      "tagTodo": "#3399ff",
+      "tagImportant": "#ff8800",
+      "tagCustom1": "#6610f2",
+      "tagCustom2": "#20c997",
+      "tagCustom3": "#fd7e14",
+      "tagCustom4": "#6f42c1"
+    }
+  },
+  "zones": [
+    {
+      "id": "zone-architecture-layers",
+      "name": "Architecture Layers",
+      "title": "Architecture Layers",
+      "subtitle": "Presentation, Application, Domain, Persistence",
+      "x": 260,
+      "y": 40,
+      "width": 900,
+      "height": 160,
+      "nodeIds": [
+        "layer-presentation",
+        "layer-application",
+        "layer-domain",
+        "layer-persistence"
+      ],
+      "nodes": [
+        "layer-presentation",
+        "layer-application",
+        "layer-domain",
+        "layer-persistence"
+      ],
+      "colorKey": "primary"
+    },
+    {
+      "id": "zone-scoring-scheduler",
+      "name": "Business Logic: Scheduling & Scoring",
+      "title": "Business Logic: Scheduling & Scoring",
+      "subtitle": "SchedulerService + scoring + lifecycle/selection flows",
+      "x": 520,
+      "y": 220,
+      "width": 500,
+      "height": 380,
+      "nodeIds": [
+        "svc-scheduler",
+        "svc-scoring",
+        "flow-task-lifecycle",
+        "flow-task-selection"
+      ],
+      "nodes": [
+        "svc-scheduler",
+        "svc-scoring",
+        "flow-task-lifecycle",
+        "flow-task-selection"
+      ],
+      "colorKey": "secondary"
+    },
+    {
+      "id": "zone-notifications",
+      "name": "Notifications & Background",
+      "title": "Notifications & Background",
+      "subtitle": "Notification pipeline and related UX",
+      "x": 260,
+      "y": 220,
+      "width": 350,
+      "height": 380,
+      "nodeIds": [
+        "svc-shuffle-coordinator",
+        "svc-notification",
+        "flow-notification"
+      ],
+      "nodes": [
+        "svc-shuffle-coordinator",
+        "svc-notification",
+        "flow-notification"
+      ],
+      "colorKey": "secondary"
+    },
+    {
+      "id": "zone-sync-network",
+      "name": "Sync & Networking",
+      "title": "Sync & Networking",
+      "subtitle": "Network sync services and flows",
+      "x": 1010,
+      "y": 220,
+      "width": 350,
+      "height": 380,
+      "nodeIds": [
+        "svc-network-sync",
+        "flow-sync"
+      ],
+      "nodes": [
+        "svc-network-sync",
+        "flow-sync"
+      ],
+      "colorKey": "secondary"
+    },
+    {
+      "id": "zone-settings-ux",
+      "name": "UX: Settings & Configuration",
+      "title": "UX: Settings & Configuration",
+      "subtitle": "Settings screens and related roadmap",
+      "x": 260,
+      "y": 620,
+      "width": 350,
+      "height": 160,
+      "nodeIds": [
+        "ux-settings"
+      ],
+      "nodes": [
+        "ux-settings"
+      ],
+      "colorKey": "info"
+    },
+    {
+      "id": "zone-tasks-ux",
+      "name": "UX: Tasks Page",
+      "title": "UX: Tasks Page",
+      "subtitle": "Task list UX and roadmap links",
+      "x": 520,
+      "y": 620,
+      "width": 350,
+      "height": 160,
+      "nodeIds": [
+        "ux-tasks-page"
+      ],
+      "nodes": [
+        "ux-tasks-page"
+      ],
+      "colorKey": "info"
+    },
+    {
+      "id": "zone-roadmap",
+      "name": "Roadmap (Open Feature Issues)",
+      "title": "Roadmap (Open Feature Issues)",
+      "subtitle": "Grouped by feature area",
+      "x": 1310,
+      "y": 40,
+      "width": 420,
+      "height": 960,
+      "nodeIds": [
+        "roadmap-allowed-period",
+        "roadmap-tasks-page-ux",
+        "roadmap-settings-ux",
+        "roadmap-sync-manifest",
+        "roadmap-shuffle-limits",
+        "roadmap-notification-ux"
+      ],
+      "nodes": [
+        "roadmap-allowed-period",
+        "roadmap-tasks-page-ux",
+        "roadmap-settings-ux",
+        "roadmap-sync-manifest",
+        "roadmap-shuffle-limits",
+        "roadmap-notification-ux"
+      ],
+      "colorKey": "warning"
+    }
+  ]
+}
+

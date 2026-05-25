@@ -57,11 +57,13 @@ public static partial class MauiProgram
 
         // DI registrations
         builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
+        builder.Services.AddSingleton<IShuffleLogger>(sp => new DefaultShuffleLogger(sp.GetRequiredService<TimeProvider>()));
         builder.Services.AddSingleton(provider =>
         {
             var clock = provider.GetRequiredService<TimeProvider>();
+            var shuffleLogger = provider.GetRequiredService<IShuffleLogger>();
             var dbPath = Path.Combine(FileSystem.AppDataDirectory, "shuffletask.db3");
-            return new StorageService(clock, dbPath);
+            return new StorageService(clock, dbPath, shuffleLogger);
         });
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();

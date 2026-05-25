@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Utilities;
@@ -8,7 +7,6 @@ using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Storage;
 
 namespace ShuffleTask.Presentation.Services;
 
@@ -859,25 +857,23 @@ public class ShuffleCoordinatorService : IDisposable
 
     private static void PersistPendingShuffle(string? taskId, DateTimeOffset scheduledAt)
     {
-        Preferences.Default.Set(PreferenceKeys.NextShuffleAt, scheduledAt.ToString("O", CultureInfo.InvariantCulture));
-        if (string.IsNullOrEmpty(taskId))
-        {
-            Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
-        }
-        else
-        {
-            Preferences.Default.Set(PreferenceKeys.PendingShuffleTaskId, taskId);
-        }
+        PersistedSchedulerState.SavePendingShuffle(taskId, scheduledAt);
     }
 
     private static void PersistActiveTask(TaskItem task, EffectiveTimerSettings timerSettings)
     {
         int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
-        Preferences.Default.Set(PreferenceKeys.CurrentTaskId, task.Id);
-        Preferences.Default.Set(PreferenceKeys.TimerDurationSeconds, seconds);
-        Preferences.Default.Set(
-            PreferenceKeys.TimerExpiresAt,
-            DateTimeOffset.UtcNow.AddSeconds(seconds).ToString("O", CultureInfo.InvariantCulture));
+        PersistedTimerState.SaveActiveTimer(
+            task.Id,
+            seconds,
+            DateTimeOffset.UtcNow.AddSeconds(seconds),
+            new PersistedTimerState.TimerDetails(
+                (int)timerSettings.Mode,
+                timerSettings.Mode == TimerMode.Pomodoro ? 0 : null,
+                1,
+                timerSettings.PomodoroCycles,
+                timerSettings.FocusMinutes,
+                timerSettings.BreakMinutes));
     }
 
     /// <summary>
@@ -898,46 +894,29 @@ public class ShuffleCoordinatorService : IDisposable
 
     private static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle()
     {
-        string iso = Preferences.Default.Get(PreferenceKeys.NextShuffleAt, string.Empty);
-        string taskId = Preferences.Default.Get(PreferenceKeys.PendingShuffleTaskId, string.Empty);
-
-        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var nextAt))
-        {
-            return (nextAt, taskId);
-        }
-
-        return (null, taskId);
+        return PersistedSchedulerState.LoadPendingShuffle();
     }
 
     private static (DateTimeOffset? Date, int Count) LoadDailyCount()
     {
-        string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
-        int count = Preferences.Default.Get(PreferenceKeys.ShuffleCount, 0);
-
-        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
-        {
-            return (date, count);
-        }
-
-        return (null, 0);
+        return PersistedSchedulerState.LoadDailyCount();
     }
 
     private static void ResetDailyCountIfNeeded(DateTimeOffset now)
     {
-        string iso = Preferences.Default.Get(PreferenceKeys.ShuffleCountDate, string.Empty);
         DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
         bool needsReset = true;
-        if (!string.IsNullOrWhiteSpace(iso) && DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var date))
+        var (date, _) = LoadDailyCount();
+        if (date.HasValue)
         {
-            DateTimeOffset existingLocal = TimeZoneInfo.ConvertTime(date, TimeZoneInfo.Local);
+            DateTimeOffset existingLocal = TimeZoneInfo.ConvertTime(date.Value, TimeZoneInfo.Local);
             needsReset = existingLocal.Date != local.Date;
         }
 
         if (needsReset)
         {
             var storedLocal = new DateTimeOffset(local.Date, local.Offset);
-            Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, storedLocal.ToString("O", CultureInfo.InvariantCulture));
-            Preferences.Default.Set(PreferenceKeys.ShuffleCount, 0);
+            PersistedSchedulerState.SaveDailyCount(storedLocal, 0);
         }
     }
 
@@ -951,14 +930,12 @@ public class ShuffleCoordinatorService : IDisposable
             count = 0;
         }
 
-        Preferences.Default.Set(PreferenceKeys.ShuffleCountDate, date.Value.ToString("O", CultureInfo.InvariantCulture));
-        Preferences.Default.Set(PreferenceKeys.ShuffleCount, count + 1);
+        PersistedSchedulerState.SaveDailyCount(date.Value, count + 1);
     }
 
     private static void ClearPendingShuffle()
     {
-        Preferences.Default.Remove(PreferenceKeys.NextShuffleAt);
-        Preferences.Default.Remove(PreferenceKeys.PendingShuffleTaskId);
+        PersistedSchedulerState.ClearPendingShuffle();
     }
 
     private void CancelPersistentSchedule()
