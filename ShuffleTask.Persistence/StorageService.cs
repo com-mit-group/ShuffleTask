@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using SQLite;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
@@ -964,6 +965,11 @@ public class StorageService : IStorageService
 
         try
         {
+            if (TryReadSchemaVersion(kv.Value, out int schemaVersion) && schemaVersion > CurrentSettingsSchemaVersion)
+            {
+                return true;
+            }
+
             var payload = DeserializeSettingsPayload(kv.Value);
             if (payload.SchemaVersion > CurrentSettingsSchemaVersion)
             {
@@ -973,6 +979,44 @@ public class StorageService : IStorageService
         catch (UnsupportedSettingsSchemaException)
         {
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadSchemaVersion(string json, out int schemaVersion)
+    {
+        schemaVersion = 0;
+
+        try
+        {
+            var token = JToken.Parse(json);
+            if (token is not JObject obj)
+            {
+                return false;
+            }
+
+            var schemaToken = obj["SchemaVersion"];
+            if (schemaToken == null || schemaToken.Type == JTokenType.Null)
+            {
+                return false;
+            }
+
+            if (schemaToken.Type == JTokenType.Integer)
+            {
+                schemaVersion = schemaToken.Value<int>();
+                return true;
+            }
+
+            if (schemaToken.Type == JTokenType.String && int.TryParse(schemaToken.Value<string>(), out int parsed))
+            {
+                schemaVersion = parsed;
+                return true;
+            }
         }
         catch
         {

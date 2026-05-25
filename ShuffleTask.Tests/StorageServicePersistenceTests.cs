@@ -202,6 +202,28 @@ public class StorageServicePersistenceTests
         Assert.That(rawAfterSave, Is.EqualTo(futurePayload));
     }
 
+    [Test]
+    public async Task Settings_FutureSchemaVersionWithoutData_SetSettings_DoesNotOverwriteStoredValue()
+    {
+        var dbPath = CreateDbPath();
+        var storage = new StorageService(TimeProvider.System, dbPath);
+        await storage.InitializeAsync();
+
+        var futurePayload = JsonConvert.SerializeObject(new
+        {
+            SchemaVersion = 99,
+            AppVersion = "future",
+            LastSuccessfulSaveUtc = DateTime.UtcNow,
+            Payload = new { FocusMinutes = 88, BreakMinutes = 12 }
+        });
+        await WriteRawSettingsValueAsync(storage, futurePayload);
+
+        await storage.SetSettingsAsync(new AppSettings { FocusMinutes = 25, BreakMinutes = 5 });
+
+        var rawAfterSave = await ReadRawSettingsValueAsync(storage);
+        Assert.That(rawAfterSave, Is.EqualTo(futurePayload));
+    }
+
     private static async Task WriteRawSettingsValueAsync(StorageService storage, string json)
     {
         dynamic db = typeof(StorageService).GetProperty("Db", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(storage)!;
