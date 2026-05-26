@@ -181,6 +181,14 @@ jobs:
             -p $env:NUGET_TOKEN `
             --store-password-in-clear-text
 
+      - name: Restore Windows runtime packs
+        if: steps.check-artifacts.outputs.exists == 'false'
+        run: >-
+          dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          -r win-x64
+          /p:TargetFrameworks=net10.0-windows10.0.19041.0
+          /p:SelfContained=true
+
       - name: Restore dependencies
         if: steps.check-artifacts.outputs.exists == 'false'
         run: dotnet restore ShuffleTask.sln
