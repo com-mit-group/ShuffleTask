@@ -100,7 +100,7 @@ jobs:
             echo "exists=false" >> $env:GITHUB_OUTPUT
           }
 
-      - name: Set up .NET 8 SDK
+      - name: Set up .NET 10 SDK
         if: steps.check-artifacts.outputs.exists == 'false'
         id: setup-dotnet
         uses: actions/setup-dotnet@v4
@@ -189,6 +189,7 @@ jobs:
         if: steps.check-artifacts.outputs.exists == 'false'
         run: >-
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
+          --no-restore
           -c Release
           -r win-x64
           --self-contained true
