@@ -192,7 +192,7 @@ jobs:
           -c Release
           -r win-x64
           --self-contained true
-          -f net8.0-windows10.0.19041.0
+          -f net10.0-windows10.0.19041.0
           -o ./artifacts/win
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
@@ -201,7 +201,7 @@ jobs:
         run: >-
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
           -c Release
-          -f net8.0-android
+          -f net10.0-android
           /p:AndroidPackageFormat=apk
           /p:ApplicationVersion=${{ steps.set-version.outputs.android_version_code }}
           -o ./artifacts/android
