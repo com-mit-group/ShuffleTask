@@ -197,12 +197,12 @@ jobs:
         if: steps.check-artifacts.outputs.exists == 'false'
         run: >-
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
-          --no-restore
           -c Release
           -r win-x64
           --self-contained true
           -f net10.0-windows10.0.19041.0
           -o ./artifacts/win
+          /p:UseMonoRuntime=false
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
       - name: Build Android APK
