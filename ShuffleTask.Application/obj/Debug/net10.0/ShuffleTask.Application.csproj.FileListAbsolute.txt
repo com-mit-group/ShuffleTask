@@ -1,0 +1,16 @@
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\bin\Debug\net10.0\ShuffleTask.Application.deps.json
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\bin\Debug\net10.0\ShuffleTask.Application.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\bin\Debug\net10.0\ShuffleTask.Application.pdb
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\bin\Debug\net10.0\ShuffleTask.Domain.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\bin\Debug\net10.0\ShuffleTask.Domain.pdb
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.csproj.AssemblyReference.cache
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.AssemblyInfoInputs.cache
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.AssemblyInfo.cs
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.csproj.CoreCompileInputs.cache
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.sourcelink.json
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleT.792AAE1C.Up2Date
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\refint\ShuffleTask.Application.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ShuffleTask.Application.pdb
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Application\obj\Debug\net10.0\ref\ShuffleTask.Application.dll

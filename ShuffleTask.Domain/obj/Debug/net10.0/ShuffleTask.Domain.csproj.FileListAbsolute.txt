@@ -1,0 +1,12 @@
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\bin\Debug\net10.0\ShuffleTask.Domain.deps.json
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\bin\Debug\net10.0\ShuffleTask.Domain.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\bin\Debug\net10.0\ShuffleTask.Domain.pdb
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.AssemblyInfoInputs.cache
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.AssemblyInfo.cs
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.csproj.CoreCompileInputs.cache
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.sourcelink.json
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\refint\ShuffleTask.Domain.dll
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ShuffleTask.Domain.pdb
+C:\Users\yaref92\codex-automation-workspace\ShuffleTask-automation\ShuffleTask.Domain\obj\Debug\net10.0\ref\ShuffleTask.Domain.dll
