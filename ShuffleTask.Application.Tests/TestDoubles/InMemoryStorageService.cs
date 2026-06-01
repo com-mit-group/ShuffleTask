@@ -150,6 +150,12 @@ internal sealed class InMemoryStorageService : IStorageService
 
     public Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId) => Task.FromResult(0);
 
+    public Task<string> ExportBackupAsync(string? sourcePlatform = null) => throw new NotSupportedException();
+
+    public Task<BackupImportPreview> PreviewBackupImportAsync(string backupJson) => throw new NotSupportedException();
+
+    public Task ImportBackupAsync(string backupJson) => throw new NotSupportedException();
+
     private void EnsureInitialized()
     {
         if (!_initialized)

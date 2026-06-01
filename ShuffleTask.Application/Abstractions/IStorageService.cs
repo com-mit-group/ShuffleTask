@@ -22,4 +22,15 @@ public interface IStorageService
     Task<AppSettings> GetSettingsAsync();
     Task SetSettingsAsync(AppSettings settings);
     Task<int> MigrateDeviceTasksToUserAsync(string deviceId, string userId);
+    Task<string> ExportBackupAsync(string? sourcePlatform = null);
+    Task<BackupImportPreview> PreviewBackupImportAsync(string backupJson);
+    Task ImportBackupAsync(string backupJson);
 }
+
+public sealed record BackupImportPreview(
+    DateTime CreatedAtUtc,
+    string SourcePlatform,
+    string AppVersion,
+    int FormatVersion,
+    int SchemaVersion,
+    int TaskCount);

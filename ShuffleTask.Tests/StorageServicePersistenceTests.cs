@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
@@ -476,6 +477,172 @@ public class StorageServicePersistenceTests
 
         var rawAfterSave = await ReadRawSettingsValueAsync(storage);
         Assert.That(rawAfterSave, Is.EqualTo(futurePayload));
+    }
+
+    [Test]
+    public async Task Backup_ExportImport_RestoresTasksSettingsAndPeriodDefinitions()
+    {
+        var sourcePath = CreateDbPath();
+        var targetPath = CreateDbPath();
+
+        var source = new StorageService(TimeProvider.System, sourcePath);
+        await source.InitializeAsync();
+        await source.SetSettingsAsync(new AppSettings
+        {
+            FocusMinutes = 42,
+            BreakMinutes = 7,
+            PomodoroCycles = 5,
+            ImportanceWeight = 33
+        });
+        await source.UpdatePeriodDefinitionAsync(new PeriodDefinition
+        {
+            Id = "deep-work",
+            Name = "Deep work",
+            Weekdays = Weekdays.Mon | Weekdays.Wed,
+            StartTime = new TimeSpan(8, 30, 0),
+            EndTime = new TimeSpan(10, 0, 0),
+            Mode = PeriodDefinitionMode.None
+        });
+        await source.AddTaskAsync(new TaskItem
+        {
+            Id = "active-task",
+            Title = "Active task",
+            Description = "keep notes",
+            Importance = 5,
+            Deadline = DateTime.UtcNow.AddDays(2),
+            Repeat = RepeatType.Weekly,
+            Weekdays = Weekdays.Mon | Weekdays.Wed,
+            PeriodDefinitionId = "deep-work",
+            CutInLineMode = CutInLineMode.Once,
+            CustomReminderMinutes = 20
+        });
+        await source.AddTaskAsync(new TaskItem { Id = "snoozed-task", Title = "Snoozed task", Importance = 3 });
+        await source.SnoozeTaskAsync("snoozed-task", TimeSpan.FromDays(2));
+
+        string backup = await source.ExportBackupAsync("Android");
+        var preview = await source.PreviewBackupImportAsync(backup);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(backup, Does.Contain("\"format\": \"ShuffleTaskExport\""));
+            Assert.That(backup, Does.Contain("\"formatVersion\": 1"));
+            Assert.That(preview.SourcePlatform, Is.EqualTo("Android"));
+            Assert.That(preview.TaskCount, Is.EqualTo(2));
+        });
+
+        var target = new StorageService(TimeProvider.System, targetPath);
+        await target.InitializeAsync();
+        await target.AddTaskAsync(new TaskItem { Id = "old-task", Title = "Old task" });
+        await target.SetSettingsAsync(new AppSettings { FocusMinutes = 11 });
+
+        await target.ImportBackupAsync(backup);
+
+        var tasks = await target.GetTasksAsync();
+        var restoredSettings = await target.GetSettingsAsync();
+        var restoredPeriod = await target.GetPeriodDefinitionAsync("deep-work");
+        bool safetyBackupExists = Directory.GetFiles(Path.GetDirectoryName(targetPath)!, $"{Path.GetFileName(targetPath)}.backup.pre-import.*.db3").Length > 0;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tasks.Select(t => t.Id), Does.Contain("active-task"));
+            Assert.That(tasks.Select(t => t.Id), Does.Contain("snoozed-task"));
+            Assert.That(tasks.Select(t => t.Id), Does.Not.Contain("old-task"));
+            Assert.That(tasks.Single(t => t.Id == "snoozed-task").Status, Is.EqualTo(TaskLifecycleStatus.Snoozed));
+            Assert.That(restoredSettings.FocusMinutes, Is.EqualTo(42));
+            Assert.That(restoredSettings.BreakMinutes, Is.EqualTo(7));
+            Assert.That(restoredPeriod, Is.Not.Null);
+            Assert.That(restoredPeriod!.StartTime, Is.EqualTo(new TimeSpan(8, 30, 0)));
+            Assert.That(safetyBackupExists, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Backup_ImportInvalidJson_DoesNotModifyExistingData()
+    {
+        var dbPath = CreateDbPath();
+        var storage = new StorageService(TimeProvider.System, dbPath);
+        await storage.InitializeAsync();
+        await storage.AddTaskAsync(new TaskItem { Id = "existing-task", Title = "Existing" });
+        await storage.SetSettingsAsync(new AppSettings { FocusMinutes = 31 });
+
+        Assert.ThrowsAsync<InvalidDataException>(() => storage.ImportBackupAsync("{bad json"));
+
+        var task = await storage.GetTaskAsync("existing-task");
+        var settings = await storage.GetSettingsAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(task, Is.Not.Null);
+            Assert.That(task!.Title, Is.EqualTo("Existing"));
+            Assert.That(settings.FocusMinutes, Is.EqualTo(31));
+        });
+    }
+
+    [Test]
+    public async Task Backup_ImportFutureVersion_DoesNotModifyExistingData()
+    {
+        var source = new StorageService(TimeProvider.System, CreateDbPath());
+        await source.InitializeAsync();
+        await source.AddTaskAsync(new TaskItem { Id = "source-task", Title = "Source" });
+        var json = JObject.Parse(await source.ExportBackupAsync("Android"));
+        json["formatVersion"] = 99;
+
+        var target = new StorageService(TimeProvider.System, CreateDbPath());
+        await target.InitializeAsync();
+        await target.AddTaskAsync(new TaskItem { Id = "existing-task", Title = "Existing" });
+
+        Assert.ThrowsAsync<InvalidDataException>(() => target.ImportBackupAsync(json.ToString(Formatting.None)));
+
+        var tasks = await target.GetTasksAsync();
+        Assert.That(tasks.Select(t => t.Id), Is.EquivalentTo(new[] { "existing-task" }));
+    }
+
+    [Test]
+    public async Task Backup_ImportDuplicateTaskIds_DoesNotModifyExistingData()
+    {
+        var source = new StorageService(TimeProvider.System, CreateDbPath());
+        await source.InitializeAsync();
+        await source.AddTaskAsync(new TaskItem { Id = "duplicate-task", Title = "Original" });
+        var json = JObject.Parse(await source.ExportBackupAsync("Android"));
+        var tasks = (JArray)json["data"]!["tasks"]!;
+        tasks.Add(tasks[0]!.DeepClone());
+
+        var target = new StorageService(TimeProvider.System, CreateDbPath());
+        await target.InitializeAsync();
+        await target.AddTaskAsync(new TaskItem { Id = "existing-task", Title = "Existing" });
+
+        Assert.ThrowsAsync<InvalidDataException>(() => target.ImportBackupAsync(json.ToString(Formatting.None)));
+
+        var existing = await target.GetTaskAsync("existing-task");
+        Assert.That(existing, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task Backup_ImportOlderSchemaVersion_IsAcceptedWhenCurrentModelsCanReadIt()
+    {
+        var source = new StorageService(TimeProvider.System, CreateDbPath());
+        await source.InitializeAsync();
+        await source.SetSettingsAsync(new AppSettings { FocusMinutes = 27 });
+        await source.AddTaskAsync(new TaskItem { Id = "portable-task", Title = "Portable" });
+
+        var json = JObject.Parse(await source.ExportBackupAsync("Android"));
+        json["schemaVersion"] = 1;
+        json["taskSchemaVersion"] = 1;
+        json["settingsSchemaVersion"] = 1;
+        json["periodSchemaVersion"] = 1;
+
+        var target = new StorageService(TimeProvider.System, CreateDbPath());
+        await target.InitializeAsync();
+        await target.ImportBackupAsync(json.ToString(Formatting.None));
+
+        var task = await target.GetTaskAsync("portable-task");
+        var settings = await target.GetSettingsAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(task, Is.Not.Null);
+            Assert.That(settings.FocusMinutes, Is.EqualTo(27));
+        });
     }
 
     private static async Task WriteRawSettingsValueAsync(StorageService storage, string json)
