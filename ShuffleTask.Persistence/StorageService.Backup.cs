@@ -309,7 +309,6 @@ public partial class StorageService
         }
 
         string backupPath = CreateSidecarPath("backup.pre-import");
-        await Db.ExecuteAsync("PRAGMA wal_checkpoint(FULL);").ConfigureAwait(false);
         await Db.CloseAsync().ConfigureAwait(false);
         File.Copy(_dbPath, backupPath, overwrite: false);
         CopySidecarIfExists("-wal", backupPath + "-wal");
