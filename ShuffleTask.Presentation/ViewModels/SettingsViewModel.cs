@@ -11,6 +11,7 @@ using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Utilities;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -241,11 +242,18 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             {
                 await _notifications.CancelAllAsync();
                 await _storage.ImportBackupAsync(json);
-                Settings = await _storage.GetSettingsAsync();
+                AppSettings restoredSettings = await _storage.GetSettingsAsync();
+                Settings.CopyFrom(restoredSettings);
                 Settings.NormalizeWeights();
                 Settings.Network?.Normalize();
+                UpdateNetworkSubscription(_networkOptions, Settings.Network);
+                PersistedTimerState.Clear();
+                PersistedSchedulerState.ClearPendingShuffle();
+                PersistedSchedulerState.SaveDailyCount(_clock.GetUtcNow(), 0);
                 await LoadPresetDefinitionsAsync();
                 CacheSessionState();
+                OnPropertyChanged(nameof(Settings));
+                OnPropertyChanged(nameof(UsePomodoro));
                 OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
 
                 var (userScope, deviceScope) = ResolveTaskScopes();
