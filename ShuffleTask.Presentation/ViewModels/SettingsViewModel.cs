@@ -243,7 +243,16 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
                 await _notifications.CancelAllAsync();
                 await _storage.ImportBackupAsync(json);
                 AppSettings restoredSettings = await _storage.GetSettingsAsync();
-                Settings.CopyFrom(restoredSettings);
+                UnsubscribeSettings(Settings);
+                try
+                {
+                    Settings.CopyFrom(restoredSettings);
+                }
+                finally
+                {
+                    SubscribeSettings(Settings);
+                }
+
                 Settings.NormalizeWeights();
                 Settings.Network?.Normalize();
                 UpdateNetworkSubscription(_networkOptions, Settings.Network);
