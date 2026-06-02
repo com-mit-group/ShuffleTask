@@ -339,6 +339,29 @@
 
             <toolkit:Expander>
                 <toolkit:Expander.Header>
+                    <Label Text="Backup &amp; restore"
+                           FontAttributes="Bold"
+                           FontSize="16" />
+                </toolkit:Expander.Header>
+                <VerticalStackLayout Spacing="10"
+                                     Padding="0,10,0,0">
+                    <Label Text="Backup files include private task and settings data."
+                           FontSize="12"
+                           TextColor="#6B7280" />
+                    <Grid ColumnDefinitions="*,*"
+                          ColumnSpacing="12">
+                        <Button Grid.Column="0"
+                                Text="Export backup"
+                                Command="{Binding ExportBackupCommand}" />
+                        <Button Grid.Column="1"
+                                Text="Import backup"
+                                Command="{Binding ImportBackupCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </toolkit:Expander>
+
+            <toolkit:Expander>
+                <toolkit:Expander.Header>
                     <Label Text="Sync &amp; account"
                            FontAttributes="Bold"
                            FontSize="16" />

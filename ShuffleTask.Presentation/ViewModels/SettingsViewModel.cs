@@ -2,14 +2,19 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Devices;
+using Microsoft.Maui.Storage;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Exceptions;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Utilities;
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Yaref92.Events.Transport.Grpc;
@@ -155,6 +160,124 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
             if (next != null && Settings.EnableNotifications)
             {
                 await _notifications.NotifyTaskAsync(next, Settings.ReminderMinutes, Settings);
+            }
+        });
+    }
+
+    [RelayCommand]
+    private Task ExportBackupAsync()
+    {
+        return ExecuteIfNotBusyAsync(async () =>
+        {
+            bool export = await ShowConfirmAsync(
+                "Export backup",
+                "ShuffleTask backups contain private task and settings data. Keep exported files somewhere you trust.",
+                "Export",
+                "Cancel");
+
+            if (!export)
+            {
+                return;
+            }
+
+            await _storage.InitializeAsync();
+            string json = await _storage.ExportBackupAsync(DeviceInfo.Current.Platform.ToString());
+            string fileName = $"shuffletask-backup-{_clock.GetUtcNow().UtcDateTime:yyyyMMdd-HHmmss}.shuffletask.json";
+            string path = Path.Combine(FileSystem.CacheDirectory, fileName);
+            await File.WriteAllTextAsync(path, json);
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Export ShuffleTask backup",
+                File = new ShareFile(path)
+            });
+        });
+    }
+
+    [RelayCommand]
+    private Task ImportBackupAsync()
+    {
+        return ExecuteIfNotBusyAsync(async () =>
+        {
+            FileResult? file = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select ShuffleTask backup"
+            });
+
+            if (file == null)
+            {
+                return;
+            }
+
+            string json;
+            await using (Stream stream = await file.OpenReadAsync())
+            using (var reader = new StreamReader(stream))
+            {
+                json = await reader.ReadToEndAsync();
+            }
+
+            BackupImportPreview preview;
+            try
+            {
+                preview = await _storage.PreviewBackupImportAsync(json);
+            }
+            catch (InvalidDataException ex)
+            {
+                await ShowAlertAsync("Import failed", ex.Message);
+                return;
+            }
+
+            bool replace = await ShowConfirmAsync(
+                "Import Backup?",
+                BuildImportPreviewMessage(preview),
+                "Replace data",
+                "Cancel");
+
+            if (!replace)
+            {
+                return;
+            }
+
+            try
+            {
+                await _notifications.CancelAllAsync();
+                await _storage.ImportBackupAsync(json);
+                AppSettings restoredSettings = await _storage.GetSettingsAsync();
+                UnsubscribeSettings(Settings);
+                try
+                {
+                    Settings.CopyFrom(restoredSettings);
+                }
+                finally
+                {
+                    SubscribeSettings(Settings);
+                }
+
+                Settings.NormalizeWeights();
+                Settings.Network?.Normalize();
+                UpdateNetworkSubscription(_networkOptions, Settings.Network);
+                PersistedTimerState.Clear();
+                PersistedSchedulerState.ClearPendingShuffle();
+                PersistedSchedulerState.SaveDailyCount(_clock.GetUtcNow(), 0);
+                await LoadPresetDefinitionsAsync();
+                CacheSessionState();
+                OnPropertyChanged(nameof(Settings));
+                OnPropertyChanged(nameof(UsePomodoro));
+                OnNetworkChanged(this, new PropertyChangedEventArgs(string.Empty));
+
+                var (userScope, deviceScope) = ResolveTaskScopes();
+                await _coordinator.RefreshAsync();
+                await RefreshBoundCollectionsAsync(userScope, deviceScope);
+                await ShowAlertAsync("Import complete", "Your ShuffleTask backup was restored.");
+            }
+            catch (InvalidDataException ex)
+            {
+                await ShowAlertAsync("Import failed", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Backup import failed.");
+                await ShowAlertAsync("Import failed", "Import failed. Your existing data was not changed.");
             }
         });
     }
@@ -485,6 +608,26 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         return MainThread.InvokeOnMainThreadAsync(() =>
             Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK")
             ?? Task.CompletedTask);
+    }
+
+    private static string BuildImportPreviewMessage(BackupImportPreview preview)
+        => $"Backup created: {preview.CreatedAtUtc:u}{Environment.NewLine}"
+           + $"Tasks: {preview.TaskCount}{Environment.NewLine}"
+           + $"Source: {preview.SourcePlatform}{Environment.NewLine}"
+           + $"App version: {preview.AppVersion}{Environment.NewLine}"
+           + $"Schema version: {preview.SchemaVersion}{Environment.NewLine}{Environment.NewLine}"
+           + "This will replace your current ShuffleTask data. A safety backup of your current data will be created first.";
+
+    private static Task<bool> ShowConfirmAsync(string title, string message, string accept, string cancel)
+    {
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, accept, cancel) ?? Task.FromResult(false));
+    }
+
+    private static Task ShowAlertAsync(string title, string message)
+    {
+        return MainThread.InvokeOnMainThreadAsync(() =>
+            Microsoft.Maui.Controls.Application.Current?.MainPage?.DisplayAlert(title, message, "OK") ?? Task.CompletedTask);
     }
 
     private async Task<string?> GetUsernameAsync(string? username)

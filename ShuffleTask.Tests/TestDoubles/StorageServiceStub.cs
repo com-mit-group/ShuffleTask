@@ -263,6 +263,12 @@ public class StorageServiceStub : IStorageService
         return Task.CompletedTask;
     }
 
+    public Task<string> ExportBackupAsync(string? sourcePlatform = null) => throw new NotSupportedException();
+
+    public Task<BackupImportPreview> PreviewBackupImportAsync(string backupJson) => throw new NotSupportedException();
+
+    public Task ImportBackupAsync(string backupJson) => throw new NotSupportedException();
+
     private void AutoResumeDueTasks()
     {
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
