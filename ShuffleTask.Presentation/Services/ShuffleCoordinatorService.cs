@@ -87,6 +87,14 @@ public class ShuffleCoordinatorService : IDisposable
 
         await PauseAsync().ConfigureAwait(false);
         _backgroundService.Stop();
+        try
+        {
+            await _notifications.CancelAllAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShuffleCoordinatorService notification cancel error: {ex}");
+        }
     }
 
     private async Task ResumeInternalAsync()

@@ -130,6 +130,19 @@ public class ShuffleCoordinatorServiceTests
         Assert.That(_background.LastScheduledAt, Is.Not.Null);
     }
 
+    [Test]
+    public async Task ApplyBackgroundActivityChangeAsync_WhenDisabled_CancelsBackgroundAndNotifications()
+    {
+        using var service = CreateService();
+        await service.StartAsync();
+
+        await service.ApplyBackgroundActivityChangeAsync(false);
+
+        Assert.That(_background.CancelCount, Is.GreaterThan(0));
+        Assert.That(_background.StopCount, Is.EqualTo(1));
+        Assert.That(_notifications.CancelAllCount, Is.EqualTo(1));
+    }
+
     private ShuffleCoordinatorService CreateService()
     {
         var network = Substitute.For<INetworkSyncService>();
@@ -161,8 +174,15 @@ public class ShuffleCoordinatorServiceTests
 
     private sealed class NotificationStub : INotificationService
     {
+        public int CancelAllCount { get; private set; }
+
         public Task InitializeAsync() => Task.CompletedTask;
-        public Task CancelAllAsync() => Task.CompletedTask;
+
+        public Task CancelAllAsync()
+        {
+            CancelAllCount++;
+            return Task.CompletedTask;
+        }
 
         public Task NotifyPhaseAsync(string title, string message, TimeSpan delay, AppSettings settings)
         {
@@ -183,6 +203,8 @@ public class ShuffleCoordinatorServiceTests
     {
         public int ScheduleCount { get; private set; }
         public int AsyncScheduleCount { get; private set; }
+        public int CancelCount { get; private set; }
+        public int StopCount { get; private set; }
         public DateTimeOffset? LastScheduledAt { get; private set; }
         public string? LastScheduledTaskId { get; private set; }
         private Func<Task>? _callback;
@@ -205,10 +227,12 @@ public class ShuffleCoordinatorServiceTests
 
         public void Cancel()
         {
+            CancelCount++;
         }
 
         public void Stop()
         {
+            StopCount++;
         }
 
         public Task TriggerAsyncCallbackAsync()
