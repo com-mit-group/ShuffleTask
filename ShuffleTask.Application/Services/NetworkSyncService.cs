@@ -19,7 +19,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
 #if DEBUG
     private readonly INotificationService? _notifications;
 #endif
-    private readonly PeerSyncCoordinator _coordinator;
+    private readonly ISyncExchangeService _syncExchange;
     private readonly AsyncLocal<bool> _suppressBroadcast = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private readonly NetworkedEventAggregator _aggregator;
@@ -39,6 +39,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         AppSettings appSettings,
         NetworkedEventAggregator aggregator,
         IEventTransport transport,
+        ISyncExchangeService syncExchange,
         ILogger<NetworkSyncService>? logger = null,
         INotificationService? notifications = null)
     {
@@ -46,11 +47,11 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        _syncExchange = syncExchange ?? throw new ArgumentNullException(nameof(syncExchange));
         _logger = logger;
 #if DEBUG
         _notifications = notifications;
 #endif
-        _coordinator = new PeerSyncCoordinator(_storage);
         DeviceId = Environment.MachineName;
         UserId = Environment.UserName;
     }
@@ -422,31 +423,35 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
 
         await DebugToastAsync("Manifest announced", $"Received manifest announcement from {domainEvent.DeviceId}.").ConfigureAwait(false);
 
-        var manifest = domainEvent.Manifest.ToList();
         using var linkedCts = LinkToConnection(cancellationToken);
+        var remoteManifest = BuildRemoteManifest(domainEvent);
+        var localPeer = CreateLocalPeerContext();
 
-        var comparison = await _coordinator
-            .CompareManifestAsync(manifest, UserId, DeviceId)
+        var request = await _syncExchange
+            .BuildTaskRequestAsync(remoteManifest, localPeer, linkedCts.Token)
             .WaitAsync(linkedCts.Token)
             .ConfigureAwait(false);
 
-        var tasksToRequest = comparison.GetTasksToRequest();
-        if (tasksToRequest.Count > 0)
+        if (request.RequestedTaskIds.Count > 0)
         {
-            await PublishManifestRequestAsync(manifest, tasksToRequest, linkedCts.Token).ConfigureAwait(false);
+            await PublishManifestRequestAsync(request, linkedCts.Token).ConfigureAwait(false);
         }
 
-        var tasksToAdvertise = comparison.GetTasksToAdvertise();
-        if (tasksToAdvertise.Count > 0)
+        var localBatch = await _syncExchange
+            .BuildLocalTaskBatchAsync(remoteManifest, localPeer, linkedCts.Token)
+            .WaitAsync(linkedCts.Token)
+            .ConfigureAwait(false);
+
+        if (localBatch.Tasks.Count > 0)
         {
-            await PublishTaskBatchesAsync(tasksToAdvertise, linkedCts.Token).ConfigureAwait(false);
+            await PublishTaskBatchesAsync(localBatch, linkedCts.Token).ConfigureAwait(false);
         }
     }
 
     internal async Task HandleManifestRequestAsync(TaskManifestRequest domainEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
-        if (domainEvent.Manifest is null)
+        if (domainEvent.RequestedTaskIds is null)
         {
             return;
         }
@@ -454,30 +459,35 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         await DebugToastAsync("Manifest request", $"Received manifest request from {domainEvent.DeviceId}.").ConfigureAwait(false);
 
         using var linkedCts = LinkToConnection(cancellationToken);
+        var request = new SyncTaskRequest(
+            domainEvent.DeviceId,
+            domainEvent.UserId,
+            domainEvent.DeviceId,
+            domainEvent.RequestedTaskIds);
 
-        var requestedTaskIds = domainEvent.Manifest
-            .Select(entry => entry.TaskId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        string[] tasksToAdvertise = (await _coordinator
-            .GetTasksToAdvertiseAsync(domainEvent.Manifest, UserId, DeviceId)
+        var batch = await _syncExchange
+            .BuildTaskBatchAsync(request, CreateLocalPeerContext(), linkedCts.Token)
             .WaitAsync(linkedCts.Token)
-            .ConfigureAwait(false))
-            .Where(requestedTaskIds.Contains)
-            .ToArray();
+            .ConfigureAwait(false);
 
-        if (tasksToAdvertise.Length == 0)
+        if (batch.Tasks.Count == 0)
         {
             return;
         }
 
-        await PublishTaskBatchesAsync(tasksToAdvertise, linkedCts.Token).ConfigureAwait(false);
+        await PublishTaskBatchesAsync(batch, linkedCts.Token).ConfigureAwait(false);
     }
 
     internal async Task HandleTaskBatchResponseAsync(TaskBatchResponse domainEvent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
-        if (domainEvent.Tasks is null)
+        var batch = domainEvent.Batch ?? new SyncTaskBatch(
+            domainEvent.DeviceId,
+            domainEvent.UserId,
+            domainEvent.DeviceId,
+            domainEvent.Tasks ?? Array.Empty<TaskItem>());
+
+        if (batch.Tasks.Count == 0)
         {
             return;
         }
@@ -485,14 +495,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         await DebugToastAsync("Task batch response", $"Received task batch response from {domainEvent.DeviceId}.").ConfigureAwait(false);
 
         using var linkedCts = LinkToConnection(cancellationToken);
-        await RunWithoutBroadcastAsync(async () =>
-        {
-            foreach (var task in domainEvent.Tasks)
-            {
-                var upsertedEvent = new TaskUpsertedEvent(task, domainEvent.DeviceId, domainEvent.UserId);
-                await _aggregator.PublishEventAsync(upsertedEvent, linkedCts.Token).ConfigureAwait(false);
-            }
-        }).ConfigureAwait(false);
+        await RunWithoutBroadcastAsync(() => _syncExchange.ApplyTaskBatchAsync(batch, linkedCts.Token)).ConfigureAwait(false);
     }
 
     private async Task PublishManifestAnnouncementAsync(CancellationToken cancellationToken)
@@ -509,57 +512,53 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
             .ConfigureAwait(false);
     }
 
-    private async Task PublishManifestRequestAsync(
-        IReadOnlyCollection<TaskManifestEntry> remoteManifest,
-        IReadOnlyCollection<string> tasksToRequest,
-        CancellationToken cancellationToken)
+    private async Task PublishManifestRequestAsync(SyncTaskRequest request, CancellationToken cancellationToken)
     {
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        var requestEntries = remoteManifest
-            .Where(entry => tasksToRequest.Contains(entry.TaskId))
-            .ToArray();
-
-        if (requestEntries.Length == 0)
+        if (request.RequestedTaskIds.Count == 0)
         {
             return;
         }
 
-        var request = new TaskManifestRequest(requestEntries, DeviceId, UserId);
-        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(request, cancellationToken), cancellationToken)
+        var domainEvent = new TaskManifestRequest(request.RequestedTaskIds, DeviceId, UserId);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(domainEvent, cancellationToken), cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private async Task PublishTaskBatchesAsync(IEnumerable<string> taskIds, CancellationToken cancellationToken)
+    private async Task PublishTaskBatchesAsync(SyncTaskBatch batch, CancellationToken cancellationToken)
     {
         if (!ShouldBroadcast)
         {
             return;
         }
 
-        foreach (var batch in taskIds.Chunk(TaskBatchSize))
+        foreach (var taskChunk in batch.Tasks.Chunk(TaskBatchSize))
         {
-            var tasks = await LoadTasksAsync(batch, cancellationToken).ConfigureAwait(false);
-            foreach (var task in tasks)
-            {
-                await PublishTaskUpsertAsync(task, cancellationToken).ConfigureAwait(false);
-            }
+            var chunkBatch = new SyncTaskBatch(DeviceId, batch.UserId, DeviceId, taskChunk, batch.DeletedTaskIds);
+            var response = new TaskBatchResponse(chunkBatch, DeviceId, UserId);
+            await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(response, cancellationToken), cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
     private async Task<IReadOnlyCollection<TaskManifestEntry>> BuildLocalManifestAsync(CancellationToken cancellationToken)
     {
-        var tasks = await _storage.GetTasksAsync(UserId, DeviceId).WaitAsync(cancellationToken).ConfigureAwait(false);
-        return tasks.Select(task => new TaskManifestEntry
+        var manifest = await _syncExchange
+            .BuildManifestAsync(CreateLocalPeerContext(), cancellationToken)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return manifest.Entries.Select(entry => new TaskManifestEntry
         {
-            TaskId = task.Id,
-            EventVersion = task.EventVersion,
-            UpdatedAt = task.UpdatedAt,
-            DeviceId = task.DeviceId,
-            UserId = task.UserId,
+            TaskId = entry.TaskId,
+            EventVersion = entry.EventVersion,
+            UpdatedAt = entry.UpdatedAtUtc,
+            DeviceId = manifest.DeviceId,
+            UserId = manifest.UserId,
         }).ToArray();
     }
 
@@ -601,5 +600,23 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
     private CancellationTokenSource LinkToConnection(CancellationToken cancellationToken)
     {
         return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, EnsureConnectionCts().Token);
+    }
+
+    private SyncPeerContext CreateLocalPeerContext()
+        => new(DeviceId, UserId, DeviceId);
+
+    private static SyncManifest BuildRemoteManifest(TaskManifestAnnounced domainEvent)
+    {
+        var entries = domainEvent.Manifest.Select(entry => new SyncManifestEntry(
+            entry.TaskId,
+            entry.EventVersion,
+            entry.UpdatedAt));
+
+        return new SyncManifest(
+            domainEvent.DeviceId,
+            domainEvent.UserId,
+            domainEvent.DeviceId,
+            schemaVersion: 1,
+            entries);
     }
 }
