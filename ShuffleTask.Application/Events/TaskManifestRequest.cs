@@ -7,11 +7,7 @@ public class TaskManifestRequest : DomainEventBase
 {
     public TaskManifestRequest(IEnumerable<string> requestedTaskIds, string deviceId, string? userId)
     {
-        RequestedTaskIds = requestedTaskIds?
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Select(id => id.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .ToArray() ?? Array.Empty<string>();
+        RequestedTaskIds = SyncIdentity.DistinctIds(requestedTaskIds);
         DeviceId = deviceId;
         UserId = userId;
     }

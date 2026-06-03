@@ -562,27 +562,6 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         }).ToArray();
     }
 
-    private async Task<IReadOnlyCollection<TaskItem>> LoadTasksAsync(IEnumerable<string> taskIds, CancellationToken cancellationToken)
-    {
-        var tasks = new List<TaskItem>();
-
-        foreach (var taskId in taskIds)
-        {
-            if (string.IsNullOrWhiteSpace(taskId))
-            {
-                continue;
-            }
-
-            var task = await _storage.GetTaskAsync(taskId).WaitAsync(cancellationToken).ConfigureAwait(false);
-            if (task is not null)
-            {
-                tasks.Add(task);
-            }
-        }
-
-        return tasks;
-    }
-
     private async Task RunWithoutBroadcastAsync(Func<Task> action)
     {
         var previous = _suppressBroadcast.Value;

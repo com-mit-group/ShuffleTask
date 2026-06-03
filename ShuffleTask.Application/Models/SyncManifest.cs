@@ -11,9 +11,9 @@ public sealed class SyncManifest
         int schemaVersion,
         IEnumerable<SyncManifestEntry> entries)
     {
-        PeerId = string.IsNullOrWhiteSpace(peerId) ? string.Empty : peerId.Trim();
-        UserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
-        DeviceId = string.IsNullOrWhiteSpace(deviceId) ? string.Empty : deviceId.Trim();
+        PeerId = SyncIdentity.Required(peerId);
+        UserId = SyncIdentity.Optional(userId);
+        DeviceId = SyncIdentity.Required(deviceId);
         SchemaVersion = schemaVersion;
         Entries = entries?.ToArray() ?? Array.Empty<SyncManifestEntry>();
     }

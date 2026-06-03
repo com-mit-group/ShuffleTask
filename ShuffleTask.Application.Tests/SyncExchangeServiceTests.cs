@@ -16,28 +16,21 @@ public class SyncExchangeServiceTests
     [Test]
     public async Task ManifestExchange_RequestsAndReturnsRemoteOnlyTasks()
     {
-        var peerAStorage = new InMemoryStorageService();
-        await peerAStorage.InitializeAsync();
+        var peerA = await CreateHarnessAsync();
+        var peerB = await CreateHarnessAsync(CreateTask("only-b", "Remote Only", version: 2, DeviceB));
 
-        var peerBStorage = new InMemoryStorageService();
-        await peerBStorage.InitializeAsync();
-        await peerBStorage.AddTaskAsync(CreateTask("only-b", "Remote Only", version: 2, DeviceB));
+        var manifestFromB = await peerB.Exchange.BuildManifestAsync(CreateContext("peer-b", DeviceB));
+        var requestFromA = await peerA.Exchange.BuildTaskRequestAsync(manifestFromB, CreateContext("peer-a", DeviceA));
+        var batchFromB = await peerB.Exchange.BuildTaskBatchAsync(requestFromA, CreateContext("peer-b", DeviceB));
 
-        var peerA = new SyncExchangeService(peerAStorage);
-        var peerB = new SyncExchangeService(peerBStorage);
+        await peerA.Exchange.ApplyTaskBatchAsync(batchFromB);
 
-        var manifestFromB = await peerB.BuildManifestAsync(CreateContext("peer-b", DeviceB));
-        var requestFromA = await peerA.BuildTaskRequestAsync(manifestFromB, CreateContext("peer-a", DeviceA));
-        var batchFromB = await peerB.BuildTaskBatchAsync(requestFromA, CreateContext("peer-b", DeviceB));
-
-        await peerA.ApplyTaskBatchAsync(batchFromB);
-
-        var received = await peerAStorage.GetTaskAsync("only-b");
+        var received = await peerA.Storage.GetTaskAsync("only-b");
 
         Assert.Multiple(() =>
         {
             Assert.That(requestFromA.RequestedTaskIds, Is.EquivalentTo(new[] { "only-b" }));
-            Assert.That(batchFromB.Tasks.Select(task => task.Id), Is.EquivalentTo(new[] { "only-b" }));
+            Assert.That(TaskIds(batchFromB), Is.EquivalentTo(new[] { "only-b" }));
             Assert.That(received, Is.Not.Null);
             Assert.That(received!.Title, Is.EqualTo("Remote Only"));
             Assert.That(received.EventVersion, Is.EqualTo(2));
@@ -47,47 +40,35 @@ public class SyncExchangeServiceTests
     [Test]
     public async Task BuildTaskBatchAsync_ReturnsExplicitlyRequestedEqualLocalTasks()
     {
-        var storage = new InMemoryStorageService();
-        await storage.InitializeAsync();
-        await storage.AddTaskAsync(CreateTask("shared", "Local", version: 3, DeviceB));
+        var harness = await CreateHarnessAsync(CreateTask("shared", "Local", version: 3, DeviceB));
 
-        var exchange = new SyncExchangeService(storage);
-        var request = new SyncTaskRequest("peer-a", UserId, DeviceA, new[] { "shared" });
+        var batch = await harness.Exchange.BuildTaskBatchAsync(CreateRequest("shared"), CreateContext("peer-b", DeviceB));
 
-        var batch = await exchange.BuildTaskBatchAsync(request, CreateContext("peer-b", DeviceB));
-
-        Assert.That(batch.Tasks.Select(task => task.Id), Is.EquivalentTo(new[] { "shared" }));
+        Assert.That(TaskIds(batch), Is.EquivalentTo(new[] { "shared" }));
     }
 
     [Test]
     public async Task BuildLocalTaskBatchAsync_ReturnsTasksMissingFromRemoteManifest()
     {
-        var storage = new InMemoryStorageService();
-        await storage.InitializeAsync();
-        await storage.AddTaskAsync(CreateTask("only-b", "Local Only", version: 2, DeviceB));
-
-        var exchange = new SyncExchangeService(storage);
+        var harness = await CreateHarnessAsync(CreateTask("only-b", "Local Only", version: 2, DeviceB));
         var remoteManifest = new SyncManifest("peer-a", UserId, DeviceA, schemaVersion: 1, Array.Empty<SyncManifestEntry>());
 
-        var batch = await exchange.BuildLocalTaskBatchAsync(remoteManifest, CreateContext("peer-b", DeviceB));
+        var batch = await harness.Exchange.BuildLocalTaskBatchAsync(remoteManifest, CreateContext("peer-b", DeviceB));
 
-        Assert.That(batch.Tasks.Select(task => task.Id), Is.EquivalentTo(new[] { "only-b" }));
+        Assert.That(TaskIds(batch), Is.EquivalentTo(new[] { "only-b" }));
     }
 
     [Test]
     public async Task ApplyTaskBatchAsync_IgnoresStaleTasks()
     {
-        var storage = new InMemoryStorageService();
-        await storage.InitializeAsync();
-        await storage.AddTaskAsync(CreateTask("shared", "Latest", version: 5, DeviceA));
+        var harness = await CreateHarnessAsync(CreateTask("shared", "Latest", version: 5, DeviceA));
 
         var staleTask = CreateTask("shared", "Stale", version: 3, DeviceB);
         var batch = new SyncTaskBatch("peer-b", UserId, DeviceB, new[] { staleTask });
 
-        var exchange = new SyncExchangeService(storage);
-        await exchange.ApplyTaskBatchAsync(batch);
+        await harness.Exchange.ApplyTaskBatchAsync(batch);
 
-        var stored = await storage.GetTaskAsync("shared");
+        var stored = await harness.Storage.GetTaskAsync("shared");
 
         Assert.Multiple(() =>
         {
@@ -99,39 +80,58 @@ public class SyncExchangeServiceTests
     [Test]
     public async Task BuildTaskBatchAsync_IgnoresTasksOutsideRequestedUserScope()
     {
-        var storage = new InMemoryStorageService();
-        await storage.InitializeAsync();
-        await storage.AddTaskAsync(new TaskItem
-        {
-            Id = "other-user-task",
-            Title = "Other User",
-            UserId = "user-b",
-            DeviceId = DeviceB,
-            EventVersion = 1,
-            CreatedAt = BaseTimeUtc,
-            UpdatedAt = BaseTimeUtc,
-        });
+        var harness = await CreateHarnessAsync(CreateTask(
+            "other-user-task",
+            "Other User",
+            version: 1,
+            DeviceB,
+            userId: "user-b"));
 
-        var exchange = new SyncExchangeService(storage);
-        var request = new SyncTaskRequest("peer-a", UserId, DeviceA, new[] { "other-user-task" });
-
-        var batch = await exchange.BuildTaskBatchAsync(request, CreateContext("peer-b", DeviceB));
+        var batch = await harness.Exchange.BuildTaskBatchAsync(
+            CreateRequest("other-user-task"),
+            CreateContext("peer-b", DeviceB));
 
         Assert.That(batch.Tasks, Is.Empty);
     }
 
+    private static async Task<ExchangeHarness> CreateHarnessAsync(params TaskItem[] tasks)
+    {
+        var storage = new InMemoryStorageService();
+        await storage.InitializeAsync();
+
+        foreach (var task in tasks)
+        {
+            await storage.AddTaskAsync(task);
+        }
+
+        return new ExchangeHarness(storage, new SyncExchangeService(storage));
+    }
+
+    private static SyncTaskRequest CreateRequest(params string[] taskIds)
+        => new("peer-a", UserId, DeviceA, taskIds);
+
     private static SyncPeerContext CreateContext(string peerId, string deviceId)
         => new(peerId, UserId, deviceId);
 
-    private static TaskItem CreateTask(string id, string title, int version, string deviceId)
+    private static IEnumerable<string> TaskIds(SyncTaskBatch batch)
+        => batch.Tasks.Select(task => task.Id);
+
+    private static TaskItem CreateTask(
+        string id,
+        string title,
+        int version,
+        string deviceId,
+        string? userId = UserId)
         => new()
         {
             Id = id,
             Title = title,
-            UserId = UserId,
+            UserId = userId,
             DeviceId = deviceId,
             EventVersion = version,
             CreatedAt = BaseTimeUtc.AddMinutes(-version),
             UpdatedAt = BaseTimeUtc.AddMinutes(version),
         };
+
+    private sealed record ExchangeHarness(InMemoryStorageService Storage, SyncExchangeService Exchange);
 }

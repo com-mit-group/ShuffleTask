@@ -45,18 +45,7 @@ public sealed class SyncExchangeService : ISyncExchangeService
         ArgumentNullException.ThrowIfNull(remoteManifest);
         ArgumentNullException.ThrowIfNull(localPeer);
 
-        var comparisonManifest = remoteManifest.Entries
-            .Where(entry => !entry.Deleted)
-            .Select(entry => new TaskManifestEntry(entry.TaskId, entry.EventVersion, entry.UpdatedAtUtc)
-            {
-                UserId = remoteManifest.UserId,
-                DeviceId = remoteManifest.DeviceId,
-            })
-            .ToArray();
-
-        var comparison = await _coordinator
-            .CompareManifestAsync(comparisonManifest, localPeer.UserId, localPeer.DeviceId)
-            .WaitAsync(cancellationToken)
+        var comparison = await CompareRemoteManifestAsync(remoteManifest, localPeer, cancellationToken)
             .ConfigureAwait(false);
 
         return new SyncTaskRequest(
@@ -97,18 +86,7 @@ public sealed class SyncExchangeService : ISyncExchangeService
         ArgumentNullException.ThrowIfNull(remoteManifest);
         ArgumentNullException.ThrowIfNull(localPeer);
 
-        var comparisonManifest = remoteManifest.Entries
-            .Where(entry => !entry.Deleted)
-            .Select(entry => new TaskManifestEntry(entry.TaskId, entry.EventVersion, entry.UpdatedAtUtc)
-            {
-                UserId = remoteManifest.UserId,
-                DeviceId = remoteManifest.DeviceId,
-            })
-            .ToArray();
-
-        var comparison = await _coordinator
-            .CompareManifestAsync(comparisonManifest, localPeer.UserId, localPeer.DeviceId)
-            .WaitAsync(cancellationToken)
+        var comparison = await CompareRemoteManifestAsync(remoteManifest, localPeer, cancellationToken)
             .ConfigureAwait(false);
 
         var request = new SyncTaskRequest(
@@ -175,6 +153,29 @@ public sealed class SyncExchangeService : ISyncExchangeService
         return string.IsNullOrWhiteSpace(task.UserId)
             && string.Equals(task.DeviceId, request.DeviceId, StringComparison.Ordinal);
     }
+
+    private async Task<ManifestComparisonResult> CompareRemoteManifestAsync(
+        SyncManifest remoteManifest,
+        SyncPeerContext localPeer,
+        CancellationToken cancellationToken)
+    {
+        var comparisonManifest = remoteManifest.Entries
+            .Where(entry => !entry.Deleted)
+            .Select(entry => ToLegacyManifestEntry(entry, remoteManifest))
+            .ToArray();
+
+        return await _coordinator
+            .CompareManifestAsync(comparisonManifest, localPeer.UserId, localPeer.DeviceId)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static TaskManifestEntry ToLegacyManifestEntry(SyncManifestEntry entry, SyncManifest manifest)
+        => new(entry.TaskId, entry.EventVersion, entry.UpdatedAtUtc)
+        {
+            UserId = manifest.UserId,
+            DeviceId = manifest.DeviceId,
+        };
 
     private static bool MatchesBatchScope(TaskItem task, SyncTaskBatch batch)
     {

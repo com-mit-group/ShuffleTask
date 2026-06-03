@@ -11,12 +11,11 @@ public sealed class SyncTaskBatch
         IEnumerable<TaskItem> tasks,
         IEnumerable<string>? deletedTaskIds = null)
     {
-        PeerId = string.IsNullOrWhiteSpace(peerId) ? string.Empty : peerId.Trim();
-        UserId = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
-        DeviceId = string.IsNullOrWhiteSpace(deviceId) ? string.Empty : deviceId.Trim();
+        PeerId = SyncIdentity.Required(peerId);
+        UserId = SyncIdentity.Optional(userId);
+        DeviceId = SyncIdentity.Required(deviceId);
         Tasks = tasks?.Select(TaskItem.Clone).ToArray() ?? Array.Empty<TaskItem>();
-        DeletedTaskIds = deletedTaskIds?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToArray()
-            ?? Array.Empty<string>();
+        DeletedTaskIds = SyncIdentity.DistinctIds(deletedTaskIds);
     }
 
     public string PeerId { get; }
