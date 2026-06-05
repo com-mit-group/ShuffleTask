@@ -139,6 +139,7 @@ internal sealed class WindowsTrayIconManager : IDisposable
         {
             RemoveTrayIcon();
             _window?.Close();
+            MauiApplication.Current?.Quit();
         });
 
         if (!queued)
