@@ -156,6 +156,7 @@ public static partial class MauiProgram
             return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
+        builder.Services.AddSingleton<ISyncExchangeService, SyncExchangeService>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
 
         builder.Services.AddSingleton<TaskStartedAsyncHandler>();

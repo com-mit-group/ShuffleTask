@@ -179,8 +179,9 @@ public class HandlersAndEventsTests
             Assert.That(started.Minutes, Is.EqualTo(15));
             Assert.That(timeUp.DeviceId, Is.EqualTo("device-a"));
             Assert.That(announced.Manifest?.Count(), Is.EqualTo(1));
-            Assert.That(request.Manifest?.Count(), Is.EqualTo(1));
+            Assert.That(request.RequestedTaskIds, Is.EquivalentTo(new[] { "task-1" }));
             Assert.That(batch.Tasks?.Count(), Is.EqualTo(1));
+            Assert.That(batch.Batch?.Tasks.Count, Is.EqualTo(1));
             Assert.That(settingsUpdated.Settings.FocusMinutes, Is.EqualTo(42));
         });
     }
