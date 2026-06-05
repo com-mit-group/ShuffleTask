@@ -1,20 +1,12 @@
 namespace ShuffleTask.Application.Models;
 
-public sealed class SyncTaskRequest
+public sealed class SyncTaskRequest : SyncPeerMessage
 {
     public SyncTaskRequest(string peerId, string? userId, string deviceId, IEnumerable<string> requestedTaskIds)
+        : base(peerId, userId, deviceId)
     {
-        PeerId = SyncIdentity.Required(peerId);
-        UserId = SyncIdentity.Optional(userId);
-        DeviceId = SyncIdentity.Required(deviceId);
         RequestedTaskIds = SyncIdentity.DistinctIds(requestedTaskIds);
     }
-
-    public string PeerId { get; }
-
-    public string? UserId { get; }
-
-    public string DeviceId { get; }
 
     public IReadOnlyCollection<string> RequestedTaskIds { get; }
 }

@@ -2,7 +2,7 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Models;
 
-public sealed class SyncTaskBatch
+public sealed class SyncTaskBatch : SyncPeerMessage
 {
     public SyncTaskBatch(
         string peerId,
@@ -10,19 +10,11 @@ public sealed class SyncTaskBatch
         string deviceId,
         IEnumerable<TaskItem> tasks,
         IEnumerable<string>? deletedTaskIds = null)
+        : base(peerId, userId, deviceId)
     {
-        PeerId = SyncIdentity.Required(peerId);
-        UserId = SyncIdentity.Optional(userId);
-        DeviceId = SyncIdentity.Required(deviceId);
         Tasks = tasks?.Select(TaskItem.Clone).ToArray() ?? Array.Empty<TaskItem>();
         DeletedTaskIds = SyncIdentity.DistinctIds(deletedTaskIds);
     }
-
-    public string PeerId { get; }
-
-    public string? UserId { get; }
-
-    public string DeviceId { get; }
 
     public IReadOnlyCollection<TaskItem> Tasks { get; }
 

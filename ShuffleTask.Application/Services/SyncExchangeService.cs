@@ -120,7 +120,7 @@ public sealed class SyncExchangeService : ISyncExchangeService
             }
 
             var existing = await _storage.GetTaskAsync(task.Id).WaitAsync(cancellationToken).ConfigureAwait(false);
-            var incoming = NormalizeIncoming(task, existing);
+            var incoming = TaskSyncMerge.NormalizeIncoming(task, existing);
 
             if (existing is null)
             {
@@ -129,7 +129,7 @@ public sealed class SyncExchangeService : ISyncExchangeService
                 continue;
             }
 
-            if (IsStale(incoming, existing))
+            if (TaskSyncMerge.IsStaleBatchTask(incoming, existing))
             {
                 ignored.Add(incoming.Id);
                 continue;
@@ -187,62 +187,4 @@ public sealed class SyncExchangeService : ISyncExchangeService
         return string.IsNullOrWhiteSpace(task.UserId);
     }
 
-    private static bool IsStale(TaskItem incoming, TaskItem existing)
-    {
-        if (incoming.EventVersion > existing.EventVersion)
-        {
-            return false;
-        }
-
-        if (incoming.EventVersion < existing.EventVersion)
-        {
-            return true;
-        }
-
-        if (incoming.UpdatedAt != default && existing.UpdatedAt != default)
-        {
-            return incoming.UpdatedAt <= existing.UpdatedAt;
-        }
-
-        return true;
-    }
-
-    private static TaskItem NormalizeIncoming(TaskItem task, TaskItem? existing)
-    {
-        var normalized = task.Clone();
-
-        if (string.IsNullOrWhiteSpace(normalized.Id))
-        {
-            normalized.Id = existing?.Id ?? Guid.NewGuid().ToString("n");
-        }
-
-        if (normalized.CreatedAt == default)
-        {
-            normalized.CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow;
-        }
-
-        if (normalized.UpdatedAt == default)
-        {
-            normalized.UpdatedAt = existing?.UpdatedAt ?? DateTime.UtcNow;
-        }
-
-        if (normalized.EventVersion <= 0)
-        {
-            normalized.EventVersion = (existing?.EventVersion ?? 0) + 1;
-        }
-
-        if (!string.IsNullOrWhiteSpace(normalized.UserId))
-        {
-            normalized.DeviceId = null;
-        }
-        else
-        {
-            normalized.UserId = existing?.UserId;
-            normalized.DeviceId = string.IsNullOrWhiteSpace(normalized.DeviceId)
-                ? existing?.DeviceId ?? Environment.MachineName
-                : normalized.DeviceId.Trim();
-        }
-
-        return normalized;
-    }
 }

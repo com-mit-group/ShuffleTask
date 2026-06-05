@@ -2,7 +2,7 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Application.Models;
 
-public sealed class SyncManifest
+public sealed class SyncManifest : SyncPeerMessage
 {
     public SyncManifest(
         string peerId,
@@ -10,19 +10,11 @@ public sealed class SyncManifest
         string deviceId,
         int schemaVersion,
         IEnumerable<SyncManifestEntry> entries)
+        : base(peerId, userId, deviceId)
     {
-        PeerId = SyncIdentity.Required(peerId);
-        UserId = SyncIdentity.Optional(userId);
-        DeviceId = SyncIdentity.Required(deviceId);
         SchemaVersion = schemaVersion;
         Entries = entries?.ToArray() ?? Array.Empty<SyncManifestEntry>();
     }
-
-    public string PeerId { get; }
-
-    public string? UserId { get; }
-
-    public string DeviceId { get; }
 
     public int SchemaVersion { get; }
 
