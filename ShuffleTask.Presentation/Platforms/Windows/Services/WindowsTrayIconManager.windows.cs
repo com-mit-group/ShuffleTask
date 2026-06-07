@@ -2,14 +2,23 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using WinRT.Interop;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Presentation.Services;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Presentation.Platforms.Windows.Services;
 
 internal sealed class WindowsTrayIconManager : IDisposable
 {
+    private readonly IStorageService _storage;
+    private readonly AppSettings _settings;
+    private readonly ShuffleCoordinatorService _coordinator;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<WindowsTrayIconManager>? _logger;
     private readonly Icon _icon;
     private readonly bool _ownsIcon;
     private readonly uint _trayCallbackMessage;
@@ -22,9 +31,20 @@ internal sealed class WindowsTrayIconManager : IDisposable
     private bool _initialized;
     private bool _allowClose;
     private bool _hasShownBackgroundTip;
+    private bool _exitRequested;
 
-    public WindowsTrayIconManager()
+    public WindowsTrayIconManager(
+        IStorageService storage,
+        AppSettings settings,
+        ShuffleCoordinatorService coordinator,
+        TimeProvider clock,
+        ILogger<WindowsTrayIconManager>? logger = null)
     {
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _logger = logger;
         (_icon, _ownsIcon) = LoadIcon();
         _trayCallbackMessage = WM_APP + 1000;
         _wndProcDelegate = WindowProcedure;
@@ -97,8 +117,17 @@ internal sealed class WindowsTrayIconManager : IDisposable
         });
     }
 
-    private void ExitApplication()
+    private async void ExitApplication()
     {
+        if (_exitRequested)
+        {
+            return;
+        }
+
+        _exitRequested = true;
+        _allowClose = true;
+        await StopBackgroundActivityAsync().ConfigureAwait(false);
+
         if (_window == null)
         {
             MauiApplication.Current?.Quit();
@@ -106,12 +135,43 @@ internal sealed class WindowsTrayIconManager : IDisposable
             return;
         }
 
-        _allowClose = true;
-        _ = _window.DispatcherQueue.TryEnqueue(() =>
+        bool queued = _window.DispatcherQueue.TryEnqueue(() =>
         {
             RemoveTrayIcon();
             _window?.Close();
+            MauiApplication.Current?.Quit();
         });
+
+        if (!queued)
+        {
+            RemoveTrayIcon();
+            MauiApplication.Current?.Quit();
+            Dispose();
+        }
+    }
+
+    private async Task StopBackgroundActivityAsync()
+    {
+        _settings.BackgroundActivityEnabled = false;
+        _settings.Touch(_clock);
+
+        try
+        {
+            await _storage.SetSettingsAsync(_settings).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to persist disabled background activity before tray exit.");
+        }
+
+        try
+        {
+            await _coordinator.ApplyBackgroundActivityChangeAsync(false).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to stop background activity before tray exit.");
+        }
     }
 
     private void ShowBackgroundTip()
