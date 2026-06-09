@@ -135,7 +135,7 @@ public class PeerSyncCoordinatorTests
     }
 
     [Test]
-    public async Task CompareManifestAsync_ReusesComparisonForSameManifest()
+    public async Task CompareManifestAsync_ReusesComparisonForSameRemoteAndLocalManifest()
     {
         var storage = new StorageServiceStub();
         await storage.InitializeAsync();
@@ -147,12 +147,31 @@ public class PeerSyncCoordinatorTests
 
         var coordinator = new PeerSyncCoordinator(storage);
 
-        var requestIds = await coordinator.GetTasksToRequestAsync(remoteManifest);
-        var advertiseIds = await coordinator.GetTasksToAdvertiseAsync(remoteManifest);
+        var first = await coordinator.CompareManifestAsync(remoteManifest);
+        var second = await coordinator.CompareManifestAsync(remoteManifest);
 
-        Assert.That(requestIds, Is.EquivalentTo(new[] { "remote-only" }));
-        Assert.That(advertiseIds, Is.Empty);
-        Assert.That(storage.GetTasksCallCount, Is.EqualTo(1));
+        Assert.That(second, Is.SameAs(first));
+        Assert.That(second.GetTasksToRequest(), Is.EquivalentTo(new[] { "remote-only" }));
+        Assert.That(second.GetTasksToAdvertise(), Is.Empty);
+        Assert.That(storage.GetTasksCallCount, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task CompareManifestAsync_RecomputesWhenLocalTasksChange()
+    {
+        var storage = new StorageServiceStub();
+        await storage.InitializeAsync();
+
+        var coordinator = new PeerSyncCoordinator(storage);
+        var remoteManifest = Array.Empty<TaskManifestEntry>();
+
+        var beforeMutation = await coordinator.CompareManifestAsync(remoteManifest);
+        await storage.AddTaskAsync(CreateTask("local-after-first-compare", version: 1, updatedAt: BaseTimeUtc));
+        var afterMutation = await coordinator.CompareManifestAsync(remoteManifest);
+
+        Assert.That(beforeMutation.GetTasksToAdvertise(), Is.Empty);
+        Assert.That(afterMutation, Is.Not.SameAs(beforeMutation));
+        Assert.That(afterMutation.GetTasksToAdvertise(), Is.EquivalentTo(new[] { "local-after-first-compare" }));
     }
 
     private static TaskItem CreateTask(string id, int version, DateTime updatedAt)
