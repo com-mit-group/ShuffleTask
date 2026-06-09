@@ -28,7 +28,8 @@ public class PeerSyncCoordinator
         ArgumentNullException.ThrowIfNull(remoteManifest);
 
         var remoteEntries = remoteManifest.ToList();
-        var cacheKey = ManifestComparisonCacheKey.From(remoteEntries, userId, deviceId);
+        var localManifest = await LoadLocalManifestAsync(userId, deviceId).ConfigureAwait(false);
+        var cacheKey = ManifestComparisonCacheKey.From(remoteEntries, localManifest, userId, deviceId);
 
         await _comparisonLock.WaitAsync().ConfigureAwait(false);
         try
@@ -38,8 +39,7 @@ public class PeerSyncCoordinator
                 return _comparison;
             }
 
-            var comparison = await CompareManifestInternalAsync(remoteEntries, userId, deviceId)
-                .ConfigureAwait(false);
+            var comparison = CompareManifestInternal(remoteEntries, localManifest, userId, deviceId);
 
             _comparisonKey = cacheKey;
             _comparison = comparison;
@@ -70,8 +70,9 @@ public class PeerSyncCoordinator
         return comparison.GetTasksToAdvertise();
     }
 
-    private async Task<ManifestComparisonResult> CompareManifestInternalAsync(
+    private static ManifestComparisonResult CompareManifestInternal(
         IReadOnlyCollection<TaskManifestEntry> remoteManifest,
+        IReadOnlyCollection<TaskManifestEntry> localManifest,
         string? userId,
         string deviceId)
     {
@@ -88,8 +89,6 @@ public class PeerSyncCoordinator
             .Where(idFilterPredicate)
             .GroupBy(entry => entry.TaskId)
             .ToDictionary(group => group.Key, group => group.First());
-
-        var localManifest = await LoadLocalManifestAsync(userId, deviceId).ConfigureAwait(false);
 
         var missing = new List<TaskManifestEntry>();
         var remoteNewer = new List<TaskManifestEntry>();
@@ -208,16 +207,22 @@ public class ManifestComparisonResult
 
 internal sealed class ManifestComparisonCacheKey : IEquatable<ManifestComparisonCacheKey>
 {
-    public ManifestComparisonCacheKey(string? userId, string deviceId, IReadOnlyList<ManifestEntryKey> remoteEntries)
+    public ManifestComparisonCacheKey(
+        string? userId,
+        string deviceId,
+        IReadOnlyList<ManifestEntryKey> remoteEntries,
+        IReadOnlyList<ManifestEntryKey> localEntries)
     {
         UserId = userId;
         DeviceId = deviceId;
         RemoteEntries = remoteEntries;
+        LocalEntries = localEntries;
     }
 
     public string? UserId { get; }
     public string DeviceId { get; }
     public IReadOnlyList<ManifestEntryKey> RemoteEntries { get; }
+    public IReadOnlyList<ManifestEntryKey> LocalEntries { get; }
 
     public bool Equals(ManifestComparisonCacheKey? other)
     {
@@ -233,7 +238,8 @@ internal sealed class ManifestComparisonCacheKey : IEquatable<ManifestComparison
 
         return string.Equals(UserId, other.UserId, StringComparison.Ordinal)
             && string.Equals(DeviceId, other.DeviceId, StringComparison.Ordinal)
-            && RemoteEntries.SequenceEqual(other.RemoteEntries);
+            && RemoteEntries.SequenceEqual(other.RemoteEntries)
+            && LocalEntries.SequenceEqual(other.LocalEntries);
     }
 
     public override bool Equals(object? obj) => Equals(obj as ManifestComparisonCacheKey);
@@ -249,22 +255,34 @@ internal sealed class ManifestComparisonCacheKey : IEquatable<ManifestComparison
             hash.Add(entry);
         }
 
+        foreach (var entry in LocalEntries)
+        {
+            hash.Add(entry);
+        }
+
         return hash.ToHashCode();
     }
 
     public static ManifestComparisonCacheKey From(
         IEnumerable<TaskManifestEntry> remoteManifest,
+        IEnumerable<TaskManifestEntry> localManifest,
         string? userId,
         string deviceId)
     {
-        var entries = remoteManifest
+        var remoteEntries = BuildEntryKeys(remoteManifest);
+        var localEntries = BuildEntryKeys(localManifest);
+
+        return new ManifestComparisonCacheKey(userId, deviceId, remoteEntries, localEntries);
+    }
+
+    private static IReadOnlyList<ManifestEntryKey> BuildEntryKeys(IEnumerable<TaskManifestEntry> manifest)
+    {
+        return manifest
             .Select(entry => new ManifestEntryKey(entry.TaskId, entry.EventVersion, entry.UpdatedAt))
             .OrderBy(entry => entry.TaskId)
             .ThenBy(entry => entry.EventVersion)
             .ThenBy(entry => entry.UpdatedAt)
             .ToArray();
-
-        return new ManifestComparisonCacheKey(userId, deviceId, entries);
     }
 }
 
