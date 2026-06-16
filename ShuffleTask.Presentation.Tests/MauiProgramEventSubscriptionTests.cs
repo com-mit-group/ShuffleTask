@@ -15,25 +15,12 @@ public class MauiProgramEventSubscriptionTests
         var networkSyncService = File.ReadAllText(
             Path.Combine(repositoryRoot, "ShuffleTask.Application", "Services", "NetworkSyncService.cs"));
 
-        var subscriptionMarker = $"SubscribeToEventType(new {handlerType}";
-        var subscriptionCount = CountOccurrences(mauiProgram, subscriptionMarker)
-            + CountOccurrences(networkSyncService, subscriptionMarker);
+        var subscriptionCount = new[] { mauiProgram, networkSyncService }
+            .SelectMany(source => source.Split('\n'))
+            .Count(line => line.Contains("SubscribeToEventType", StringComparison.Ordinal)
+                && line.Contains(handlerType, StringComparison.Ordinal));
 
         Assert.That(subscriptionCount, Is.EqualTo(1),
             $"{handlerType} must be subscribed exactly once across application startup wiring.");
-    }
-
-    private static int CountOccurrences(string source, string value)
-    {
-        var count = 0;
-        var startIndex = 0;
-
-        while ((startIndex = source.IndexOf(value, startIndex, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            startIndex += value.Length;
-        }
-
-        return count;
     }
 }
