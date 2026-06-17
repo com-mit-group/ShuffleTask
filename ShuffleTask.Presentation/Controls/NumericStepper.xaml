@@ -5,7 +5,7 @@
              x:Class="ShuffleTask.Controls.NumericStepper"
              x:Name="Root"
              HorizontalOptions="Start">
-    <Grid Padding="2"
+    <Grid Padding="3"
           HorizontalOptions="Start">
         <Border StrokeShape="RoundRectangle 8"
                 StrokeThickness="1"
