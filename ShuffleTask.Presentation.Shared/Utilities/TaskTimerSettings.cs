@@ -3,7 +3,7 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Presentation.Utilities;
 
-internal readonly record struct EffectiveTimerSettings(
+public readonly record struct EffectiveTimerSettings(
     TimerMode Mode,
     int ReminderMinutes,
     int FocusMinutes,
@@ -13,7 +13,7 @@ internal readonly record struct EffectiveTimerSettings(
     public int InitialMinutes => Mode == TimerMode.Pomodoro ? FocusMinutes : ReminderMinutes;
 }
 
-internal static class TaskTimerSettings
+public static class TaskTimerSettings
 {
     public static EffectiveTimerSettings Resolve(TaskItem task, AppSettings settings)
     {

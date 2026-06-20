@@ -1,13 +1,33 @@
-using System;
 using System.Collections.Concurrent;
-using System.Threading.Tasks;
+
+namespace Microsoft.Maui.ApplicationModel
+{
+    public static class MainThread
+    {
+        public static bool IsMainThread => true;
+
+        public static void BeginInvokeOnMainThread(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+            action();
+        }
+
+        public static Task InvokeOnMainThreadAsync(Func<Task> function)
+        {
+            ArgumentNullException.ThrowIfNull(function);
+            return function();
+        }
+    }
+}
 
 namespace Microsoft.Maui.Storage
 {
     public interface IPreferences
     {
         T Get<T>(string key, T defaultValue);
+
         void Set<T>(string key, T value);
+
         void Remove(string key);
     }
 
@@ -17,12 +37,9 @@ namespace Microsoft.Maui.Storage
 
         public T Get<T>(string key, T defaultValue)
         {
-            if (_values.TryGetValue(key, out var value) && value is T typed)
-            {
-                return typed;
-            }
-
-            return defaultValue;
+            return _values.TryGetValue(key, out var value) && value is T typed
+                ? typed
+                : defaultValue;
         }
 
         public void Set<T>(string key, T value)
@@ -45,18 +62,9 @@ namespace Microsoft.Maui.Storage
     {
         public static IPreferences Default { get; } = new InMemoryPreferences();
 
-        public static void Clear() => (Default as InMemoryPreferences)?.Clear();
-    }
-}
-
-namespace Microsoft.Maui.ApplicationModel
-{
-    public static class MainThread
-    {
-        public static Task InvokeOnMainThreadAsync(Func<Task> function)
+        public static void Clear()
         {
-            ArgumentNullException.ThrowIfNull(function);
-            return function();
+            (Default as InMemoryPreferences)?.Clear();
         }
     }
 }

@@ -1,6 +1,6 @@
 namespace ShuffleTask.Presentation;
 
-internal static class PreferenceKeys
+public static class PreferenceKeys
 {
     public const string CurrentTaskId = "pref.currentTaskId";
     public const string TimerDurationSeconds = "pref.timerDurationSecs";

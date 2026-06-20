@@ -6,14 +6,14 @@ using System.Text.Json;
 
 namespace ShuffleTask.Presentation.Utilities;
 
-internal static class PersistedTimerState
+public static class PersistedTimerState
 {
-    internal const string TimerEnvelopeKey = "pref.timerEnvelope";
-    internal const string TimerQuarantinePrefix = "pref.timerEnvelope.quarantine.";
+    public const string TimerEnvelopeKey = "pref.timerEnvelope";
+    public const string TimerQuarantinePrefix = "pref.timerEnvelope.quarantine.";
     private const int CurrentSchemaVersion = 1;
 
 #if TEST
-    internal static Action<string>? FaultInjector { get; set; }
+    public static Action<string>? FaultInjector { get; set; }
 #endif
 
     public static bool TryGetActiveTimer(

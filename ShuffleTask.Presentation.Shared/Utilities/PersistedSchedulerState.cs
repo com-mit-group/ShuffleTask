@@ -5,10 +5,10 @@ using System.Text.Json;
 
 namespace ShuffleTask.Presentation.Utilities;
 
-internal static class PersistedSchedulerState
+public static class PersistedSchedulerState
 {
-    internal const string SchedulerEnvelopeKey = "pref.schedulerEnvelope";
-    internal const string SchedulerQuarantinePrefix = "pref.schedulerEnvelope.quarantine.";
+    public const string SchedulerEnvelopeKey = "pref.schedulerEnvelope";
+    public const string SchedulerQuarantinePrefix = "pref.schedulerEnvelope.quarantine.";
     private const int CurrentSchemaVersion = 1;
 
     public static void SavePendingShuffle(string? taskId, DateTimeOffset scheduledAt, IShuffleLogger? logger = null)
