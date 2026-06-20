@@ -86,6 +86,7 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         await PauseAsync().ConfigureAwait(false);
+        await _notifications.CancelAllAsync().ConfigureAwait(false);
         _backgroundService.Stop();
     }
 
