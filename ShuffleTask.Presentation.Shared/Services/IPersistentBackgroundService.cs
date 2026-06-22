@@ -1,0 +1,19 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace ShuffleTask.Presentation.Services;
+
+// Host-provided background scheduler contract consumed by shared presentation services.
+public interface IPersistentBackgroundService
+{
+    Task InitializeAsync();
+
+    Task ScheduleAsync(TimeSpan delay, CancellationToken cancellationToken, Func<Task> callback);
+
+    void Schedule(DateTimeOffset when, string? taskId);
+
+    void Cancel();
+
+    void Stop();
+}

@@ -1,0 +1,983 @@
+using System.Diagnostics;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Utilities;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
+using ShuffleTask.ViewModels;
+using Microsoft.Maui.ApplicationModel;
+
+namespace ShuffleTask.Presentation.Services;
+
+// Host-neutral coordinator for reusable shuffle timer and notification orchestration.
+public class ShuffleCoordinatorService : IDisposable
+{
+    private readonly IStorageService _storage;
+    private readonly ISchedulerService _scheduler;
+    private readonly INotificationService _notifications;
+    private readonly AppSettings _settings;
+    private readonly INetworkSyncService? _networkSync;
+    private readonly TimeProvider _clock;
+    private readonly IPersistentBackgroundService _backgroundService;
+
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _initLock = new();
+    private Task? _initializationTask;
+    private CancellationTokenSource? _timerCts;
+    private WeakReference<DashboardViewModel>? _dashboardRef;
+    private bool _isPaused;
+    private bool _disposed;
+
+    public ShuffleCoordinatorService(
+        IStorageService storage,
+        ISchedulerService scheduler,
+        INotificationService notifications,
+        AppSettings settings,
+        TimeProvider clock,
+        IPersistentBackgroundService backgroundService,
+        INetworkSyncService? networkSync = null)
+    {
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _backgroundService = backgroundService ?? throw new ArgumentNullException(nameof(backgroundService));
+        _networkSync = networkSync;
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            CancelTimerInternal();
+            _gate.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    public void RegisterDashboard(DashboardViewModel dashboard)
+    {
+        _dashboardRef = new WeakReference<DashboardViewModel>(dashboard);
+    }
+
+    public Task StartAsync() => ResumeInternalAsync();
+
+    public Task ResumeAsync() => ResumeInternalAsync();
+
+    public async Task ApplyBackgroundActivityChangeAsync(bool enabled)
+    {
+        if (enabled)
+        {
+            await ResumeInternalAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await PauseAsync().ConfigureAwait(false);
+        await _notifications.CancelAllAsync().ConfigureAwait(false);
+        _backgroundService.Stop();
+    }
+
+    private async Task ResumeInternalAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        await RunWithGateAsync(() =>
+        {
+            _isPaused = false;
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        await ScheduleNextShuffleAsync().ConfigureAwait(false);
+    }
+
+    public async Task PauseAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        await RunWithGateAsync(() =>
+        {
+            _isPaused = true;
+            CancelTimerInternal();
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+    }
+
+    public void SuspendInProcessTimer()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        CancelInProcessTimer();
+    }
+
+    public async Task RefreshAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            CancelTimerInternal();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (!_isPaused && IsBackgroundActivityEnabled(_settings))
+        {
+            await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+    }
+
+    private Task EnsureInitializedAsync()
+    {
+        lock (_initLock)
+        {
+            _initializationTask ??= InitializeAsync();
+            return _initializationTask;
+        }
+    }
+
+    private Task RunWithGateAsync(Func<Task> action)
+    {
+        return RunWithGateAsync(async () =>
+        {
+            await action().ConfigureAwait(false);
+            return true;
+        });
+    }
+
+    private async Task<T> RunWithGateAsync<T>(Func<Task<T>> action)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task InitializeAsync()
+    {
+        await _storage.InitializeAsync().ConfigureAwait(false);
+        await _notifications.InitializeAsync().ConfigureAwait(false);
+        await _backgroundService.InitializeAsync().ConfigureAwait(false);
+    }
+
+    private async Task ScheduleNextShuffleAsync()
+    {
+        if (_isPaused)
+        {
+            return;
+        }
+
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            CancelTimerInternal();
+            return;
+        }
+
+        await RunWithGateAsync(() => ScheduleNextShuffleUnsafeAsync()).ConfigureAwait(false);
+    }
+
+    private async Task ScheduleNextShuffleUnsafeAsync()
+    {
+        CancelTimerInternal();
+
+        var settings = _settings;
+        if (HandleAutoShuffleDisabled(settings))
+        {
+            return;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+        ResetDailyCountIfNeeded(now);
+
+        if (TryScheduleAfterDailyLimit(settings, now))
+        {
+            return;
+        }
+
+        if (await TryResumePendingShuffleAsync(settings, now).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
+    }
+
+    private bool HandleAutoShuffleDisabled(AppSettings settings)
+    {
+        if (ShouldAutoShuffle(settings))
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+        return true;
+    }
+
+    private bool TryScheduleAfterDailyLimit(AppSettings settings, DateTimeOffset now)
+    {
+        if (!HasReachedDailyLimit(settings, now))
+        {
+            return false;
+        }
+
+        DateTimeOffset resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+        StartTimer(resumeAt, null);
+        return true;
+    }
+
+    private async Task<bool> TryResumePendingShuffleAsync(AppSettings settings, DateTimeOffset now)
+    {
+        var pending = LoadPendingShuffle();
+        if (!pending.NextAt.HasValue)
+        {
+            return false;
+        }
+
+        DateTimeOffset target = NormalizePendingTarget(pending.NextAt.Value, now);
+        if (await TryRestorePendingTaskAsync(pending.TaskId, target, settings).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        StartTimer(target, null);
+        return true;
+    }
+
+    private async Task ScheduleFromAvailableTasksAsync(AppSettings settings, DateTimeOffset now)
+    {
+        var tasks = await LoadAvailableTasksAsync(settings).ConfigureAwait(false);
+        if (HandleEmptyTaskList(tasks, settings, now))
+        {
+            return;
+        }
+
+        DateTimeOffset target = ComputeNextTarget(now, settings);
+        if (TryScheduleCandidate(tasks, settings, target))
+        {
+            return;
+        }
+
+        if (ShouldDelayForWeekend(tasks, target))
+        {
+            DateTimeOffset resumeAt = TimeWindowService.NextWeekdayStart(target, settings.WorkStart);
+            resumeAt = EnsureAllowed(resumeAt, settings);
+            StartTimer(resumeAt, null);
+            return;
+        }
+
+        DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(Math.Max(5, settings.MinGapMinutes)), settings);
+        StartTimer(retryAt, null);
+    }
+
+    private static DateTimeOffset NormalizePendingTarget(DateTimeOffset nextAt, DateTimeOffset now)
+    {
+        return nextAt <= now ? now : nextAt;
+    }
+
+    private async Task<bool> TryRestorePendingTaskAsync(string taskId, DateTimeOffset target, AppSettings settings)
+    {
+        if (string.IsNullOrEmpty(taskId))
+        {
+            return false;
+        }
+
+        var pendingTask = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (pendingTask != null && IsTaskValid(pendingTask, settings, target))
+        {
+            StartTimer(target, taskId);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<IReadOnlyList<TaskItem>> LoadAvailableTasksAsync(AppSettings settings)
+    {
+        var network = settings.Network;
+        return await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
+    }
+
+    private bool HandleEmptyTaskList(IReadOnlyCollection<TaskItem> tasks, AppSettings settings, DateTimeOffset now)
+    {
+        if (tasks.Count > 0)
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+        var retryAtEmpty = EnsureAllowed(now.AddMinutes(30), settings);
+        StartTimer(retryAtEmpty, null);
+        return true;
+    }
+
+    private bool TryScheduleCandidate(IReadOnlyList<TaskItem> tasks, AppSettings settings, DateTimeOffset target)
+    {
+        var candidate = _scheduler.PickNextTask(tasks, settings, target);
+        if (candidate == null)
+        {
+            return false;
+        }
+
+        StartTimer(target, candidate.Id);
+        return true;
+    }
+
+    private DateTimeOffset ComputeNextTarget(DateTimeOffset now, AppSettings settings)
+    {
+        TimeSpan gap = _scheduler.NextGap(settings, now);
+        DateTimeOffset target = now + gap;
+        if (target <= now)
+        {
+            target = now.AddMinutes(1);
+        }
+
+        target = EnsureAllowed(target, settings);
+        if (target <= now)
+        {
+            target = now.AddMinutes(1);
+        }
+
+        return target;
+    }
+
+    private void StartTimer(DateTimeOffset scheduledAt, string? taskId)
+    {
+        CancelTimerInternal();
+        PersistPendingShuffle(taskId, scheduledAt);
+        SchedulePersistentTimer(scheduledAt, taskId);
+        ScheduleInProcessTimer(scheduledAt, taskId);
+    }
+
+    private void SchedulePersistentTimer(DateTimeOffset scheduledAt, string? taskId)
+    {
+        try
+        {
+            _backgroundService.Schedule(scheduledAt, taskId);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShuffleCoordinatorService persistent schedule error: {ex}");
+        }
+    }
+
+    private void ScheduleInProcessTimer(DateTimeOffset scheduledAt, string? taskId)
+    {
+        var cts = new CancellationTokenSource();
+        _timerCts = cts;
+
+        TimeSpan delay = scheduledAt - GetCurrentInstant();
+        if (delay < TimeSpan.Zero)
+        {
+            delay = TimeSpan.Zero;
+        }
+
+        _ = _backgroundService.ScheduleAsync(delay, cts.Token, async () =>
+        {
+            if (cts.Token.IsCancellationRequested)
+            {
+                Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(taskId))
+            {
+                await OnTimerReevaluateAsync(cts).ConfigureAwait(false);
+            }
+            else
+            {
+                await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+            }
+        });
+    }
+
+    private async Task OnTimerReevaluateAsync(CancellationTokenSource cts)
+    {
+        CancelPersistentSchedule();
+
+        await RunWithGateAsync(() =>
+        {
+            ClearTimerReferenceIfCurrent(cts);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        if (_isPaused)
+        {
+            return;
+        }
+
+        await ScheduleNextShuffleAsync().ConfigureAwait(false);
+    }
+
+    private async Task ExecuteShuffleAsync(string taskId, CancellationTokenSource cts)
+    {
+        CancelPersistentSchedule();
+
+        bool executed = false;
+
+        await RunWithGateAsync(async () =>
+        {
+            executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        if (executed && !_isPaused)
+        {
+            await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void ClearTimerReferenceIfCurrent(CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_timerCts, cts))
+        {
+            _timerCts = null;
+        }
+    }
+
+    public async Task HandlePersistentTriggerAsync()
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            CancelTimerInternal();
+            return;
+        }
+
+        if (Volatile.Read(ref _timerCts) != null)
+        {
+            CancelPersistentSchedule();
+            return;
+        }
+
+        bool paused;
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            paused = _isPaused;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (paused)
+        {
+            CancelPersistentSchedule();
+            return;
+        }
+
+        var (scheduledAt, taskId) = LoadPendingShuffle();
+        if (scheduledAt.HasValue)
+        {
+            DateTimeOffset now = GetCurrentInstant();
+            if (scheduledAt.Value - now > TimeSpan.FromMinutes(1))
+            {
+                try
+                {
+                    _backgroundService.Schedule(scheduledAt.Value, string.IsNullOrEmpty(taskId) ? null : taskId);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"ShuffleCoordinatorService persistent reschedule error: {ex}");
+                }
+
+                return;
+            }
+        }
+
+        if (string.IsNullOrEmpty(taskId))
+        {
+            CancelPersistentSchedule();
+            await ScheduleNextShuffleAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await NotifyExpiredTimerAsync().ConfigureAwait(false);
+            using var cts = new CancellationTokenSource();
+            await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+        }
+    }
+
+    private async Task NotifyExpiredTimerAsync()
+    {
+        if (!IsBackgroundActivityEnabled(_settings))
+        {
+            return;
+        }
+
+        if (!PersistedTimerState.TryGetActiveTimer(
+                out _,
+                out _,
+                out bool expired,
+                out _,
+                out DateTimeOffset expiresAt))
+        {
+            return;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+        if (!expired && expiresAt - now > TimeSpan.FromSeconds(5))
+        {
+            return;
+        }
+
+        var settings = _settings;
+        const string TimeUpTitle = "Time's up";
+        const string TimeUpMessage = "Shuffling a new task...";
+        await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishTimeUpNotificationAsync().ConfigureAwait(false);
+        }
+        PersistedTimerState.Clear();
+    }
+
+    private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
+    {
+        if (ReferenceEquals(_timerCts, cts))
+        {
+            _timerCts = null;
+        }
+
+        if (_isPaused)
+        {
+            return false;
+        }
+
+        var settings = _settings;
+        if (!ShouldAutoShuffle(settings))
+        {
+            ClearPendingShuffle();
+            return false;
+        }
+
+        DateTimeOffset now = GetCurrentInstant();
+
+        // Guard: Prevent auto-shuffle from replacing an already active task.
+        // This ensures that once a task is active, it remains active until the user
+        // explicitly marks it done, snoozes it, or manually shuffles to a different task.
+        // This guard only affects automatic shuffles; manual shuffles via UI are not blocked.
+        if (HasActiveTask())
+        {
+            Debug.WriteLine("ShuffleCoordinatorService: Auto-shuffle blocked - active task already exists");
+            DateTimeOffset resumeAt = ComputeNextTarget(now, settings);
+            StartTimer(resumeAt, taskId);
+            return false;
+        }
+
+        ResetDailyCountIfNeeded(now);
+
+        if (HandleQuietHoursOrLimit(settings, now, taskId))
+        {
+            return false;
+        }
+
+        TaskItem? task = await ResolveTaskAsync(taskId, settings, now).ConfigureAwait(false);
+        if (task == null)
+        {
+            return false;
+        }
+
+        ClearPendingShuffle();
+
+        EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
+        PersistActiveTask(task, effectiveSettings);
+        await HandleCutInLineModeAsync(task).ConfigureAwait(false);
+        await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
+        IncrementDailyCount(now);
+        return true;
+    }
+
+    private bool HandleQuietHoursOrLimit(AppSettings settings, DateTimeOffset now, string taskId)
+    {
+        if (IsWithinQuietHours(now, settings))
+        {
+            DateTimeOffset resumeAt = EnsureAllowed(now, settings);
+            StartTimer(resumeAt, taskId);
+            return true;
+        }
+
+        if (HasReachedDailyLimit(settings, now))
+        {
+            DateTimeOffset resumeAt = EnsureAllowed(GetNextDayStart(now, settings), settings);
+            StartTimer(resumeAt, null);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task<TaskItem?> ResolveTaskAsync(string taskId, AppSettings settings, DateTimeOffset now)
+    {
+        TaskItem? task = await _storage.GetTaskAsync(taskId).ConfigureAwait(false);
+        if (task != null && IsTaskValid(task, settings, now))
+        {
+            return task;
+        }
+
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty).ConfigureAwait(false);
+        TaskItem? candidate = _scheduler.PickNextTask(tasks, settings, now);
+        if (candidate != null)
+        {
+            return candidate;
+        }
+
+        ClearPendingShuffle();
+        DateTimeOffset retryAt = EnsureAllowed(now.AddMinutes(30), settings);
+        StartTimer(retryAt, null);
+        return null;
+    }
+
+    private async Task NotifyAsync(TaskItem task, AppSettings settings, EffectiveTimerSettings effectiveSettings)
+    {
+        if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
+        {
+            Task applyTask = MainThread.InvokeOnMainThreadAsync(() => dashboard.ApplyAutoOrCrossDeviceShuffleAsync(task, settings));
+            await applyTask.ConfigureAwait(false);
+        }
+
+        int minutes = Math.Max(1, effectiveSettings.InitialMinutes);
+        await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
+        if (_networkSync != null)
+        {
+            await _networkSync.PublishTaskStartedAsync(task.Id, minutes).ConfigureAwait(false);
+        }
+    }
+
+    private async Task HandleCutInLineModeAsync(TaskItem task)
+    {
+        await CutInLineUtilities.ClearCutInLineOnceAsync(task, _storage).ConfigureAwait(false);
+        // UntilCompletion mode is handled when the task is marked done
+    }
+
+    private static bool ShouldAutoShuffle(AppSettings settings)
+    {
+        if (settings is null)
+        {
+            return false;
+        }
+
+        if (!IsBackgroundActivityEnabled(settings))
+        {
+            return false;
+        }
+
+        if (!settings.Active)
+        {
+            return false;
+        }
+
+        if (!settings.AutoShuffleEnabled)
+        {
+            return false;
+        }
+
+        if (!settings.EnableNotifications)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsBackgroundActivityEnabled(AppSettings settings)
+    {
+        return settings.BackgroundActivityEnabled;
+    }
+
+    private static bool HasReachedDailyLimit(AppSettings settings, DateTimeOffset now)
+    {
+        int max = settings.MaxDailyShuffles;
+        if (max <= 0)
+        {
+            return false;
+        }
+
+        var (date, count) = LoadDailyCount();
+        if (!date.HasValue)
+        {
+            return false;
+        }
+
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        return date.Value.Date == local.Date && count >= max;
+    }
+
+    private static DateTimeOffset GetNextDayStart(DateTimeOffset now, AppSettings settings)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        DateTime nextDay = local.Date.AddDays(1);
+        if (settings.QuietHoursStart != settings.QuietHoursEnd)
+        {
+            DateTime localCandidate = nextDay + settings.QuietHoursEnd;
+            return new DateTimeOffset(localCandidate, local.Offset).ToOffset(TimeSpan.Zero);
+        }
+
+        DateTime defaultCandidate = nextDay + settings.WorkStart;
+        return new DateTimeOffset(defaultCandidate, local.Offset).ToOffset(TimeSpan.Zero);
+    }
+
+    private static bool IsWithinQuietHours(DateTimeOffset time, AppSettings settings)
+    {
+        var start = settings.QuietHoursStart;
+        var end = settings.QuietHoursEnd;
+
+        if (start == end)
+        {
+            return false;
+        }
+
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(time, TimeZoneInfo.Local);
+        TimeSpan t = local.TimeOfDay;
+        if (start < end)
+        {
+            return t >= start && t < end;
+        }
+
+        return t >= start || t < end;
+    }
+
+    private static DateTimeOffset EnsureAllowed(DateTimeOffset candidate, AppSettings settings)
+    {
+        if (!IsWithinQuietHours(candidate, settings))
+        {
+            return candidate;
+        }
+
+        return GetQuietHoursEnd(candidate, settings);
+    }
+
+    private static DateTimeOffset GetQuietHoursEnd(DateTimeOffset current, AppSettings settings)
+    {
+        var start = settings.QuietHoursStart;
+        var end = settings.QuietHoursEnd;
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(current, TimeZoneInfo.Local);
+        DateTime baseDate = local.Date;
+
+        if (start < end)
+        {
+            DateTime quietEnd = baseDate + end;
+            if (local.TimeOfDay < end)
+            {
+                return new DateTimeOffset(quietEnd, local.Offset).ToOffset(TimeSpan.Zero);
+            }
+
+            DateTime next = quietEnd.AddDays(1);
+            return new DateTimeOffset(next, local.Offset).ToOffset(TimeSpan.Zero);
+        }
+        else
+        {
+            if (local.TimeOfDay >= start)
+            {
+                DateTime next = baseDate.AddDays(1) + end;
+                return new DateTimeOffset(next, local.Offset).ToOffset(TimeSpan.Zero);
+            }
+
+            if (local.TimeOfDay < end)
+            {
+                DateTime sameDay = baseDate + end;
+                return new DateTimeOffset(sameDay, local.Offset).ToOffset(TimeSpan.Zero);
+            }
+
+            DateTime fallback = baseDate + start;
+            return new DateTimeOffset(fallback, local.Offset).ToOffset(TimeSpan.Zero);
+        }
+    }
+
+    private static bool IsTaskValid(TaskItem task, AppSettings settings, DateTimeOffset when)
+    {
+        if (task.Paused)
+        {
+            return false;
+        }
+
+        return TimeWindowService.AllowedNow(task, when, settings);
+    }
+
+    private bool ShouldDelayForWeekend(IReadOnlyList<TaskItem> tasks, DateTimeOffset target)
+    {
+        if (!TimeWindowService.IsWeekend(target))
+        {
+            return false;
+        }
+
+        bool hasWeekendBlocked = false;
+        foreach (var task in tasks)
+        {
+            if (task is null)
+            {
+                continue;
+            }
+
+            if (task.Paused || !task.AutoShuffleAllowed)
+            {
+                continue;
+            }
+
+            if (!UtilityMethods.LifecycleEligible(task, target.UtcDateTime))
+            {
+                continue;
+            }
+
+            if (TimeWindowService.AllowsWeekend(task, _settings))
+            {
+                return false;
+            }
+
+            hasWeekendBlocked = true;
+        }
+
+        return hasWeekendBlocked;
+    }
+
+    private static void PersistPendingShuffle(string? taskId, DateTimeOffset scheduledAt)
+    {
+        PersistedSchedulerState.SavePendingShuffle(taskId, scheduledAt);
+    }
+
+    private static void PersistActiveTask(TaskItem task, EffectiveTimerSettings timerSettings)
+    {
+        int seconds = Math.Max(1, timerSettings.InitialMinutes) * 60;
+        PersistedTimerState.SaveActiveTimer(
+            task.Id,
+            seconds,
+            DateTimeOffset.UtcNow.AddSeconds(seconds),
+            new PersistedTimerState.TimerDetails(
+                (int)timerSettings.Mode,
+                timerSettings.Mode == TimerMode.Pomodoro ? 0 : null,
+                1,
+                timerSettings.PomodoroCycles,
+                timerSettings.FocusMinutes,
+                timerSettings.BreakMinutes));
+    }
+
+    /// <summary>
+    /// Checks if there is currently an active task based on stored preferences.
+    /// A task is considered active if both the task ID exists and there is remaining time > 0.
+    /// </summary>
+    /// <returns>True if an active task exists; otherwise, false.</returns>
+    private static bool HasActiveTask()
+    {
+        return PersistedTimerState.TryGetActiveTimer(
+            out _,
+            out _,
+            out bool expired,
+            out _,
+            out _)
+            && !expired;
+    }
+
+    private static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle()
+    {
+        return PersistedSchedulerState.LoadPendingShuffle();
+    }
+
+    private static (DateTimeOffset? Date, int Count) LoadDailyCount()
+    {
+        return PersistedSchedulerState.LoadDailyCount();
+    }
+
+    private static void ResetDailyCountIfNeeded(DateTimeOffset now)
+    {
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        bool needsReset = true;
+        var (date, _) = LoadDailyCount();
+        if (date.HasValue)
+        {
+            DateTimeOffset existingLocal = TimeZoneInfo.ConvertTime(date.Value, TimeZoneInfo.Local);
+            needsReset = existingLocal.Date != local.Date;
+        }
+
+        if (needsReset)
+        {
+            var storedLocal = new DateTimeOffset(local.Date, local.Offset);
+            PersistedSchedulerState.SaveDailyCount(storedLocal, 0);
+        }
+    }
+
+    private static void IncrementDailyCount(DateTimeOffset now)
+    {
+        var (date, count) = LoadDailyCount();
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+        if (!date.HasValue || TimeZoneInfo.ConvertTime(date.Value, TimeZoneInfo.Local).Date != local.Date)
+        {
+            date = new DateTimeOffset(local.Date, local.Offset);
+            count = 0;
+        }
+
+        PersistedSchedulerState.SaveDailyCount(date.Value, count + 1);
+    }
+
+    private static void ClearPendingShuffle()
+    {
+        PersistedSchedulerState.ClearPendingShuffle();
+    }
+
+    private void CancelPersistentSchedule()
+    {
+        try
+        {
+            _backgroundService.Cancel();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"ShuffleCoordinatorService persistent cancel error: {ex}");
+        }
+    }
+
+    private void CancelTimerInternal()
+    {
+        CancelInProcessTimer();
+        CancelPersistentSchedule();
+    }
+
+    private void CancelInProcessTimer()
+    {
+        var existing = Interlocked.Exchange(ref _timerCts, null);
+        if (existing != null)
+        {
+            try
+            {
+                existing.Cancel();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ShuffleCoordinatorService cancellation error: {ex}");
+            }
+            finally
+            {
+                existing.Dispose();
+            }
+        }
+    }
+
+    private DateTimeOffset GetCurrentInstant()
+        => _clock.GetUtcNow();
+}

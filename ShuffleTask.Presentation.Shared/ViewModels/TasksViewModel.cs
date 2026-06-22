@@ -1,0 +1,777 @@
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Maui.ApplicationModel;
+using ShuffleTask.Application.Abstractions;
+using ShuffleTask.Application.Models;
+using ShuffleTask.Application.Services;
+using ShuffleTask.Application.Utilities;
+using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Utilities;
+
+namespace ShuffleTask.ViewModels;
+
+// Host-neutral task list state and commands for MAUI presentation hosts.
+public partial class TasksViewModel : ObservableObject
+{
+    private const string SortScore = "Score";
+    private const string SortImportance = "Importance";
+    private const string SortDeadline = "Deadline";
+    private const string RepeatFilterAll = "All";
+    private const string RepeatFilterRepeating = "Repeating";
+    private const string RepeatFilterNonRepeating = "One-off";
+
+    private readonly IStorageService _storage;
+    private readonly INetworkSyncService _networkSyncService;
+    private readonly TimeProvider _clock;
+    private readonly AppSettings _settings;
+    private bool _pendingSort;
+    private bool _pendingRefresh;
+    private bool _suppressRefresh;
+    private List<TaskListItem> _allTasks = [];
+
+    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(storage);
+        _storage = storage;
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _networkSyncService = networkSyncService;
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+    }
+
+    public ObservableCollection<TaskListItem> Tasks { get; } = [];
+    public ObservableCollection<TaskListItem> ActiveTasks { get; } = [];
+    public ObservableCollection<TaskListItem> DoneTasks { get; } = [];
+    public ObservableCollection<TaskGroup> TaskGroups { get; private set; } = [];
+    public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
+    public IReadOnlyList<string> RepeatFilterOptions { get; } = new[] { RepeatFilterAll, RepeatFilterRepeating, RepeatFilterNonRepeating };
+
+    public bool HasActiveTasks => ActiveTasks.Count > 0;
+    public bool HasDoneTasks => DoneTasks.Count > 0;
+    public bool HasTasks => HasActiveTasks || HasDoneTasks;
+
+    [ObservableProperty]
+    private bool isBusy;
+
+    [ObservableProperty]
+    private string selectedSort = SortScore;
+
+    [ObservableProperty]
+    private bool filterAllowedNow;
+
+    [ObservableProperty]
+    private bool filterAllowedMorning;
+
+    [ObservableProperty]
+    private bool filterAllowedAfternoon;
+
+    [ObservableProperty]
+    private bool filterAllowedEvening;
+
+    [ObservableProperty]
+    private string selectedRepeatFilter = RepeatFilterAll;
+
+    public async Task LoadAsync(string? userId = null, string? deviceId = null)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await _storage.InitializeAsync();
+            List<TaskItem> items = await _storage.GetTasksAsync(
+                userId ?? _settings.Network?.UserId,
+                deviceId ?? _settings.Network?.DeviceId ?? string.Empty);
+            AppSettings settings = _settings;
+            DateTimeOffset now = _clock.GetUtcNow();
+
+            _allTasks = items
+                .Select(task => TaskListItem.From(task, settings, now))
+                .ToList();
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                ApplySortToCollections();
+                return Task.CompletedTask;
+            });
+        }
+        finally
+        {
+            IsBusy = false;
+            if (_pendingSort || _pendingRefresh)
+            {
+                _pendingSort = false;
+                _pendingRefresh = false;
+                ApplySortToCollections();
+            }
+        }
+    }
+
+    partial void OnSelectedSortChanged(string value)
+    {
+        RequestRefresh(true);
+    }
+
+    partial void OnFilterAllowedNowChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedMorningChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedAfternoonChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnFilterAllowedEveningChanged(bool value)
+    {
+        RequestRefresh();
+    }
+
+    partial void OnSelectedRepeatFilterChanged(string value)
+    {
+        RequestRefresh();
+    }
+
+    public void ResetFilters()
+    {
+        _suppressRefresh = true;
+        FilterAllowedNow = false;
+        FilterAllowedMorning = false;
+        FilterAllowedAfternoon = false;
+        FilterAllowedEvening = false;
+        SelectedRepeatFilter = RepeatFilterAll;
+        _suppressRefresh = false;
+        ApplySortToCollections();
+    }
+
+    private void RequestRefresh(bool isSortChange = false)
+    {
+        if (_suppressRefresh)
+        {
+            return;
+        }
+
+        if (IsBusy)
+        {
+            if (isSortChange)
+            {
+                _pendingSort = true;
+            }
+
+            _pendingRefresh = true;
+            return;
+        }
+
+        ApplySortToCollections();
+    }
+
+    private IEnumerable<TaskListItem> ApplySort(IEnumerable<TaskListItem> items)
+    {
+        return SelectedSort switch
+        {
+            SortImportance => items
+                .OrderByDescending(item => item.Task.Importance)
+                .ThenByDescending(item => item.PriorityScore)
+                .ThenBy(item => item.Task.Deadline ?? DateTime.MaxValue),
+            SortDeadline => items
+                .OrderBy(item => item.Task.Deadline ?? DateTime.MaxValue)
+                .ThenByDescending(item => item.Task.Importance)
+                .ThenByDescending(item => item.PriorityScore),
+            _ => items.OrderByDescending(item => item.PriorityScore)
+        };
+    }
+
+    private void ApplySortToCollections()
+    {
+#if !TEST
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(ApplySortToCollections);
+            return;
+        }
+#endif
+
+        List<TaskListItem> items = _allTasks.ToList();
+        Tasks.Clear();
+        ActiveTasks.Clear();
+        DoneTasks.Clear();
+
+        IEnumerable<TaskListItem> filteredItems = ApplyFilters(items);
+        SeparateTasksToActiveAndDone(ApplySort(filteredItems));
+        AddAppropriateTaskGroups();
+        OnTaskBooleansChanged();
+    }
+
+    private IEnumerable<TaskListItem> ApplyFilters(IEnumerable<TaskListItem> items)
+    {
+        IEnumerable<TaskListItem> filteredItems = items;
+
+        if (FilterAllowedNow || FilterAllowedMorning || FilterAllowedAfternoon || FilterAllowedEvening)
+        {
+            DateTimeOffset now = _clock.GetUtcNow();
+            filteredItems = filteredItems.Where(item => MatchesAllowedTimeFilter(item.Task, now));
+        }
+
+        filteredItems = SelectedRepeatFilter switch
+        {
+            RepeatFilterRepeating => filteredItems.Where(item => item.Task.Repeat != RepeatType.None),
+            RepeatFilterNonRepeating => filteredItems.Where(item => item.Task.Repeat == RepeatType.None),
+            _ => filteredItems
+        };
+
+        return filteredItems;
+    }
+
+    private bool MatchesAllowedTimeFilter(TaskItem task, DateTimeOffset now)
+    {
+        if (FilterAllowedNow && TimeWindowService.AllowedNow(task, now, _settings))
+        {
+            return true;
+        }
+
+        DateTimeOffset localNow = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local);
+
+        if (FilterAllowedMorning && IsAllowedDuringWindow(task, localNow, _settings.MorningStart, _settings.MorningEnd))
+        {
+            return true;
+        }
+
+        if (FilterAllowedAfternoon && IsAllowedDuringWindow(task, localNow, _settings.LunchEnd, _settings.EveningStart))
+        {
+            return true;
+        }
+
+        if (FilterAllowedEvening && IsAllowedDuringWindow(task, localNow, _settings.EveningStart, _settings.EveningEnd))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsAllowedDuringWindow(TaskItem task, DateTimeOffset localNow, TimeSpan start, TimeSpan end)
+    {
+        DateTimeOffset windowStartLocal = new(localNow.Date + start, localNow.Offset);
+        DateTimeOffset windowEndLocal = start == end
+            ? windowStartLocal.AddDays(1)
+            : (start < end
+                ? new DateTimeOffset(localNow.Date + end, localNow.Offset)
+                : new DateTimeOffset(localNow.Date + end, localNow.Offset).AddDays(1));
+
+        if (windowEndLocal <= windowStartLocal)
+        {
+            return false;
+        }
+
+        HashSet<DateTimeOffset> probes = BuildAllowedWindowProbes(task, windowStartLocal, windowEndLocal);
+        foreach (DateTimeOffset probe in probes.OrderBy(value => value))
+        {
+            if (TimeWindowService.AllowedNow(task, probe.ToOffset(TimeSpan.Zero), _settings))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private HashSet<DateTimeOffset> BuildAllowedWindowProbes(TaskItem task, DateTimeOffset windowStartLocal, DateTimeOffset windowEndLocal)
+    {
+        HashSet<DateTimeOffset> probes = [];
+
+        void AddProbe(DateTimeOffset localProbe)
+        {
+            if (localProbe >= windowStartLocal && localProbe < windowEndLocal)
+            {
+                probes.Add(localProbe);
+            }
+        }
+
+        AddProbe(windowStartLocal);
+        AddProbe(windowStartLocal.AddTicks(1));
+        AddProbe(windowEndLocal.AddTicks(-1));
+
+        foreach (TimeSpan boundary in GetTransitionBoundaries(task))
+        {
+            DateTime startDate = windowStartLocal.Date.AddDays(-1);
+            DateTime endDate = windowEndLocal.Date.AddDays(1);
+
+            for (DateTime day = startDate; day <= endDate; day = day.AddDays(1))
+            {
+                DateTimeOffset boundaryLocal = new(day + boundary, windowStartLocal.Offset);
+                AddProbe(boundaryLocal.AddTicks(-1));
+                AddProbe(boundaryLocal);
+                AddProbe(boundaryLocal.AddTicks(1));
+            }
+        }
+
+        for (DateTime day = windowStartLocal.Date.AddDays(-1); day <= windowEndLocal.Date.AddDays(1); day = day.AddDays(1))
+        {
+            DateTimeOffset midnight = new(day, windowStartLocal.Offset);
+            AddProbe(midnight.AddTicks(-1));
+            AddProbe(midnight);
+            AddProbe(midnight.AddTicks(1));
+        }
+
+        return probes;
+    }
+
+    private IReadOnlyCollection<TimeSpan> GetTransitionBoundaries(TaskItem task)
+    {
+        HashSet<TimeSpan> boundaries =
+        [
+            _settings.WorkStart,
+            _settings.WorkEnd,
+            _settings.MorningStart,
+            _settings.MorningEnd,
+            _settings.LunchStart,
+            _settings.LunchEnd,
+            _settings.EveningStart,
+            _settings.EveningEnd
+        ];
+
+        PeriodDefinition definition = ResolvePeriodDefinition(task);
+        (TimeSpan definitionStart, TimeSpan definitionEnd) = ResolveTimeWindow(definition);
+        boundaries.Add(definitionStart);
+        boundaries.Add(definitionEnd);
+
+        return boundaries;
+    }
+
+    private PeriodDefinition ResolvePeriodDefinition(TaskItem task)
+    {
+        if (PeriodDefinitionCatalog.TryGet(task.PeriodDefinitionId, out PeriodDefinition catalogDefinition))
+        {
+            return catalogDefinition;
+        }
+
+        if (TaskItemPeriodDefinitionHelper.TryBuildAdHocDefinition(task, out PeriodDefinition adHocDefinition))
+        {
+            return adHocDefinition;
+        }
+
+        return task.AllowedPeriod switch
+        {
+            AllowedPeriod.Work => PeriodDefinitionCatalog.Work,
+            AllowedPeriod.OffWork => PeriodDefinitionCatalog.OffWork,
+            AllowedPeriod.Custom => new PeriodDefinition
+            {
+                Id = string.Empty,
+                Name = "Legacy custom",
+                StartTime = task.CustomStartTime,
+                EndTime = task.CustomEndTime,
+                Weekdays = task.CustomWeekdays ?? PeriodDefinitionCatalog.AllWeekdays,
+                IsAllDay = !task.CustomStartTime.HasValue || !task.CustomEndTime.HasValue,
+                Mode = PeriodDefinitionMode.None
+            },
+            _ => PeriodDefinitionCatalog.Any
+        };
+    }
+
+    private (TimeSpan Start, TimeSpan End) ResolveTimeWindow(PeriodDefinition definition)
+    {
+        bool alignsWithWorkHours = definition.Mode.HasFlag(PeriodDefinitionMode.AlignWithWorkHours)
+            || definition.Mode.HasFlag(PeriodDefinitionMode.OffWorkRelativeToWorkHours);
+
+        if (alignsWithWorkHours)
+        {
+            return (_settings.WorkStart, _settings.WorkEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Morning))
+        {
+            return (_settings.MorningStart, _settings.MorningEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Lunch))
+        {
+            return (_settings.LunchStart, _settings.LunchEnd);
+        }
+
+        if (definition.Mode.HasFlag(PeriodDefinitionMode.Evening))
+        {
+            return (_settings.EveningStart, _settings.EveningEnd);
+        }
+
+        return (definition.StartTime ?? TimeSpan.Zero, definition.EndTime ?? TimeSpan.Zero);
+    }
+
+    private void SeparateTasksToActiveAndDone(IEnumerable<TaskListItem> sortedItems)
+    {
+        foreach (TaskListItem entry in sortedItems)
+        {
+            Tasks.Add(entry);
+            if (entry.Task.Status == TaskLifecycleStatus.Completed)
+            {
+                DoneTasks.Add(entry);
+            }
+            else
+            {
+                ActiveTasks.Add(entry);
+            }
+        }
+    }
+
+    private void AddAppropriateTaskGroups()
+    {
+        List<TaskListItem> activeItems = ActiveTasks.ToList();
+        List<TaskListItem> doneItems = DoneTasks.ToList();
+        List<TaskGroup> taskGroups = [];
+
+        if (activeItems.Count > 0)
+        {
+            taskGroups.Add(new TaskGroup("Active Tasks", false, activeItems));
+        }
+
+        if (doneItems.Count > 0)
+        {
+            taskGroups.Add(new TaskGroup("Done Tasks", activeItems.Count > 0, doneItems));
+        }
+
+        TaskGroups = new ObservableCollection<TaskGroup>(taskGroups);
+        OnPropertyChanged(nameof(TaskGroups));
+    }
+
+    private void OnTaskBooleansChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveTasks));
+        OnPropertyChanged(nameof(HasDoneTasks));
+        OnPropertyChanged(nameof(HasTasks));
+    }
+
+    public async Task TogglePauseAsync(TaskItem task)
+    {
+        task.Paused = !task.Paused;
+        await _storage.UpdateTaskAsync(task);
+        await _networkSyncService.PublishTaskUpsertAsync(task);
+        await LoadAsync();
+    }
+
+    public async Task SetCutInLineModeAsync(TaskItem task, CutInLineMode mode)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        if (task.CutInLineMode != mode)
+        {
+            task.CutInLineMode = mode;
+            await _storage.UpdateTaskAsync(task);
+            await _networkSyncService.PublishTaskUpsertAsync(task);
+        }
+
+        await LoadAsync();
+    }
+
+    public async Task ResumeAsync(TaskItem task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        TaskItem? updated = await _storage.ResumeTaskAsync(task.Id);
+
+        if (updated is not null)
+        {
+            await _networkSyncService.PublishTaskUpsertAsync(updated); 
+        }
+
+        await LoadAsync();
+    }
+
+    public async Task DeleteAsync(TaskItem task)
+    {
+        await _storage.DeleteTaskAsync(task.Id);
+        await _networkSyncService.PublishTaskDeletedAsync(task.Id);
+        await LoadAsync();
+    }
+
+    public async Task MarkDoneAsync(TaskItem task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        TaskItem? updated = await _storage.MarkTaskDoneAsync(task.Id);
+
+        if (updated is not null)
+        {
+            await _networkSyncService.PublishTaskUpsertAsync(updated); 
+        }
+
+        await LoadAsync();
+    }
+
+}
+
+public class TaskListItem
+{
+    public TaskItem Task { get; }
+
+    public ImportanceUrgencyScore Score { get; }
+
+    public double PriorityScore => Score.CombinedScore;
+
+    public string ScoreText => $"Score {PriorityScore:0.#}";
+
+    public string Title => string.IsNullOrWhiteSpace(Task.Title) ? "Untitled" : Task.Title;
+
+    public string Description => string.IsNullOrWhiteSpace(Task.Description) ? "No description" : Task.Description;
+
+    public string RepeatText { get; }
+
+    public string ScheduleText { get; }
+
+    public string ImportanceText { get; }
+
+    public string AllowedPeriodText { get; }
+
+    public string StatusText { get; }
+
+    public bool HasStatusBadge { get; }
+
+    public string StatusBackgroundColor { get; }
+
+    public string StatusTextColor { get; }
+
+    public bool CanResume { get; }
+
+    public bool HasCutInLineBadge => Task.CutInLineMode != CutInLineMode.None;
+
+    public string CutInLineBadgeText => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "Cut-in-line: Once",
+        CutInLineMode.UntilCompletion => "Cut-in-line: Until complete",
+        _ => string.Empty
+    };
+
+    public string CutInLineBadgeBackgroundColor => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "#DBEAFE",
+        CutInLineMode.UntilCompletion => "#FEEBC8",
+        _ => "Transparent"
+    };
+
+    public string CutInLineBadgeTextColor => Task.CutInLineMode switch
+    {
+        CutInLineMode.Once => "#1D4ED8",
+        CutInLineMode.UntilCompletion => "#92400E",
+        _ => "#1F2937"
+    };
+
+    private TaskListItem(
+        TaskItem task,
+        string repeatText,
+        string scheduleText,
+        string importanceText,
+        string allowedPeriodText,
+        TaskStatusPresentation status, ImportanceUrgencyScore score)
+    {
+        Task = task;
+        RepeatText = repeatText;
+        ScheduleText = scheduleText;
+        ImportanceText = importanceText;
+        AllowedPeriodText = allowedPeriodText;
+        StatusText = status.Text;
+        HasStatusBadge = status.HasBadge;
+        StatusBackgroundColor = status.BackgroundColor;
+        StatusTextColor = status.TextColor;
+        CanResume = status.CanResume;
+        Score = score;
+    }
+
+    public static TaskListItem From(TaskItem task, AppSettings settings, DateTimeOffset now)
+    {
+        string repeat = task.Repeat switch
+        {
+            RepeatType.None => "One-off",
+            RepeatType.Daily => "Daily",
+            RepeatType.Weekly => $"Weekly ({FormatWeekdays(task.Weekdays)})",
+            RepeatType.Interval => $"Every {Math.Max(1, task.IntervalDays)} day(s)",
+            _ => task.Repeat.ToString()
+        };
+
+        string schedule = task.Deadline.HasValue
+            ? $"Due {FormatAbsolute(task.Deadline)}"
+            : "No deadline";
+
+        int importance = Math.Clamp(task.Importance, 1, 5);
+        string importanceStars = new string('★', importance).PadRight(5, '☆');
+        string importanceText = $"Importance: {importanceStars} ({importance}/5)";
+
+        string allowedPeriodText = $"Auto shuffle: {PeriodDefinitionFormatter.FormatAllowedPeriodLabel(task)}";
+
+        TaskStatusPresentation status = BuildStatusPresentation(task, now);
+        ImportanceUrgencyScore score = ImportanceUrgencyCalculator.Calculate(task, now, settings);
+
+        return new TaskListItem(
+            task,
+            repeat,
+            schedule,
+            importanceText,
+            allowedPeriodText,
+            status, score);
+    }
+
+    private static TaskStatusPresentation BuildStatusPresentation(TaskItem task, DateTimeOffset reference)
+    {
+        if (task.Paused)
+        {
+            return new TaskStatusPresentation("Paused", true, "#FEE2E2", "#C53030", false);
+        }
+
+        return task.Status switch
+        {
+            TaskLifecycleStatus.Active => TaskStatusPresentation.Active,
+            TaskLifecycleStatus.Snoozed => BuildSnoozedPresentation(task, reference),
+            TaskLifecycleStatus.Completed => BuildCompletedPresentation(task, reference),
+            _ => TaskStatusPresentation.Active
+        };
+    }
+
+    private static TaskStatusPresentation BuildSnoozedPresentation(TaskItem task, DateTimeOffset reference)
+    {
+        string until = FormatRelative(task.SnoozedUntil ?? task.NextEligibleAt, reference);
+        string text = string.IsNullOrEmpty(until) ? "Snoozed" : $"Snoozed until {until}";
+        return new TaskStatusPresentation(text, true, "#FEF3C7", "#975A16", true);
+    }
+
+    private static TaskStatusPresentation BuildCompletedPresentation(TaskItem task, DateTimeOffset reference)
+    {
+        bool oneOff = task.Repeat == RepeatType.None;
+        string next = FormatRelative(task.NextEligibleAt, reference);
+        string text = "Completed";
+
+        if (!oneOff && !string.IsNullOrEmpty(next))
+        {
+            text = $"Completed • next at {next}";
+        }
+
+        return new TaskStatusPresentation(text, true, "#C6F6D5", "#276749", true);
+    }
+
+    private static string FormatRelative(DateTime? value, DateTimeOffset reference)
+    {
+        if (!value.HasValue)
+        {
+            return string.Empty;
+        }
+
+        DateTimeOffset? target = EnsureUtc(value);
+        if (target == null)
+        {
+            return string.Empty;
+        }
+
+        DateTimeOffset referenceLocal = TimeZoneInfo.ConvertTime(reference, TimeZoneInfo.Local);
+        DateTimeOffset targetLocal = TimeZoneInfo.ConvertTime(target.Value, TimeZoneInfo.Local);
+
+        DateTime referenceDate = referenceLocal.Date;
+        if (targetLocal.Date == referenceDate)
+        {
+            return targetLocal.ToString("h:mm tt", CultureInfo.CurrentCulture);
+        }
+
+        if (targetLocal.Date == referenceDate.AddDays(1))
+        {
+            return $"tomorrow {targetLocal.ToString("h:mm tt", CultureInfo.CurrentCulture)}";
+        }
+
+        return targetLocal.ToString("MMM d h:mm tt", CultureInfo.CurrentCulture);
+    }
+
+    private static string FormatAbsolute(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return "--";
+        }
+
+        DateTimeOffset? target = EnsureUtc(value);
+        if (target == null)
+        {
+            return "--";
+        }
+
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(target.Value, TimeZoneInfo.Local);
+        return local.ToString("MMM d, yyyy HH:mm", CultureInfo.CurrentCulture);
+    }
+
+    private static DateTimeOffset? EnsureUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        DateTime dt = value.Value;
+        return dt.Kind switch
+        {
+            DateTimeKind.Utc => new DateTimeOffset(dt, TimeSpan.Zero),
+            DateTimeKind.Local => new DateTimeOffset(dt.ToUniversalTime(), TimeSpan.Zero),
+            _ => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc), TimeSpan.Zero)
+        };
+    }
+
+    private static string FormatWeekdays(Weekdays weekdays)
+    {
+        if (weekdays == Weekdays.None)
+        {
+            return "--";
+        }
+
+        var names = new List<string>();
+        void Add(Weekdays day, string label)
+        {
+            if (weekdays.HasFlag(day))
+            {
+                names.Add(label);
+            }
+        }
+
+        Add(Weekdays.Mon, "Mon");
+        Add(Weekdays.Tue, "Tue");
+        Add(Weekdays.Wed, "Wed");
+        Add(Weekdays.Thu, "Thu");
+        Add(Weekdays.Fri, "Fri");
+        Add(Weekdays.Sat, "Sat");
+        Add(Weekdays.Sun, "Sun");
+
+        return string.Join(", ", names);
+    }
+
+    private sealed record TaskStatusPresentation(
+        string Text,
+        bool HasBadge,
+        string BackgroundColor,
+        string TextColor,
+        bool CanResume)
+    {
+        public static TaskStatusPresentation Active { get; } = new("Active", false, "#E2E8F0", "#2D3748", false);
+    }
+}
+
+public class TaskGroup : ObservableCollection<TaskListItem>
+{
+    public TaskGroup(string title, bool showDivider, IEnumerable<TaskListItem> items)
+        : base(items)
+    {
+        Title = title;
+        ShowDivider = showDivider;
+    }
+
+    public string Title { get; }
+
+    public bool ShowDivider { get; }
+}
