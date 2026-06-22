@@ -56,7 +56,6 @@ public static partial class MauiProgram
         });
 
         // DI registrations
-        builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
         builder.Services.AddSingleton<IShuffleLogger>(sp => new DefaultShuffleLogger(sp.GetRequiredService<TimeProvider>()));
         builder.Services.AddSingleton(provider =>
         {
@@ -69,27 +68,13 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         SetupEventAggregation(builder);
-        builder.Services.AddSingleton<ISchedulerService>(sp => new SchedulerService(deterministic: false));
-        builder.Services.AddSingleton<ShuffleCoordinatorService>();
-
-        // ViewModels
-        builder.Services.AddSingleton<DashboardViewModel>(sp =>
+        builder.Services.AddShuffleTaskSharedPresentation((sp, dashboardViewModel) =>
         {
-            var storage = sp.GetRequiredService<IStorageService>();
-            var scheduler = sp.GetRequiredService<ISchedulerService>();
-            var notifications = sp.GetRequiredService<INotificationService>();
-            var shuffleCoordinator = sp.GetRequiredService<ShuffleCoordinatorService>();
-            var timeProvider = sp.GetRequiredService<TimeProvider>();
-            var networkSync = sp.GetRequiredService<INetworkSyncService>();
-            var appSettings = sp.GetRequiredService<AppSettings>();
-            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings);
             var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
             taskStartedHandler.RegisterDashboard(dashboardViewModel);
-            return dashboardViewModel;
         });
-        builder.Services.AddSingleton<TasksViewModel>();
-        builder.Services.AddSingleton<EditTaskViewModel>();
-        builder.Services.AddSingleton<PeriodDefinitionEditorViewModel>();
+
+        // Host-specific ViewModels
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views

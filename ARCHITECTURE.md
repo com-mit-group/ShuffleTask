@@ -8,9 +8,9 @@ ShuffleTask follows a clean layered architecture with clear separation of concer
 ┌─────────────────────────────────────────────────────────────┐
 │                    Presentation Layer                       │
 │  ┌─────────────────┐  ┌─────────────────────────────────────┐ │
-│  │   MAUI UI       │  │     Services                       │ │
-│  │   Views         │  │ ┌─────────────────────────────────┐ │ │
-│  │   ViewModels    │  │ │   ShuffleCoordinatorService    │ │ │
+│  │   MAUI Hosts    │  │ Shared Presentation               │ │
+│  │   Views/Shell   │  │ ┌─────────────────────────────────┐ │ │
+│  │   Resources     │  │ │ ViewModels/Coordinator State    │ │ │
 │  │                 │  │ │   NotificationService          │ │ │
 │  └─────────────────┘  │ └─────────────────────────────────┘ │ │
 │                       │                                     │ │
@@ -63,6 +63,16 @@ ShuffleTask follows a clean layered architecture with clear separation of concer
 ```
 
 ## Core Components
+
+### Presentation Project Boundaries
+
+The MAUI presentation layer is split into a reusable shared project and a standalone runnable host:
+
+- `ShuffleTask.Presentation.Shared` contains reusable presentation logic: host-neutral ViewModels, `ShuffleCoordinatorService`, scheduler/timer persistence helpers, selection catalogs, and preference keys. It references Application and Domain, but not Persistence or app resources.
+- `ShuffleTask.Presentation.Shared` exposes `AddShuffleTaskSharedPresentation` so a host can register reusable ViewModels and coordinator services without taking a dependency on the standalone app's Views, Shell, resources, or platform integrations. Hosts must still provide storage, settings, notification, background, and optional network-sync implementations.
+- `ShuffleTask.Presentation` remains the standalone app host. It owns `App`, `AppShell`, concrete Views, XAML controls, resources, platform integrations, notification/background implementations, persistence wiring, and MAUI startup composition.
+- Current Views are intentionally host-specific. SecondBrain can reference `ShuffleTask.Presentation.Shared` and provide its own Views, Shell/navigation, resources, platform services, and startup wiring rather than being forced to mirror the standalone app UI.
+- Settings and peer-management presentation remain in the standalone host for now because they directly use app-specific MAUI UI prompts, file/share pickers, and host composition.
 
 ### 1. Task Lifecycle Management
 
