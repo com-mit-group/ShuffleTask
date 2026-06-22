@@ -6,7 +6,7 @@ using ShuffleTask.Application.Services;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.ViewModels;
 
-namespace ShuffleTask.Presentation;
+namespace ShuffleTask.Presentation.Shared;
 
 public static class SharedPresentationServiceCollectionExtensions
 {

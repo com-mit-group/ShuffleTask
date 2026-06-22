@@ -6,6 +6,7 @@ using ShuffleTask.Application.Utilities;
 using ShuffleTask.Persistence;
 using ShuffleTask.Presentation.EventsHandlers;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Shared;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Views;
 using Yaref92.Events;

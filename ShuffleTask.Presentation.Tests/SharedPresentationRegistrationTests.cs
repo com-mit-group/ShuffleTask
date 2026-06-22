@@ -3,8 +3,8 @@ using NSubstitute;
 using NUnit.Framework;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
-using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.Presentation.Shared;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Presentation.Tests;
