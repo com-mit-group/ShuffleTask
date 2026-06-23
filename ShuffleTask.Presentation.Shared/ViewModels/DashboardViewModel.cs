@@ -380,7 +380,7 @@ public partial class DashboardViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    internal static string FormatTimerText(TimeSpan remaining)
+    public static string FormatTimerText(TimeSpan remaining)
     {
         if (remaining <= TimeSpan.Zero)
         {

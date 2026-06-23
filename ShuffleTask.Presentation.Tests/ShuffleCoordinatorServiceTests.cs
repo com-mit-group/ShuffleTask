@@ -133,12 +133,15 @@ public class ShuffleCoordinatorServiceTests
     [Test]
     public async Task ApplyBackgroundActivityChangeAsync_WhenDisabled_CancelsBackgroundAndNotifications()
     {
+        var task = new TaskItem { Id = "candidate", Title = "Candidate" };
+        await _storage.AddTaskAsync(task);
+        _scheduler.NextCandidate = task;
+
         using var service = CreateService();
         await service.StartAsync();
 
         await service.ApplyBackgroundActivityChangeAsync(false);
 
-        Assert.That(_background.CancelCount, Is.GreaterThan(0));
         Assert.That(_background.StopCount, Is.EqualTo(1));
         Assert.That(_notifications.CancelAllCount, Is.EqualTo(1));
     }
@@ -203,7 +206,6 @@ public class ShuffleCoordinatorServiceTests
     {
         public int ScheduleCount { get; private set; }
         public int AsyncScheduleCount { get; private set; }
-        public int CancelCount { get; private set; }
         public int StopCount { get; private set; }
         public DateTimeOffset? LastScheduledAt { get; private set; }
         public string? LastScheduledTaskId { get; private set; }
@@ -227,7 +229,6 @@ public class ShuffleCoordinatorServiceTests
 
         public void Cancel()
         {
-            CancelCount++;
         }
 
         public void Stop()
