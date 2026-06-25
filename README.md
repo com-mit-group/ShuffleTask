@@ -7,6 +7,37 @@ A task prioritization and scheduling system that helps you focus by intelligentl
 ### Architecture & Design
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Clean layered architecture with structured logging and state management
 
+### Ubuntu MAUI Android smoke test
+
+The runnable MAUI host is `ShuffleTask.Presentation`. On Ubuntu, use the Android target:
+
+- Host project: `ShuffleTask.Presentation/ShuffleTask.Presentation.csproj`
+- Ubuntu target framework: `net10.0-android`
+- Shared presentation target frameworks: `net10.0` and `net10.0-android`
+
+Install the .NET SDK used by the repo, the .NET MAUI workload, and the Android SDK:
+
+```bash
+dotnet workload install maui
+export ANDROID_HOME="$HOME/Android/Sdk"
+```
+
+Then build the Android target from Ubuntu:
+
+```bash
+scripts/maui-android-ubuntu.sh build
+```
+
+To run on a booted emulator or attached Android device:
+
+```bash
+scripts/maui-android-ubuntu.sh run
+```
+
+Use `scripts/maui-android-ubuntu.sh run --device SERIAL` when more than one device is attached. The helper fails early with actionable messages when the MAUI workload, Android SDK, platform packages, platform-tools, or a runnable device/emulator are missing.
+
+Windows, iOS, and MacCatalyst targets remain native-host paths. Build Windows on Windows, iOS on macOS with the Apple toolchain, and MacCatalyst on macOS.
+
 ### Core Flows
 
 **Task Selection Flow:**
