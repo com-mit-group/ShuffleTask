@@ -9,14 +9,14 @@ DEVICE_SERIAL=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/maui-android-ubuntu.sh [build|run] [--configuration Debug|Release] [--device SERIAL]
+Usage: bash scripts/maui-android-ubuntu.sh [build|run] [--configuration Debug|Release] [--device SERIAL]
 
 Build or run the MAUI host from Ubuntu through the Android target.
 
 Examples:
-  scripts/maui-android-ubuntu.sh build
-  scripts/maui-android-ubuntu.sh run
-  scripts/maui-android-ubuntu.sh run --device emulator-5554
+  bash scripts/maui-android-ubuntu.sh build
+  bash scripts/maui-android-ubuntu.sh run
+  bash scripts/maui-android-ubuntu.sh run --device emulator-5554
 USAGE
 }
 

@@ -25,16 +25,16 @@ export ANDROID_HOME="$HOME/Android/Sdk"
 Then build the Android target from Ubuntu:
 
 ```bash
-scripts/maui-android-ubuntu.sh build
+bash scripts/maui-android-ubuntu.sh build
 ```
 
 To run on a booted emulator or attached Android device:
 
 ```bash
-scripts/maui-android-ubuntu.sh run
+bash scripts/maui-android-ubuntu.sh run
 ```
 
-Use `scripts/maui-android-ubuntu.sh run --device SERIAL` when more than one device is attached. The helper fails early with actionable messages when the MAUI workload, Android SDK, platform packages, platform-tools, or a runnable device/emulator are missing.
+Use `bash scripts/maui-android-ubuntu.sh run --device SERIAL` when more than one device is attached. The helper fails early with actionable messages when the MAUI workload, Android SDK, platform packages, platform-tools, or a runnable device/emulator are missing.
 
 Windows, iOS, and MacCatalyst targets remain native-host paths. Build Windows on Windows, iOS on macOS with the Apple toolchain, and MacCatalyst on macOS.
 
