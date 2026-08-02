@@ -26,7 +26,7 @@ public sealed class OperationState : ObservableObject
 
     public OperationState()
     {
-        RetryCommand = new AsyncRelayCommand(() => RetryAsync(CancellationToken.None), CanRetryNow);
+        RetryCommand = new AsyncRelayCommand(RetryAsync, CanRetryNow);
     }
 
     public OperationStateKind Kind

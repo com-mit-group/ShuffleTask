@@ -58,7 +58,7 @@ public class OperationStateTests
     }
 
     [Test]
-    public async Task RetryCommand_InvokesRetryAndPreventsConcurrentExecution()
+    public async Task RetryCommand_IsCancellableAndDisablesConcurrentExecution()
     {
         var state = new OperationState();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -74,13 +74,16 @@ public class OperationStateTests
 
         Task first = state.RetryCommand.ExecuteAsync(null);
         await started.Task;
-        Assert.That(calls, Is.EqualTo(1));
-        Task second = state.RetryCommand.ExecuteAsync(null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(calls, Is.EqualTo(1));
+            Assert.That(state.RetryCommand.CanExecute(null), Is.False);
+            Assert.That(state.RetryCommand.CanBeCanceled, Is.True);
+        });
 
+        state.RetryCommand.Cancel();
+        Assert.ThrowsAsync<TaskCanceledException>(async () => await first);
         Assert.That(calls, Is.EqualTo(1));
-
-        release.SetResult();
-        await Task.WhenAll(first, second);
     }
 
     [Test]
