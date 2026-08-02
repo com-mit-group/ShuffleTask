@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation;
+using ShuffleTask.Presentation.Models;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.Views;
 
@@ -119,6 +121,7 @@ public partial class EditTaskPage : ContentPage
 
         _viewModel.Saved += OnSaved;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.OperationState.PropertyChanged += OnOperationStateChanged;
         _eventsSubscribed = true;
 
         UpdateTitle();
@@ -133,7 +136,20 @@ public partial class EditTaskPage : ContentPage
 
         _viewModel.Saved -= OnSaved;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.OperationState.PropertyChanged -= OnOperationStateChanged;
         _eventsSubscribed = false;
+    }
+
+    private void OnOperationStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_viewModel == null
+            || e.PropertyName != nameof(OperationState.Announcement)
+            || string.IsNullOrWhiteSpace(_viewModel.OperationState.Announcement))
+        {
+            return;
+        }
+
+        OperationStateAccessibility.Announce(Dispatcher, OperationStateMessage, _viewModel.OperationState);
     }
 
     private void UpdateTitle()

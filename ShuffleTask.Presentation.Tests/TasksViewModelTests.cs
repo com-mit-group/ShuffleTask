@@ -5,6 +5,7 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.Tests.TestDoubles;
 using ShuffleTask.ViewModels;
 
@@ -83,6 +84,39 @@ public class TasksViewModelTests
 
         Assert.AreEqual(1, _storage.InitializeCallCount, "ViewModel should not reinitialize when busy.");
         Assert.AreEqual(0, _storage.GetTasksCallCount, "LoadAsync should not fetch tasks when IsBusy is true.");
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenRefreshFails_PreservesTasksAndRetryRecovers()
+    {
+        IStorageService storage = Substitute.For<IStorageService>();
+        storage.InitializeAsync().Returns(Task.CompletedTask);
+        var task = CreateTask("retained", TimeSpan.Zero);
+        storage.GetTasksAsync(Arg.Any<string?>(), Arg.Any<string>()).Returns(
+            Task.FromResult(new List<TaskItem> { task }),
+            Task.FromException<List<TaskItem>>(new IOException("Injected storage failure.")),
+            Task.FromResult(new List<TaskItem> { task }));
+        var networkSync = Substitute.For<INetworkSyncService>();
+        var viewModel = new TasksViewModel(storage, _clock, networkSync, _settings);
+
+        await viewModel.LoadAsync();
+        await viewModel.LoadAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Tasks.Select(item => item.Task.Id), Is.EqualTo(new[] { task.Id }));
+            Assert.That(viewModel.OperationState.Kind, Is.EqualTo(OperationStateKind.TransientFailure));
+            Assert.That(viewModel.OperationState.CanRetry, Is.True);
+            Assert.That(viewModel.OperationState.IsBlocking, Is.False);
+        });
+
+        await viewModel.OperationState.RetryCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Tasks.Select(item => item.Task.Id), Is.EqualTo(new[] { task.Id }));
+            Assert.That(viewModel.OperationState.Kind, Is.EqualTo(OperationStateKind.Success));
+        });
     }
 
     [Test]

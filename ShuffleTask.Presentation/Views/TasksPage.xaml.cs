@@ -1,4 +1,7 @@
+using System.ComponentModel;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
+using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;
@@ -16,6 +19,18 @@ public partial class TasksPage : ContentPage
         BindingContext = _vm;
 
         Appearing += OnAppearing;
+        _vm.OperationState.PropertyChanged += OnOperationStateChanged;
+    }
+
+    private void OnOperationStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OperationState.Announcement)
+            || string.IsNullOrWhiteSpace(_vm.OperationState.Announcement))
+        {
+            return;
+        }
+
+        OperationStateAccessibility.Announce(Dispatcher, OperationStateMessage, _vm.OperationState);
     }
 
     private async void OnAppearing(object? sender, EventArgs e)

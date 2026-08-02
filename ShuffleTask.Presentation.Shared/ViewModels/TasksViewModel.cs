@@ -2,12 +2,14 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
@@ -25,18 +27,20 @@ public partial class TasksViewModel : ObservableObject
     private readonly INetworkSyncService _networkSyncService;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
+    private readonly IShuffleLogger? _logger;
     private bool _pendingSort;
     private bool _pendingRefresh;
     private bool _suppressRefresh;
     private List<TaskListItem> _allTasks = [];
 
-    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
+    public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings, IShuffleLogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(storage);
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _networkSyncService = networkSyncService;
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _logger = logger;
     }
 
     public ObservableCollection<TaskListItem> Tasks { get; } = [];
@@ -45,6 +49,7 @@ public partial class TasksViewModel : ObservableObject
     public ObservableCollection<TaskGroup> TaskGroups { get; private set; } = [];
     public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
     public IReadOnlyList<string> RepeatFilterOptions { get; } = new[] { RepeatFilterAll, RepeatFilterRepeating, RepeatFilterNonRepeating };
+    public OperationState OperationState { get; } = new();
 
     public bool HasActiveTasks => ActiveTasks.Count > 0;
     public bool HasDoneTasks => DoneTasks.Count > 0;
@@ -71,7 +76,7 @@ public partial class TasksViewModel : ObservableObject
     [ObservableProperty]
     private string selectedRepeatFilter = RepeatFilterAll;
 
-    public async Task LoadAsync(string? userId = null, string? deviceId = null)
+    public async Task LoadAsync(string? userId = null, string? deviceId = null, CancellationToken cancellationToken = default)
     {
         if (IsBusy)
         {
@@ -79,23 +84,55 @@ public partial class TasksViewModel : ObservableObject
         }
 
         IsBusy = true;
+        OperationState.SetLoading(HasTasks ? "Refreshing tasks…" : "Loading tasks…");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await _storage.InitializeAsync();
             List<TaskItem> items = await _storage.GetTasksAsync(
                 userId ?? _settings.Network?.UserId,
                 deviceId ?? _settings.Network?.DeviceId ?? string.Empty);
+            cancellationToken.ThrowIfCancellationRequested();
             AppSettings settings = _settings;
             DateTimeOffset now = _clock.GetUtcNow();
 
-            _allTasks = items
+            List<TaskListItem> loadedTasks = items
                 .Select(task => TaskListItem.From(task, settings, now))
                 .ToList();
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
+                _allTasks = loadedTasks;
                 ApplySortToCollections();
                 return Task.CompletedTask;
             });
+
+            if (loadedTasks.Count == 0)
+            {
+                OperationState.SetEmpty("No tasks yet. Add a task to get started.");
+            }
+            else
+            {
+                OperationState.SetSuccess("Tasks updated.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            OperationState.SetTransientFailure(
+                "Task loading was canceled. Try again.",
+                null,
+                token => LoadAsync(userId, deviceId, token),
+                isBlocking: !HasTasks);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Error, "LoadTasks", "Failed to load the task list.", ex);
+            OperationState.SetTransientFailure(
+                HasTasks
+                    ? "Tasks could not be refreshed. Your current list is still shown."
+                    : "Tasks could not be loaded. Check storage access and try again.",
+                null,
+                token => LoadAsync(userId, deviceId, token),
+                isBlocking: !HasTasks);
         }
         finally
         {

@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Services;
 using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Utilities;
 
@@ -20,17 +22,19 @@ public partial class DashboardViewModel : ObservableObject
     private readonly ShuffleCoordinatorService _coordinator;
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
+    private readonly IShuffleLogger? _logger;
 
     private TaskItem? _activeTask;
     private PomodoroSession? _pomodoroSession;
     private TimerRequest? _currentTimer;
     private bool _isInitialized;
+    private bool _isInitializing;
 
     private const string DefaultTitle = "Shuffle a task";
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings)
+    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings, IShuffleLogger? logger = null)
     {
         _storage = storage;
         _scheduler = scheduler;
@@ -46,6 +50,7 @@ public partial class DashboardViewModel : ObservableObject
         CycleStatus = string.Empty;
         PhaseBadge = string.Empty;
         _networkSyncService = networkSyncService;
+        _logger = logger;
     }
 
     public event EventHandler<TimerRequest>? CountdownRequested;
@@ -105,6 +110,8 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
+    public OperationState OperationState { get; } = new();
+
     [ObservableProperty]
     private string cycleStatus = string.Empty;
 
@@ -115,24 +122,64 @@ public partial class DashboardViewModel : ObservableObject
     private bool isPomodoroVisible;
 
     public string? ActiveTaskId => _activeTask?.Id;
+    public bool CanActOnTask => HasTask && !IsBusy;
+    public bool CanShuffle => !IsBusy;
 
-    public async Task InitializeAsync()
+    partial void OnHasTaskChanged(bool value) => OnPropertyChanged(nameof(CanActOnTask));
+
+    partial void OnIsBusyChanged(bool value)
     {
-        if (!_isInitialized)
+        OnPropertyChanged(nameof(CanActOnTask));
+        OnPropertyChanged(nameof(CanShuffle));
+    }
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        if (_isInitialized || _isInitializing)
         {
+            return;
+        }
+
+        _isInitializing = true;
+        OperationState.SetLoading("Preparing the dashboard…");
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             await _storage.InitializeAsync();
             await _notifications.InitializeAsync();
             _coordinator.RegisterDashboard(this);
             _isInitialized = true;
+            OperationState.SetSuccess("Dashboard ready.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            OperationState.SetTransientFailure(
+                "Dashboard setup was canceled. Try again.",
+                null,
+                InitializeAsync,
+                isBlocking: !HasTask);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Error, "InitializeDashboard", "Failed to initialize dashboard services.", ex);
+            OperationState.SetTransientFailure(
+                "The dashboard could not start. Check storage and notification access, then retry.",
+                null,
+                InitializeAsync,
+                isBlocking: !HasTask);
+        }
+        finally
+        {
+            _isInitializing = false;
         }
     }
 
     [RelayCommand]
-    private Task ShuffleAsync() => ShuffleInternalAsync(allowRepeat: false);
+    private Task ShuffleAsync(CancellationToken cancellationToken) => ShuffleInternalAsync(allowRepeat: false, cancellationToken);
 
     public Task ShuffleAfterTimeoutAsync() => ShuffleInternalAsync(allowRepeat: true);
 
-    private async Task ShuffleInternalAsync(bool allowRepeat)
+    private async Task ShuffleInternalAsync(bool allowRepeat, CancellationToken cancellationToken = default)
     {
         if (IsBusy)
         {
@@ -140,14 +187,23 @@ public partial class DashboardViewModel : ObservableObject
         }
 
         IsBusy = true;
+        OperationState.SetLoading("Finding the next task…");
+        bool? localDataSaved = null;
         try
         {
-            await InitializeAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            await InitializeAsync(cancellationToken);
+            if (!_isInitialized)
+            {
+                return;
+            }
+
             var settings = _settings;
 
             if (!settings.Active)
             {
                 ShowMessage("Scheduling paused", "Enable the scheduler from Settings to shuffle tasks.");
+                OperationState.SetValidation("Scheduling is paused. Enable it in Settings before shuffling.");
                 return;
             }
 
@@ -160,16 +216,28 @@ public partial class DashboardViewModel : ObservableObject
             if (next == null)
             {
                 ShowMessage("No tasks ready", "Add a task or adjust filters to get started.");
+                OperationState.SetEmpty("No tasks are ready. Add a task or adjust its schedule.");
                 return;
             }
 
             bool isSameTask = !string.IsNullOrEmpty(previousId) && next.Id == previousId;
             if (isSameTask && !allowRepeat)
             {
+                OperationState.SetSuccess("The current task is still the best available task.");
                 return;
             }
 
-            await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
+            bool clearsOneTimePriority = next.CutInLineMode == CutInLineMode.Once;
+            try
+            {
+                bool cleared = await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
+                localDataSaved = clearsOneTimePriority ? cleared : null;
+            }
+            catch
+            {
+                localDataSaved = false;
+                throw;
+            }
 
             BindTask(next);
 
@@ -206,6 +274,29 @@ public partial class DashboardViewModel : ObservableObject
                     await _notifications.NotifyTaskAsync(next, minutes, settings);
                 }
             }
+
+            OperationState.SetSuccess("Next task selected.", localDataSaved);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            OperationState.SetTransientFailure(
+                localDataSaved == true
+                    ? "Shuffle was canceled after local task data was saved. Retry to refresh the selection."
+                    : "Shuffle was canceled. No local task data was saved.",
+                localDataSaved,
+                token => ShuffleInternalAsync(allowRepeat, token),
+                isBlocking: !HasTask);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Error, "ShuffleTask", "Failed while selecting or notifying the next task.", ex);
+            OperationState.SetTransientFailure(
+                localDataSaved == true
+                    ? "The operation failed after local task data was saved. Retry the remaining work."
+                    : "A task could not be selected. No local task data was saved. Try again.",
+                localDataSaved,
+                token => ShuffleInternalAsync(allowRepeat, token),
+                isBlocking: !HasTask);
         }
         finally
         {

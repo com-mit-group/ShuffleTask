@@ -27,6 +27,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Entry Grid.Row="0"
@@ -395,15 +396,32 @@
                   ColumnSpacing="16">
                 <Button Grid.Column="0"
                         Text="Save"
+                        IsEnabled="{Binding CanSave}"
                         Command="{Binding SaveCommand}" />
                 <Button Grid.Column="1"
                         Text="Cancel"
                         Clicked="OnCancelClicked" />
             </Grid>
 
-            <ActivityIndicator Grid.Row="15"
-                               IsVisible="{Binding IsBusy}"
-                               IsRunning="{Binding IsBusy}"
+            <Border Grid.Row="15"
+                    Padding="12"
+                    StrokeShape="RoundRectangle 8"
+                    IsVisible="{Binding OperationState.HasMessage}"
+                    SemanticProperties.Description="{Binding OperationState.Announcement}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Label x:Name="OperationStateMessage"
+                           Text="{Binding OperationState.Message}"
+                           VerticalTextAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Text="Retry"
+                            Command="{Binding OperationState.RetryCommand}"
+                            IsVisible="{Binding OperationState.CanRetry}" />
+                </Grid>
+            </Border>
+
+            <ActivityIndicator Grid.Row="16"
+                               IsVisible="{Binding OperationState.IsLoading}"
+                               IsRunning="{Binding OperationState.IsLoading}"
                                HorizontalOptions="Center" />
         </Grid>
     </ScrollView>

@@ -13,6 +13,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0"
@@ -105,7 +106,7 @@
                     HeightRequest="44"
                     Text="Done"
                     Command="{Binding DoneCommand}"
-                    IsEnabled="{Binding HasTask}"
+                    IsEnabled="{Binding CanActOnTask}"
                     BackgroundColor="{AppThemeBinding Light=#ead46a, Dark=#b39b34}"
                     TextColor="{AppThemeBinding Light=Black, Dark=Black}" />
 
@@ -114,7 +115,7 @@
                     HeightRequest="44"
                     Text="Snooze"
                     Command="{Binding SnoozeCommand}"
-                    IsEnabled="{Binding HasTask}"
+                    IsEnabled="{Binding CanActOnTask}"
                     BackgroundColor="{AppThemeBinding Light=#e5e5e5, Dark=#444444}"
                     TextColor="{AppThemeBinding Light=Black, Dark=White}" />
 
@@ -123,13 +124,30 @@
                     HeightRequest="44"
                     Text="Shuffle"
                     Command="{Binding ShuffleCommand}"
+                    IsEnabled="{Binding CanShuffle}"
                     BackgroundColor="{AppThemeBinding Light=#e5e5e5, Dark=#444444}"
                     TextColor="{AppThemeBinding Light=Black, Dark=White}" />
         </Grid>
 
-        <ActivityIndicator Grid.Row="3"
+        <Border Grid.Row="3"
+                Padding="12"
+                StrokeShape="RoundRectangle 8"
+                IsVisible="{Binding OperationState.HasMessage}"
+                SemanticProperties.Description="{Binding OperationState.Announcement}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Label x:Name="OperationStateMessage"
+                       Text="{Binding OperationState.Message}"
+                       VerticalTextAlignment="Center" />
+                <Button Grid.Column="1"
+                        Text="Retry"
+                        Command="{Binding OperationState.RetryCommand}"
+                        IsVisible="{Binding OperationState.CanRetry}" />
+            </Grid>
+        </Border>
+
+        <ActivityIndicator Grid.Row="4"
                            HorizontalOptions="Center"
-                           IsVisible="{Binding IsBusy}"
-                           IsRunning="{Binding IsBusy}" />
+                           IsVisible="{Binding OperationState.IsLoading}"
+                           IsRunning="{Binding OperationState.IsLoading}" />
     </Grid>
 </ContentPage>
