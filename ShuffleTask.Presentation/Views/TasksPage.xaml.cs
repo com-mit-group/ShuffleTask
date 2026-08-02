@@ -34,7 +34,7 @@ public partial class TasksPage : ContentPage
         {
             if (_vm.OperationState.IsBlocking)
             {
-                OperationStateMessage.Focus();
+                OperationStateMessage.SetSemanticFocus();
             }
 
             SemanticScreenReader.Default.Announce(_vm.OperationState.Announcement);

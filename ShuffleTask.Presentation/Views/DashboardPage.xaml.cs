@@ -47,7 +47,7 @@ public partial class DashboardPage : ContentPage
         {
             if (_vm.OperationState.IsBlocking)
             {
-                OperationStateMessage.Focus();
+                OperationStateMessage.SetSemanticFocus();
             }
 
             SemanticScreenReader.Default.Announce(_vm.OperationState.Announcement);

@@ -153,7 +153,7 @@ public partial class EditTaskPage : ContentPage
         {
             if (_viewModel.OperationState.IsBlocking)
             {
-                OperationStateMessage.Focus();
+                OperationStateMessage.SetSemanticFocus();
             }
 
             SemanticScreenReader.Default.Announce(_viewModel.OperationState.Announcement);
