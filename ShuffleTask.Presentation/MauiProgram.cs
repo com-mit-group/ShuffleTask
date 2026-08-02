@@ -82,7 +82,8 @@ public static partial class MauiProgram
             var timeProvider = sp.GetRequiredService<TimeProvider>();
             var networkSync = sp.GetRequiredService<INetworkSyncService>();
             var appSettings = sp.GetRequiredService<AppSettings>();
-            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings);
+            var shuffleLogger = sp.GetRequiredService<IShuffleLogger>();
+            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings, shuffleLogger);
             var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
             taskStartedHandler.RegisterDashboard(dashboardViewModel);
             return dashboardViewModel;
@@ -156,11 +157,13 @@ public static partial class MauiProgram
             return transport;
         });
         builder.Services.AddSingleton<NetworkedEventAggregator>();
-        builder.Services.AddSingleton<ISyncExchangeService, SyncExchangeService>();
         builder.Services.AddSingleton<INetworkSyncService, NetworkSyncService>();
 
         builder.Services.AddSingleton<TaskStartedAsyncHandler>();
         builder.Services.AddSingleton<TimeUpNotificationAsyncHandler>();
+        builder.Services.AddSingleton<TaskManifestAnnouncedAsyncHandler>();
+        builder.Services.AddSingleton<TaskManifestRequestAsyncHandler>();
+        builder.Services.AddSingleton<TaskBatchResponseAsyncHandler>();
     }
 
     private static void InitNetworkSync()
@@ -173,6 +176,9 @@ public static partial class MauiProgram
         {
             aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskStartedAsyncHandler>());
             aggregator.SubscribeToEventType(_services!.GetRequiredService<TimeUpNotificationAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskManifestAnnouncedAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskManifestRequestAsyncHandler>());
+            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskBatchResponseAsyncHandler>());
         }, TaskScheduler.Default);
     }
 

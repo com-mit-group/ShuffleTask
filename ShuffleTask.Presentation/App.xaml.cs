@@ -1,7 +1,11 @@
+using System.ComponentModel;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Accessibility;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.Presentation.Services;
 using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.Views;
@@ -15,6 +19,10 @@ public partial class App : Microsoft.Maui.Controls.Application
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
     private readonly IShuffleLogger? _logger;
+    private bool _startupRunning;
+    private bool _resumeRunning;
+
+    public OperationState StartupOperationState { get; } = new();
 
     public App(MainPage mainPage, IStorageService storage, ShuffleCoordinatorService coordinator, TimeProvider clock, AppSettings settings, IShuffleLogger? logger = null)
     {
@@ -25,32 +33,111 @@ public partial class App : Microsoft.Maui.Controls.Application
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger;
+        StartupOperationState.PropertyChanged += OnStartupOperationStateChanged;
         RequestedThemeChanged += (_, __) => { };
+    }
+
+    private void OnStartupOperationStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OperationState.Announcement)
+            || string.IsNullOrWhiteSpace(StartupOperationState.Announcement))
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() => SemanticScreenReader.Default.Announce(StartupOperationState.Announcement));
     }
 
     protected override async void OnStart()
     {
         base.OnStart();
-        await EnsureSeedDataAsync();
-        await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
-        if (!_settings.BackgroundActivityEnabled)
+        await StartAsync();
+    }
+
+    internal async Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        if (_startupRunning)
         {
             return;
         }
 
-        await _coordinator.StartAsync();
+        _startupRunning = true;
+        StartupOperationState.SetLoading("Starting ShuffleTask…");
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await EnsureSeedDataAsync();
+            await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
+            if (_settings.BackgroundActivityEnabled)
+            {
+                await _coordinator.StartAsync();
+            }
+
+            StartupOperationState.SetSuccess("ShuffleTask is ready.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StartupOperationState.SetTransientFailure(
+                "Startup was canceled. Retry when you are ready.",
+                null,
+                StartAsync,
+                isBlocking: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Critical, "ApplicationStartup", "Application startup failed.", ex);
+            StartupOperationState.SetFatalFailure(
+                "ShuffleTask could not start safely. Check local storage access and retry.",
+                null,
+                StartAsync);
+        }
+        finally
+        {
+            _startupRunning = false;
+        }
     }
 
     protected override async void OnResume()
     {
         base.OnResume();
-        if (!_settings.BackgroundActivityEnabled)
+        await ResumeAsync();
+    }
+
+    internal async Task ResumeAsync(CancellationToken cancellationToken = default)
+    {
+        if (_resumeRunning || !_settings.BackgroundActivityEnabled)
         {
             return;
         }
 
-        await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
-        await _coordinator.ResumeAsync();
+        _resumeRunning = true;
+        StartupOperationState.SetLoading("Restoring ShuffleTask…");
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
+            await _coordinator.ResumeAsync();
+            StartupOperationState.SetSuccess("ShuffleTask restored.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            StartupOperationState.SetTransientFailure(
+                "Restore was canceled. Retry when you are ready.",
+                null,
+                ResumeAsync);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Error, "ApplicationResume", "Application resume failed.", ex);
+            StartupOperationState.SetTransientFailure(
+                "ShuffleTask could not restore background activity. Your saved tasks are unchanged.",
+                null,
+                ResumeAsync);
+        }
+        finally
+        {
+            _resumeRunning = false;
+        }
     }
 
     protected override void OnSleep()

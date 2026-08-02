@@ -1,4 +1,7 @@
+using System.ComponentModel;
+using Microsoft.Maui.Accessibility;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;
@@ -16,6 +19,26 @@ public partial class TasksPage : ContentPage
         BindingContext = _vm;
 
         Appearing += OnAppearing;
+        _vm.OperationState.PropertyChanged += OnOperationStateChanged;
+    }
+
+    private void OnOperationStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OperationState.Announcement)
+            || string.IsNullOrWhiteSpace(_vm.OperationState.Announcement))
+        {
+            return;
+        }
+
+        Dispatcher.Dispatch(() =>
+        {
+            if (_vm.OperationState.IsBlocking)
+            {
+                OperationStateMessage.Focus();
+            }
+
+            SemanticScreenReader.Default.Announce(_vm.OperationState.Announcement);
+        });
     }
 
     private async void OnAppearing(object? sender, EventArgs e)

@@ -2,7 +2,7 @@
 <?xaml-comp compile="true"?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:ShuffleTask.ViewModels;assembly=ShuffleTask.Presentation.Shared"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels"
             x:Class="ShuffleTask.Views.TasksPage"
             x:DataType="vm:TasksViewModel"
              Title="Tasks">
@@ -181,10 +181,11 @@
         <ToolbarItem Text="+"
                      Priority="0"
                      Order="Primary"
+                     IsEnabled="{Binding OperationState.IsNotLoading}"
                      Clicked="OnAddClicked" />
     </ContentPage.ToolbarItems>
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
         <VerticalStackLayout Padding="12,8"
                              Spacing="8">
             <HorizontalStackLayout Spacing="12">
@@ -249,7 +250,27 @@
             </VerticalStackLayout>
         </VerticalStackLayout>
 
-        <CollectionView Grid.Row="1"
+        <Border Grid.Row="1"
+                Margin="12,4"
+                Padding="12"
+                StrokeShape="RoundRectangle 8"
+                IsVisible="{Binding OperationState.HasMessage}"
+                SemanticProperties.Description="{Binding OperationState.Announcement}">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ActivityIndicator IsVisible="{Binding OperationState.IsLoading}"
+                                   IsRunning="{Binding OperationState.IsLoading}" />
+                <Label x:Name="OperationStateMessage"
+                       Grid.Column="1"
+                       Text="{Binding OperationState.Message}"
+                       VerticalTextAlignment="Center" />
+                <Button Grid.Column="2"
+                        Text="Retry"
+                        Command="{Binding OperationState.RetryCommand}"
+                        IsVisible="{Binding OperationState.CanRetry}" />
+            </Grid>
+        </Border>
+
+        <CollectionView Grid.Row="2"
                         IsVisible="{Binding HasTasks}"
                         ItemsSource="{Binding TaskGroups}"
                         IsGrouped="True"
@@ -271,7 +292,7 @@
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
         </CollectionView>
-        <Grid Grid.Row="1"
+        <Grid Grid.Row="2"
               IsVisible="False">
             <Grid.Triggers>
                 <DataTrigger TargetType="Grid"
