@@ -107,7 +107,6 @@ public sealed class OperationState : ObservableObject
     {
         Kind = kind;
         Message = message;
-        Announcement = announcement;
         IsBlocking = isBlocking;
         LocalDataSaved = localDataSaved;
         _retry = retry;
@@ -116,6 +115,7 @@ public sealed class OperationState : ObservableObject
         OnPropertyChanged(nameof(HasMessage));
         OnPropertyChanged(nameof(CanRetry));
         RetryCommand.NotifyCanExecuteChanged();
+        Announcement = announcement;
     }
 
     private bool CanRetryNow() => CanRetry;

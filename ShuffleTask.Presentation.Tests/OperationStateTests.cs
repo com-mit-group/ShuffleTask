@@ -81,4 +81,23 @@ public class OperationStateTests
         release.SetResult();
         await Task.WhenAll(first, second);
     }
+
+    [Test]
+    public void AnnouncementNotification_ExposesCurrentBlockingState()
+    {
+        var state = new OperationState();
+        var observedBlockingStates = new List<bool>();
+        state.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(OperationState.Announcement))
+            {
+                observedBlockingStates.Add(state.IsBlocking);
+            }
+        };
+
+        state.SetValidation("Title required");
+        state.SetSuccess("Saved");
+
+        Assert.That(observedBlockingStates, Is.EqualTo(new[] { true, false }));
+    }
 }
