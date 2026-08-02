@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Microsoft.Maui.Accessibility;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation.Utilities;
@@ -43,15 +42,7 @@ public partial class DashboardPage : ContentPage
             return;
         }
 
-        Dispatcher.Dispatch(() =>
-        {
-            if (_vm.OperationState.IsBlocking)
-            {
-                OperationStateMessage.SetSemanticFocus();
-            }
-
-            SemanticScreenReader.Default.Announce(_vm.OperationState.Announcement);
-        });
+        OperationStateAccessibility.Announce(Dispatcher, OperationStateMessage, _vm.OperationState);
     }
 
     private async void OnLoaded(object? sender, EventArgs e)

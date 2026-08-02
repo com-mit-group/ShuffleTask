@@ -1,10 +1,10 @@
 using System.ComponentModel;
-using Microsoft.Maui.Accessibility;
 using Microsoft.Extensions.DependencyInjection;
 using ShuffleTask.ViewModels;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Models;
+using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.Views;
 
@@ -149,15 +149,7 @@ public partial class EditTaskPage : ContentPage
             return;
         }
 
-        Dispatcher.Dispatch(() =>
-        {
-            if (_viewModel.OperationState.IsBlocking)
-            {
-                OperationStateMessage.SetSemanticFocus();
-            }
-
-            SemanticScreenReader.Default.Announce(_viewModel.OperationState.Announcement);
-        });
+        OperationStateAccessibility.Announce(Dispatcher, OperationStateMessage, _viewModel.OperationState);
     }
 
     private void UpdateTitle()

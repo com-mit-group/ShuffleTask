@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Accessibility;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Domain.Entities;
@@ -45,7 +44,7 @@ public partial class App : Microsoft.Maui.Controls.Application
             return;
         }
 
-        Dispatcher.Dispatch(() => SemanticScreenReader.Default.Announce(StartupOperationState.Announcement));
+        OperationStateAccessibility.Announce(Dispatcher, null, StartupOperationState);
     }
 
     protected override async void OnStart()

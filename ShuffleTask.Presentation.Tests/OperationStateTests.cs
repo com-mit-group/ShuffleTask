@@ -74,6 +74,7 @@ public class OperationStateTests
 
         Task first = state.RetryCommand.ExecuteAsync(null);
         await started.Task;
+        Assert.That(calls, Is.EqualTo(1));
         Task second = state.RetryCommand.ExecuteAsync(null);
 
         Assert.That(calls, Is.EqualTo(1));

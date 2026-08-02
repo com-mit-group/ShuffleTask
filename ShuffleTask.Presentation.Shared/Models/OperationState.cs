@@ -22,10 +22,11 @@ public sealed class OperationState : ObservableObject
     private string _announcement = string.Empty;
     private bool _isBlocking;
     private bool? _localDataSaved;
+    private int _retryRunning;
 
     public OperationState()
     {
-        RetryCommand = new AsyncRelayCommand(RetryAsync, CanRetryNow);
+        RetryCommand = new AsyncRelayCommand(() => RetryAsync(CancellationToken.None), CanRetryNow);
     }
 
     public OperationStateKind Kind
@@ -64,7 +65,7 @@ public sealed class OperationState : ObservableObject
 
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
 
-    public bool CanRetry => _retry is not null && !IsLoading;
+    public bool CanRetry => _retry is not null && !IsLoading && Volatile.Read(ref _retryRunning) == 0;
 
     public IAsyncRelayCommand RetryCommand { get; }
 
@@ -120,6 +121,25 @@ public sealed class OperationState : ObservableObject
 
     private bool CanRetryNow() => CanRetry;
 
-    private Task RetryAsync(CancellationToken cancellationToken)
-        => _retry?.Invoke(cancellationToken) ?? Task.CompletedTask;
+    private async Task RetryAsync(CancellationToken cancellationToken)
+    {
+        Func<CancellationToken, Task>? retry = _retry;
+        if (retry is null || Interlocked.CompareExchange(ref _retryRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(CanRetry));
+        RetryCommand.NotifyCanExecuteChanged();
+        try
+        {
+            await retry(cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _retryRunning, 0);
+            OnPropertyChanged(nameof(CanRetry));
+            RetryCommand.NotifyCanExecuteChanged();
+        }
+    }
 }

@@ -1,7 +1,7 @@
 using System.ComponentModel;
-using Microsoft.Maui.Accessibility;
 using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation.Models;
+using ShuffleTask.Presentation.Utilities;
 using ShuffleTask.ViewModels;
 
 namespace ShuffleTask.Views;
@@ -30,15 +30,7 @@ public partial class TasksPage : ContentPage
             return;
         }
 
-        Dispatcher.Dispatch(() =>
-        {
-            if (_vm.OperationState.IsBlocking)
-            {
-                OperationStateMessage.SetSemanticFocus();
-            }
-
-            SemanticScreenReader.Default.Announce(_vm.OperationState.Announcement);
-        });
+        OperationStateAccessibility.Announce(Dispatcher, OperationStateMessage, _vm.OperationState);
     }
 
     private async void OnAppearing(object? sender, EventArgs e)

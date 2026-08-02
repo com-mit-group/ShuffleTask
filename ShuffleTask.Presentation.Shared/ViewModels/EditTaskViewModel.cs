@@ -1,9 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Application.Utilities;
 using ShuffleTask.Domain.Entities;
+using ShuffleTask.Presentation.Models;
 using ShuffleTask.Presentation.Utilities;
 using System.Collections.ObjectModel;
 
@@ -13,6 +15,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
 {
     private readonly IStorageService _storage;
     private readonly TimeProvider _clock;
+    private readonly IShuffleLogger? _logger;
 
     private TaskItem _workingCopy = new();
 
@@ -94,6 +97,11 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
     [ObservableProperty]
     private bool isBusy;
 
+    public OperationState OperationState { get; } = new();
+    public bool CanSave => !IsBusy;
+
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanSave));
+
     // Per-task timer override _settings
     [ObservableProperty]
     private bool useCustomTimer;
@@ -126,10 +134,11 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
         private set => SetProperty(ref _isNew, value);
     }
 
-    public EditTaskViewModel(IStorageService storage, TimeProvider clock, AppSettings appSettings)
+    public EditTaskViewModel(IStorageService storage, TimeProvider clock, AppSettings appSettings, IShuffleLogger? logger = null)
     {
         _storage = storage;
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+        _logger = logger;
         AppSettings = appSettings;
         DeadlineDate = GetTodayUtcDate();
         AlignmentModeOptions = AlignmentModeCatalog.Defaults;
@@ -223,6 +232,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
     public async Task LoadAsync(TaskItem? task)
     {
         IsBusy = false;
+        OperationState.SetIdle();
         await _storage.InitializeAsync();
         await LoadPeriodDefinitionOptionsAsync();
         _workingCopy = task != null ? TaskItem.Clone(task) : new TaskItem();
@@ -289,7 +299,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
     }
 
     [RelayCommand]
-    private async Task SaveAsync()
+    private async Task SaveAsync(CancellationToken cancellationToken)
     {
         if (IsBusy)
         {
@@ -298,12 +308,15 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
 
         if (string.IsNullOrWhiteSpace(Title))
         {
+            OperationState.SetValidation("Enter a task title before saving.");
             return;
         }
 
         IsBusy = true;
+        OperationState.SetLoading("Saving task…");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await _storage.InitializeAsync();
 
             _workingCopy.Title = Title.Trim();
@@ -376,7 +389,25 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
                 await _storage.UpdateTaskAsync(_workingCopy);
             }
 
+            OperationState.SetSuccess(IsNew ? "Task created and saved on this device." : "Task changes saved on this device.", true);
             Saved?.Invoke(this, EventArgs.Empty);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            OperationState.SetTransientFailure(
+                "Saving was canceled. No local changes were saved.",
+                false,
+                token => SaveAsync(token),
+                isBlocking: true);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Error, "SaveTask", $"Failed to save task '{_workingCopy.Id}'.", ex);
+            OperationState.SetTransientFailure(
+                "The task was not saved on this device. Check storage access and try again.",
+                false,
+                token => SaveAsync(token),
+                isBlocking: true);
         }
         finally
         {
