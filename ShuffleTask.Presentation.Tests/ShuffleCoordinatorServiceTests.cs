@@ -102,6 +102,17 @@ public class ShuffleCoordinatorServiceTests
     }
 
     [Test]
+    public async Task TimerCallback_AfterSuspension_DoesNotReadDisposedCancellationSource()
+    {
+        using var service = CreateService();
+        await service.StartAsync();
+
+        service.SuspendInProcessTimer();
+
+        await _background.TriggerAsyncCallbackAsync();
+    }
+
+    [Test]
     public async Task StartAsync_WhenBackgroundDisabled_DoesNotSchedule()
     {
         _settings.BackgroundActivityEnabled = false;

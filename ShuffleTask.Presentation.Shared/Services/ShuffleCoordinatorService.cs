@@ -388,6 +388,7 @@ public class ShuffleCoordinatorService : IDisposable
     private void ScheduleInProcessTimer(DateTimeOffset scheduledAt, string? taskId)
     {
         var cts = new CancellationTokenSource();
+        CancellationToken timerToken = cts.Token;
         _timerCts = cts;
 
         TimeSpan delay = scheduledAt - GetCurrentInstant();
@@ -396,9 +397,9 @@ public class ShuffleCoordinatorService : IDisposable
             delay = TimeSpan.Zero;
         }
 
-        _ = _backgroundService.ScheduleAsync(delay, cts.Token, async () =>
+        _ = _backgroundService.ScheduleAsync(delay, timerToken, async () =>
         {
-            if (cts.Token.IsCancellationRequested)
+            if (timerToken.IsCancellationRequested)
             {
                 Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
                 return;
@@ -410,7 +411,7 @@ public class ShuffleCoordinatorService : IDisposable
             }
             else
             {
-                await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+                await ExecuteShuffleAsync(taskId, cts, timerToken).ConfigureAwait(false);
             }
         });
     }
@@ -433,7 +434,10 @@ public class ShuffleCoordinatorService : IDisposable
         await ScheduleNextShuffleAsync().ConfigureAwait(false);
     }
 
-    private async Task ExecuteShuffleAsync(string taskId, CancellationTokenSource cts)
+    private async Task ExecuteShuffleAsync(
+        string taskId,
+        CancellationTokenSource cts,
+        CancellationToken timerToken)
     {
         CancelPersistentSchedule();
 
@@ -441,7 +445,7 @@ public class ShuffleCoordinatorService : IDisposable
 
         await RunWithGateAsync(async () =>
         {
-            executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
+            executed = await ExecuteShuffleUnsafeAsync(taskId, cts, timerToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         if (executed)
@@ -519,7 +523,8 @@ public class ShuffleCoordinatorService : IDisposable
         {
             await NotifyExpiredTimerAsync().ConfigureAwait(false);
             using var cts = new CancellationTokenSource();
-            await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+            CancellationToken timerToken = cts.Token;
+            await ExecuteShuffleAsync(taskId, cts, timerToken).ConfigureAwait(false);
         }
     }
 
@@ -557,7 +562,10 @@ public class ShuffleCoordinatorService : IDisposable
         PersistedTimerState.Clear();
     }
 
-    private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
+    private async Task<bool> ExecuteShuffleUnsafeAsync(
+        string taskId,
+        CancellationTokenSource cts,
+        CancellationToken timerToken)
     {
         if (ReferenceEquals(_timerCts, cts))
         {
@@ -608,7 +616,7 @@ public class ShuffleCoordinatorService : IDisposable
         EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
-        await NotifyAsync(task, settings, effectiveSettings, cts.Token).ConfigureAwait(false);
+        await NotifyAsync(task, settings, effectiveSettings, timerToken).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
     }
