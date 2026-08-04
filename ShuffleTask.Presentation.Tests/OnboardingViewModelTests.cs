@@ -114,11 +114,13 @@ public class OnboardingViewModelTests
     public async Task CreateTask_CompletesOnlyAfterSavedTaskCallback()
     {
         var onboarding = Substitute.For<IOnboardingService>();
+        onboarding.GetCompletedVersionAsync().Returns(0);
         onboarding.CompleteAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
         var viewModel = new OnboardingViewModel(onboarding, TimeProvider.System);
         int requests = 0;
         viewModel.CreateTaskRequested += (_, _) => requests++;
 
+        await viewModel.LoadAsync();
         viewModel.CreateTaskCommand.Execute(null);
 
         Assert.That(requests, Is.EqualTo(1));
