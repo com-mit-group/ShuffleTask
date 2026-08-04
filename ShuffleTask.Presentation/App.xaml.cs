@@ -20,6 +20,7 @@ public partial class App : Microsoft.Maui.Controls.Application
     private readonly MainPage _mainPage;
     private bool _startupRunning;
     private bool _resumeRunning;
+    private bool _backgroundStartupAllowed;
 
     public OperationState StartupOperationState { get; } = new();
 
@@ -62,6 +63,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         }
 
         _startupRunning = true;
+        _backgroundStartupAllowed = false;
         StartupOperationState.SetLoading("Starting ShuffleTask…");
         try
         {
@@ -69,13 +71,14 @@ public partial class App : Microsoft.Maui.Controls.Application
             cancellationToken.ThrowIfCancellationRequested();
             await _storage.InitializeAsync();
             await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
-            if (_settings.BackgroundActivityEnabled)
+            bool onboardingRequired = await _mainPage.ResolveOnboardingAsync(cancellationToken);
+            _backgroundStartupAllowed = !onboardingRequired;
+            if (_backgroundStartupAllowed && _settings.BackgroundActivityEnabled)
             {
                 await _coordinator.StartAsync();
             }
 
             StartupOperationState.SetSuccess("ShuffleTask is ready.");
-            await _mainPage.ResolveOnboardingAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -109,7 +112,7 @@ public partial class App : Microsoft.Maui.Controls.Application
 
     internal async Task ResumeAsync(CancellationToken cancellationToken = default)
     {
-        if (_resumeRunning || !_settings.BackgroundActivityEnabled)
+        if (_resumeRunning || !_backgroundStartupAllowed || !_settings.BackgroundActivityEnabled)
         {
             return;
         }

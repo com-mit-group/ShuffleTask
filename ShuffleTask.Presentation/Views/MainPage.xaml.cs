@@ -173,11 +173,11 @@ public partial class MainPage : TabbedPage
         await ShowOnboardingModalAsync();
     }
 
-    public async Task ResolveOnboardingAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> ResolveOnboardingAsync(CancellationToken cancellationToken = default)
     {
         if (_onboardingViewModel == null)
         {
-            return;
+            return false;
         }
 
         bool shouldShow = await _onboardingViewModel.LoadAsync(cancellationToken);
@@ -190,6 +190,8 @@ public partial class MainPage : TabbedPage
         {
             await HideOnboardingModalAsync();
         }
+
+        return shouldShow;
     }
 
     public async Task ShowOnboardingFailureAsync(Func<CancellationToken, Task> retry)

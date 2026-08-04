@@ -11,7 +11,6 @@ public partial class TasksPage : ContentPage
     private readonly TasksViewModel _vm;
     private readonly IServiceProvider _services;
     private bool _onboardingEditorOpen;
-    private bool _onboardingEditorSaved;
 
     public event EventHandler<OnboardingTaskEditorClosedEventArgs>? OnboardingTaskEditorClosed;
 
@@ -55,7 +54,6 @@ public partial class TasksPage : ContentPage
         }
 
         _onboardingEditorOpen = true;
-        _onboardingEditorSaved = false;
         await OpenEditorAsync(null);
     }
 
@@ -159,25 +157,51 @@ public partial class TasksPage : ContentPage
         editorVm.Saved -= OnEditorSaved;
         editorVm.Saved += OnEditorSaved;
 
-        void OnEditorPageDisappearing(object? s, EventArgs e)
+        if (Parent is not NavigationPage navigationPage)
         {
-            editorVm.Saved -= OnEditorSaved;
-            page.Disappearing -= OnEditorPageDisappearing;
-            if (_onboardingEditorOpen)
-            {
-                bool saved = _onboardingEditorSaved;
-                _onboardingEditorOpen = false;
-                _onboardingEditorSaved = false;
-                OnboardingTaskEditorClosed?.Invoke(this, new OnboardingTaskEditorClosedEventArgs(saved));
-            }
+            throw new InvalidOperationException("The Tasks page requires a navigation host to open the task editor.");
         }
 
-        page.Disappearing -= OnEditorPageDisappearing;
-        page.Disappearing += OnEditorPageDisappearing;
+        void OnEditorPopped(object? sender, NavigationEventArgs e)
+        {
+            if (e.Page != page)
+            {
+                return;
+            }
+
+            editorVm.Saved -= OnEditorSaved;
+            navigationPage.Popped -= OnEditorPopped;
+            if (!_onboardingEditorOpen)
+            {
+                return;
+            }
+
+            _onboardingEditorOpen = false;
+            OnboardingTaskEditorClosed?.Invoke(
+                this,
+                new OnboardingTaskEditorClosedEventArgs(page.WasSavedBeforeClosing));
+        }
+
+        navigationPage.Popped += OnEditorPopped;
 
         page.BindingContext = editorVm;
         page.Title = editorVm.IsNew ? "New Task" : "Edit Task";
-        await Navigation.PushAsync(page);
+        try
+        {
+            await navigationPage.PushAsync(page);
+        }
+        catch
+        {
+            editorVm.Saved -= OnEditorSaved;
+            navigationPage.Popped -= OnEditorPopped;
+            if (_onboardingEditorOpen)
+            {
+                _onboardingEditorOpen = false;
+                OnboardingTaskEditorClosed?.Invoke(this, new OnboardingTaskEditorClosedEventArgs(false));
+            }
+
+            throw;
+        }
     }
 
     private async void OnEditorSaved(object? sender, EventArgs e)
@@ -185,11 +209,6 @@ public partial class TasksPage : ContentPage
         if (sender is EditTaskViewModel vm)
         {
             vm.Saved -= OnEditorSaved;
-        }
-
-        if (_onboardingEditorOpen)
-        {
-            _onboardingEditorSaved = true;
         }
 
         await _vm.LoadAsync();
