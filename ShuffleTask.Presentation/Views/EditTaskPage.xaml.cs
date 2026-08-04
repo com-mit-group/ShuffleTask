@@ -30,6 +30,10 @@ public partial class EditTaskPage : ContentPage
         }
 
         UpdateTitle();
+        if (_viewModel?.IsNew == true)
+        {
+            Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(250), () => TitleEntry.Focus());
+        }
     }
 
     protected override void OnBindingContextChanged()

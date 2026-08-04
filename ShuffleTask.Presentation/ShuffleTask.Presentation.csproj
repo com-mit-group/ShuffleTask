@@ -74,6 +74,9 @@
       <MauiXaml Update="Views\DashboardPage.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>
+      <MauiXaml Update="Views\OnboardingPage.xaml">
+        <Generator>MSBuild:Compile</Generator>
+      </MauiXaml>
       <MauiXaml Update="Controls\NumericStepper.xaml">
         <Generator>MSBuild:Compile</Generator>
       </MauiXaml>

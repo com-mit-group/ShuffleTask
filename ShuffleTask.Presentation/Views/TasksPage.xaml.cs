@@ -10,6 +10,10 @@ public partial class TasksPage : ContentPage
 {
     private readonly TasksViewModel _vm;
     private readonly IServiceProvider _services;
+    private bool _onboardingEditorOpen;
+    private bool _onboardingEditorSaved;
+
+    public event EventHandler<OnboardingTaskEditorClosedEventArgs>? OnboardingTaskEditorClosed;
 
     public TasksPage(TasksViewModel vm, IServiceProvider services)
     {
@@ -40,6 +44,18 @@ public partial class TasksPage : ContentPage
 
     private async void OnAddClicked(object? sender, EventArgs e)
     {
+        await OpenEditorAsync(null);
+    }
+
+    public async Task OpenNewTaskForOnboardingAsync()
+    {
+        if (_onboardingEditorOpen)
+        {
+            return;
+        }
+
+        _onboardingEditorOpen = true;
+        _onboardingEditorSaved = false;
         await OpenEditorAsync(null);
     }
 
@@ -147,6 +163,13 @@ public partial class TasksPage : ContentPage
         {
             editorVm.Saved -= OnEditorSaved;
             page.Disappearing -= OnEditorPageDisappearing;
+            if (_onboardingEditorOpen)
+            {
+                bool saved = _onboardingEditorSaved;
+                _onboardingEditorOpen = false;
+                _onboardingEditorSaved = false;
+                OnboardingTaskEditorClosed?.Invoke(this, new OnboardingTaskEditorClosedEventArgs(saved));
+            }
         }
 
         page.Disappearing -= OnEditorPageDisappearing;
@@ -164,6 +187,16 @@ public partial class TasksPage : ContentPage
             vm.Saved -= OnEditorSaved;
         }
 
+        if (_onboardingEditorOpen)
+        {
+            _onboardingEditorSaved = true;
+        }
+
         await _vm.LoadAsync();
     }
+}
+
+public sealed class OnboardingTaskEditorClosedEventArgs(bool saved) : EventArgs
+{
+    public bool Saved { get; } = saved;
 }

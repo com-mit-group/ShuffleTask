@@ -645,6 +645,115 @@ public class StorageServicePersistenceTests
         });
     }
 
+    [Test]
+    public async Task Onboarding_FreshDatabaseStartsIncomplete_AndExplicitEmptyPersistsAcrossRestart()
+    {
+        var dbPath = CreateDbPath();
+        var storage = new StorageService(TimeProvider.System, dbPath);
+        await storage.InitializeAsync();
+
+        Assert.That(await storage.GetCompletedVersionAsync(), Is.Zero);
+
+        await storage.CompleteAsync(1);
+        var reloaded = new StorageService(TimeProvider.System, dbPath);
+        await reloaded.InitializeAsync();
+        int completedVersion = await reloaded.GetCompletedVersionAsync();
+        var tasks = await reloaded.GetTasksAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(completedVersion, Is.EqualTo(1));
+            Assert.That(tasks, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task Onboarding_PreMarkerSettingsEvidenceMigratesAsCompleted()
+    {
+        var dbPath = CreateDbPath();
+        var storage = new StorageService(TimeProvider.System, dbPath);
+        await storage.InitializeAsync();
+        await storage.SetSettingsAsync(new AppSettings { FocusMinutes = 37 });
+
+        dynamic db = GetDb(storage);
+        await db.ExecuteAsync("DELETE FROM KeyValueEntity WHERE Key = 'onboarding_completed_version'");
+
+        var migrated = new StorageService(TimeProvider.System, dbPath);
+        await migrated.InitializeAsync();
+
+        Assert.That(await migrated.GetCompletedVersionAsync(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Onboarding_SamplesAreAtomicIdempotentAndDoNotChangeSettings()
+    {
+        var dbPath = CreateDbPath();
+        var storage = new StorageService(TimeProvider.System, dbPath);
+        await storage.InitializeAsync();
+        await storage.SetSettingsAsync(new AppSettings
+        {
+            FocusMinutes = 37,
+            BackgroundActivityEnabled = false,
+            EnableNotifications = false
+        });
+        var samples = CreateOnboardingSamples();
+
+        await storage.CompleteWithSamplesAsync(samples, 1);
+        await storage.CompleteWithSamplesAsync(samples, 1);
+
+        var settings = await storage.GetSettingsAsync();
+        var tasks = await storage.GetTasksAsync();
+        int completedVersion = await storage.GetCompletedVersionAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(completedVersion, Is.EqualTo(1));
+            Assert.That(tasks.Select(task => task.Id), Is.EquivalentTo(samples.Select(task => task.Id)));
+            Assert.That(settings.FocusMinutes, Is.EqualTo(37));
+            Assert.That(settings.BackgroundActivityEnabled, Is.False);
+            Assert.That(settings.EnableNotifications, Is.False);
+        });
+
+        foreach (TaskItem task in tasks)
+        {
+            await storage.DeleteTaskAsync(task.Id);
+        }
+
+        var reloaded = new StorageService(TimeProvider.System, dbPath);
+        await reloaded.InitializeAsync();
+        var remainingTasks = await reloaded.GetTasksAsync();
+        int reloadedVersion = await reloaded.GetCompletedVersionAsync();
+        Assert.Multiple(() =>
+        {
+            Assert.That(remainingTasks, Is.Empty);
+            Assert.That(reloadedVersion, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task Onboarding_SampleFailureRollsBackTasksAndMarker()
+    {
+        var fault = new ThrowingFaultInjector { FailOperation = "onboarding.samples" };
+        var storage = new StorageService(TimeProvider.System, CreateDbPath(), faultInjector: fault);
+        await storage.InitializeAsync();
+
+        Assert.ThrowsAsync<InvalidOperationException>(() => storage.CompleteWithSamplesAsync(CreateOnboardingSamples(), 1));
+        var tasks = await storage.GetTasksAsync();
+        int completedVersion = await storage.GetCompletedVersionAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(tasks, Is.Empty);
+            Assert.That(completedVersion, Is.Zero);
+        });
+    }
+
+    private static IReadOnlyCollection<TaskItem> CreateOnboardingSamples()
+        => new[]
+        {
+            new TaskItem { Id = "sample-one", Title = "One" },
+            new TaskItem { Id = "sample-two", Title = "Two" }
+        };
+
     private static async Task WriteRawSettingsValueAsync(StorageService storage, string json)
     {
         dynamic db = GetDb(storage);

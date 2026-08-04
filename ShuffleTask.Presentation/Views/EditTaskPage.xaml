@@ -30,9 +30,11 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Entry Grid.Row="0"
+            <Entry x:Name="TitleEntry"
+                   Grid.Row="0"
                    Text="{Binding Title}"
-                   Placeholder="Title" />
+                   Placeholder="Title"
+                   SemanticProperties.Description="Task title" />
 
             <Editor Grid.Row="1"
                     HeightRequest="120"

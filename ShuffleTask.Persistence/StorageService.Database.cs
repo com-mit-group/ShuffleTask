@@ -33,6 +33,7 @@ public partial class StorageService
         await _db.CreateTableAsync<PeriodDefinitionRecord>().ConfigureAwait(false);
 
         await RunSchemaMigrationsAsync().ConfigureAwait(false);
+        await EnsureOnboardingStateAsync().ConfigureAwait(false);
         await RecoverSettingsAtStartupAsync().ConfigureAwait(false);
         await EnsurePresetPeriodDefinitionsAsync().ConfigureAwait(false);
     }

@@ -3,6 +3,7 @@ using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
 using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Services;
+using ShuffleTask.ViewModels;
 using MauiApplication = Microsoft.Maui.Controls.Application;
 
 namespace ShuffleTask.Views;
@@ -10,6 +11,14 @@ namespace ShuffleTask.Views;
 public partial class MainPage : TabbedPage
 {
     private bool _tabsInitialized;
+    private DashboardViewModel? _dashboardViewModel;
+    private TasksViewModel? _tasksViewModel;
+    private TasksPage? _tasksPage;
+    private OnboardingPage? _onboardingPage;
+    private OnboardingViewModel? _onboardingViewModel;
+    private NavigationPage? _dashboardTab;
+    private NavigationPage? _tasksTab;
+    private NavigationPage? _onboardingModal;
 
     public MainPage()
     {
@@ -17,10 +26,26 @@ public partial class MainPage : TabbedPage
         TryInitializeFromServices();
     }
 
-    public MainPage(DashboardPage dashboardPage, TasksPage tasksPage, PeersPage peersPage, SettingsPage settingsPage)
+    public MainPage(
+        DashboardPage dashboardPage,
+        TasksPage tasksPage,
+        PeersPage peersPage,
+        SettingsPage settingsPage,
+        OnboardingPage onboardingPage,
+        DashboardViewModel dashboardViewModel,
+        TasksViewModel tasksViewModel,
+        OnboardingViewModel onboardingViewModel)
     {
         InitializeComponent();
-        ConfigureTabs(dashboardPage, tasksPage, peersPage, settingsPage);
+        ConfigureTabs(
+            dashboardPage,
+            tasksPage,
+            peersPage,
+            settingsPage,
+            onboardingPage,
+            dashboardViewModel,
+            tasksViewModel,
+            onboardingViewModel);
     }
 
     private void TryInitializeFromServices()
@@ -40,13 +65,32 @@ public partial class MainPage : TabbedPage
         var tasksPage = services.GetService<TasksPage>();
         var peersPage = services.GetService<PeersPage>();
         var settingsPage = services.GetService<SettingsPage>();
+        var onboardingPage = services.GetService<OnboardingPage>();
+        var dashboardViewModel = services.GetService<DashboardViewModel>();
+        var tasksViewModel = services.GetService<TasksViewModel>();
+        var onboardingViewModel = services.GetService<OnboardingViewModel>();
 
-        if (dashboardPage == null || tasksPage == null || peersPage == null || settingsPage == null)
+        if (dashboardPage == null
+            || tasksPage == null
+            || peersPage == null
+            || settingsPage == null
+            || onboardingPage == null
+            || dashboardViewModel == null
+            || tasksViewModel == null
+            || onboardingViewModel == null)
         {
             return;
         }
 
-        ConfigureTabs(dashboardPage, tasksPage, peersPage, settingsPage);
+        ConfigureTabs(
+            dashboardPage,
+            tasksPage,
+            peersPage,
+            settingsPage,
+            onboardingPage,
+            dashboardViewModel,
+            tasksViewModel,
+            onboardingViewModel);
     }
 
     protected override void OnHandlerChanged()
@@ -71,7 +115,15 @@ public partial class MainPage : TabbedPage
         return MauiProgram.TryGetServiceProvider();
     }
 
-    private void ConfigureTabs(DashboardPage dashboardPage, TasksPage tasksPage, PeersPage peersPage, SettingsPage settingsPage)
+    private void ConfigureTabs(
+        DashboardPage dashboardPage,
+        TasksPage tasksPage,
+        PeersPage peersPage,
+        SettingsPage settingsPage,
+        OnboardingPage onboardingPage,
+        DashboardViewModel dashboardViewModel,
+        TasksViewModel tasksViewModel,
+        OnboardingViewModel onboardingViewModel)
     {
         if (_tabsInitialized)
         {
@@ -84,19 +136,150 @@ public partial class MainPage : TabbedPage
 
         Children.Clear();
 
-        var dashboardTab = CreateTab(dashboardPage);
-        var tasksTab = CreateTab(tasksPage);
+        _dashboardTab = CreateTab(dashboardPage);
+        _tasksTab = CreateTab(tasksPage);
         var peersTab = CreateTab(peersPage);
         var settingsTab = CreateTab(settingsPage);
 
-        Children.Add(dashboardTab);
-        Children.Add(tasksTab);
+        Children.Add(_dashboardTab);
+        Children.Add(_tasksTab);
         Children.Add(peersTab);
         Children.Add(settingsTab);
 
-        CurrentPage = dashboardTab;
+        _dashboardViewModel = dashboardViewModel;
+        _tasksViewModel = tasksViewModel;
+        _tasksPage = tasksPage;
+        _onboardingPage = onboardingPage;
+        _onboardingViewModel = onboardingViewModel;
+        _onboardingModal = new NavigationPage(onboardingPage);
+        _onboardingViewModel.CreateTaskRequested += OnCreateTaskRequested;
+        _onboardingViewModel.Completed += OnOnboardingCompleted;
+        _tasksPage.OnboardingTaskEditorClosed += OnOnboardingTaskEditorClosed;
+
+        CurrentPage = _dashboardTab;
         Title = "ShuffleTask";
         _tabsInitialized = true;
+    }
+
+    public async Task ShowOnboardingLoadingAsync()
+    {
+        TryInitializeFromServices();
+        if (_onboardingViewModel == null)
+        {
+            return;
+        }
+
+        _onboardingViewModel.SetStartupLoading();
+        await ShowOnboardingModalAsync();
+    }
+
+    public async Task ResolveOnboardingAsync(CancellationToken cancellationToken = default)
+    {
+        if (_onboardingViewModel == null)
+        {
+            return;
+        }
+
+        bool shouldShow = await _onboardingViewModel.LoadAsync(cancellationToken);
+        if (shouldShow)
+        {
+            CurrentPage = _dashboardTab;
+            await ShowOnboardingModalAsync();
+        }
+        else
+        {
+            await HideOnboardingModalAsync();
+        }
+    }
+
+    public async Task ShowOnboardingFailureAsync(Func<CancellationToken, Task> retry)
+    {
+        if (_onboardingViewModel == null)
+        {
+            return;
+        }
+
+        _onboardingViewModel.SetStartupFailure(retry);
+        await ShowOnboardingModalAsync();
+    }
+
+    private async Task ShowOnboardingModalAsync()
+    {
+        if (_onboardingModal == null || Navigation.ModalStack.Contains(_onboardingModal))
+        {
+            return;
+        }
+
+        await Navigation.PushModalAsync(_onboardingModal, animated: false);
+    }
+
+    private async Task HideOnboardingModalAsync()
+    {
+        if (_onboardingModal != null && Navigation.ModalStack.LastOrDefault() == _onboardingModal)
+        {
+            await Navigation.PopModalAsync(animated: false);
+        }
+    }
+
+    private async void OnCreateTaskRequested(object? sender, EventArgs e)
+    {
+        if (_tasksPage == null || _tasksTab == null)
+        {
+            return;
+        }
+
+        await HideOnboardingModalAsync();
+        CurrentPage = _tasksTab;
+        await _tasksPage.OpenNewTaskForOnboardingAsync();
+    }
+
+    private async void OnOnboardingTaskEditorClosed(object? sender, OnboardingTaskEditorClosedEventArgs e)
+    {
+        if (_onboardingViewModel == null)
+        {
+            return;
+        }
+
+        if (e.Saved)
+        {
+            await _onboardingViewModel.CompleteCreatedTaskAsync();
+            if (_onboardingViewModel.IsVisible)
+            {
+                await ShowOnboardingModalAsync();
+            }
+            return;
+        }
+
+        _onboardingViewModel.ReturnToChoices();
+        CurrentPage = _dashboardTab;
+        await ShowOnboardingModalAsync();
+    }
+
+    private async void OnOnboardingCompleted(object? sender, OnboardingCompletedEventArgs e)
+    {
+        await HideOnboardingModalAsync();
+
+        if (e.Outcome == OnboardingOutcome.CreatedTask)
+        {
+            CurrentPage = _tasksTab;
+        }
+        else
+        {
+            CurrentPage = _dashboardTab;
+        }
+
+        if (_tasksViewModel != null)
+        {
+            await _tasksViewModel.LoadAsync();
+        }
+
+        _dashboardViewModel?.OperationState.SetSuccess(
+            e.Outcome == OnboardingOutcome.AddedSamples
+                ? "Sample tasks added. Dashboard ready."
+                : e.Outcome == OnboardingOutcome.ContinuedEmpty
+                    ? "Dashboard ready with an empty task list."
+                    : "Your first task is ready.",
+            localDataSaved: true);
     }
 
     private static NavigationPage CreateTab(ContentPage page)
