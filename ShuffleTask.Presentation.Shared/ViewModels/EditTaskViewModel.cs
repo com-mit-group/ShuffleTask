@@ -98,7 +98,9 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
     private bool isBusy;
 
     public OperationState OperationState { get; } = new();
+#pragma warning disable S2325 // This bindable property depends on a source-generated instance property.
     public bool CanSave => !IsBusy;
+#pragma warning restore S2325
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanSave));
 
@@ -155,9 +157,11 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
 
     public string[] TimerModeOptions { get; } = new[] { "Long Interval", "Pomodoro" };
 
+#pragma warning disable S2325 // These bindable properties depend on source-generated instance properties.
     public bool IsAdHocSelection => SelectedPeriodDefinition?.IsAdHoc ?? false;
 
     public bool CanEditSelectedDefinition => SelectedPeriodDefinition?.IsEditable ?? false;
+#pragma warning restore S2325
 
     public string SelectedPeriodDefinitionDescription
     {
@@ -318,67 +322,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
         {
             cancellationToken.ThrowIfCancellationRequested();
             await _storage.InitializeAsync();
-
-            _workingCopy.Title = Title.Trim();
-            _workingCopy.Description = Description?.Trim() ?? string.Empty;
-            _workingCopy.Importance = (int)Math.Max(1, Math.Round(Importance));
-            _workingCopy.SizePoints = SanitizeSizePoints(SizePoints);
-            _workingCopy.Repeat = Repeat;
-            _workingCopy.Weekdays = Repeat == RepeatType.Weekly ? SelectedWeekdays : Weekdays.None;
-            int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
-            _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
-            _workingCopy.AutoShuffleAllowed = AutoShuffleAllowed;
-            _workingCopy.CustomStartTime = null;
-            _workingCopy.CustomEndTime = null;
-            _workingCopy.CustomWeekdays = null;
-            ApplyPeriodDefinitionSelection(_workingCopy);
-            _workingCopy.Paused = IsPaused;
-            _workingCopy.CutInLineMode = CutInLineMode;
-
-            // Save custom timer _settings
-            if (UseCustomTimer)
-            {
-                _workingCopy.CustomTimerMode = CustomTimerMode;
-                _workingCopy.CustomReminderMinutes = (int)Math.Max(1, Math.Round(CustomReminderMinutes));
-                _workingCopy.CustomFocusMinutes = (int)Math.Max(1, Math.Round(CustomFocusMinutes));
-                _workingCopy.CustomBreakMinutes = (int)Math.Max(1, Math.Round(CustomBreakMinutes));
-                _workingCopy.CustomPomodoroCycles = (int)Math.Max(1, Math.Round(CustomPomodoroCycles));
-            }
-            else
-            {
-                _workingCopy.CustomTimerMode = null;
-                _workingCopy.CustomReminderMinutes = null;
-                _workingCopy.CustomFocusMinutes = null;
-                _workingCopy.CustomBreakMinutes = null;
-                _workingCopy.CustomPomodoroCycles = null;
-            }
-
-            if (HasDeadline)
-            {
-                DateTime combined = DeadlineDate.Date + DeadlineTime;
-                _workingCopy.Deadline = EnsureUtc(combined);
-            }
-            else
-            {
-                _workingCopy.Deadline = null;
-            }
-
-            if (string.IsNullOrWhiteSpace(_workingCopy.Id))
-            {
-                _workingCopy.Id = Guid.NewGuid().ToString("n");
-            }
-
-            if (!string.IsNullOrWhiteSpace(AppSettings.Network.UserId))
-            {
-                _workingCopy.UserId = AppSettings.Network.UserId;
-                _workingCopy.DeviceId = string.Empty;
-            }
-            else
-            {
-                
-                _workingCopy.UserId =  string.Empty;
-                _workingCopy.DeviceId = AppSettings.Network.DeviceId;
-            }
+            ApplyEditorStateToWorkingCopy();
 
             if (IsNew)
             {
@@ -413,6 +357,78 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyEditorStateToWorkingCopy()
+    {
+        _workingCopy.Title = Title.Trim();
+        _workingCopy.Description = Description?.Trim() ?? string.Empty;
+        _workingCopy.Importance = (int)Math.Max(1, Math.Round(Importance));
+        _workingCopy.SizePoints = SanitizeSizePoints(SizePoints);
+        _workingCopy.Repeat = Repeat;
+        _workingCopy.Weekdays = Repeat == RepeatType.Weekly ? SelectedWeekdays : Weekdays.None;
+        int intervalValue = (int)Math.Max(1, Math.Round(IntervalDays));
+        _workingCopy.IntervalDays = Repeat == RepeatType.Interval ? intervalValue : 0;
+        _workingCopy.AutoShuffleAllowed = AutoShuffleAllowed;
+        _workingCopy.CustomStartTime = null;
+        _workingCopy.CustomEndTime = null;
+        _workingCopy.CustomWeekdays = null;
+        ApplyPeriodDefinitionSelection(_workingCopy);
+        _workingCopy.Paused = IsPaused;
+        _workingCopy.CutInLineMode = CutInLineMode;
+        ApplyTimerSettingsToWorkingCopy();
+        ApplyDeadlineToWorkingCopy();
+
+        if (string.IsNullOrWhiteSpace(_workingCopy.Id))
+        {
+            _workingCopy.Id = Guid.NewGuid().ToString("n");
+        }
+
+        ApplyOwnershipToWorkingCopy();
+    }
+
+    private void ApplyTimerSettingsToWorkingCopy()
+    {
+        if (UseCustomTimer)
+        {
+            _workingCopy.CustomTimerMode = CustomTimerMode;
+            _workingCopy.CustomReminderMinutes = (int)Math.Max(1, Math.Round(CustomReminderMinutes));
+            _workingCopy.CustomFocusMinutes = (int)Math.Max(1, Math.Round(CustomFocusMinutes));
+            _workingCopy.CustomBreakMinutes = (int)Math.Max(1, Math.Round(CustomBreakMinutes));
+            _workingCopy.CustomPomodoroCycles = (int)Math.Max(1, Math.Round(CustomPomodoroCycles));
+            return;
+        }
+
+        _workingCopy.CustomTimerMode = null;
+        _workingCopy.CustomReminderMinutes = null;
+        _workingCopy.CustomFocusMinutes = null;
+        _workingCopy.CustomBreakMinutes = null;
+        _workingCopy.CustomPomodoroCycles = null;
+    }
+
+    private void ApplyDeadlineToWorkingCopy()
+    {
+        if (!HasDeadline)
+        {
+            _workingCopy.Deadline = null;
+            return;
+        }
+
+        DateTime combined = DeadlineDate.Date + DeadlineTime;
+        _workingCopy.Deadline = EnsureUtc(combined);
+    }
+
+    private void ApplyOwnershipToWorkingCopy()
+    {
+        if (!string.IsNullOrWhiteSpace(AppSettings.Network.UserId))
+        {
+            _workingCopy.UserId = AppSettings.Network.UserId;
+            _workingCopy.DeviceId = string.Empty;
+            return;
+        }
+
+        _workingCopy.UserId = string.Empty;
+        _workingCopy.DeviceId = AppSettings.Network.DeviceId;
     }
 
     private static double SanitizeSizePoints(double value)
@@ -526,7 +542,7 @@ public partial class EditTaskViewModel : ViewModelWithWeekdaySelection
 
     private void ApplyPeriodDefinitionSelection(TaskItem task)
     {
-        if (SelectedPeriodDefinition?.IsAdHoc == true)
+        if (SelectedPeriodDefinition is { IsAdHoc: true })
         {
             task.PeriodDefinitionId = null;
             task.AdHocStartTime = AdHocIsAllDay ? null : AdHocStartTime;

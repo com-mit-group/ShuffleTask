@@ -31,7 +31,7 @@ public static class PersistedSchedulerState
 
     public static (DateTimeOffset? NextAt, string TaskId) LoadPendingShuffle(IShuffleLogger? logger = null)
     {
-        if (TryReadEnvelope(out SchedulerEnvelope? envelope, logger) && envelope!.PendingNextAt.HasValue)
+        if (TryReadEnvelope(out SchedulerEnvelope? envelope, logger) && envelope?.PendingNextAt.HasValue == true)
         {
             return (envelope.PendingNextAt.Value, envelope.PendingTaskId ?? string.Empty);
         }
@@ -65,7 +65,7 @@ public static class PersistedSchedulerState
 
     public static (DateTimeOffset? Date, int Count) LoadDailyCount(IShuffleLogger? logger = null)
     {
-        if (TryReadEnvelope(out SchedulerEnvelope? envelope, logger) && envelope!.ShuffleCountDate.HasValue)
+        if (TryReadEnvelope(out SchedulerEnvelope? envelope, logger) && envelope?.ShuffleCountDate.HasValue == true)
         {
             return (envelope.ShuffleCountDate.Value, Math.Max(0, envelope.ShuffleCount));
         }
@@ -101,7 +101,7 @@ public static class PersistedSchedulerState
     private static SchedulerEnvelope LoadEnvelopeOrDefault(IShuffleLogger? logger)
     {
         return TryReadEnvelope(out SchedulerEnvelope? envelope, logger)
-            ? envelope!
+            ? envelope ?? new SchedulerEnvelope { SchemaVersion = CurrentSchemaVersion }
             : new SchedulerEnvelope { SchemaVersion = CurrentSchemaVersion };
     }
 

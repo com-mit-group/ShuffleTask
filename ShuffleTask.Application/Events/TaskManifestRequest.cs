@@ -18,11 +18,11 @@ public class TaskManifestRequest : DomainEventBase
         Manifest = manifest ?? Array.Empty<TaskManifestEntry>();
     }
 
-    public IEnumerable<string> RequestedTaskIds { get; set; } = Array.Empty<string>();
+    public IEnumerable<string> RequestedTaskIds { get; set; }
 
     public IEnumerable<TaskManifestEntry>? Manifest { get; set; }
 
-    public string DeviceId { get; set; } = string.Empty;
+    public string DeviceId { get; set; }
 
     public string? UserId { get; set; }
 }

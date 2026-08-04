@@ -42,9 +42,11 @@ public sealed partial class PeriodDefinitionEditorViewModel : ViewModelWithWeekd
     [ObservableProperty]
     private bool isBusy;
 
+#pragma warning disable S2325 // These bindable properties depend on source-generated instance state.
     public bool IsAlignmentFromSettings => IsSettingsAlignedMode(SelectedAlignmentMode?.Mode ?? PeriodDefinitionMode.None);
 
     public string SettingsResolvedTimeRange => GetSettingsRangeText(SelectedAlignmentMode?.Mode ?? PeriodDefinitionMode.None);
+#pragma warning restore S2325
 
     public bool IsNew
     {

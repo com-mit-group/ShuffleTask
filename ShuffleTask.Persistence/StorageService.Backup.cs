@@ -71,7 +71,7 @@ public partial class StorageService
             string.IsNullOrWhiteSpace(envelope.AppVersion) ? "unknown" : envelope.AppVersion,
             envelope.FormatVersion,
             envelope.SchemaVersion,
-            envelope.Data!.Tasks.Count));
+            envelope.Data?.Tasks.Count ?? 0));
     }
 
     public async Task ImportBackupAsync(string backupJson)
@@ -79,7 +79,7 @@ public partial class StorageService
         await InitializeAsync().ConfigureAwait(false);
 
         var envelope = ParseAndValidateBackup(backupJson);
-        var data = envelope.Data!;
+        var data = envelope.Data ?? throw BackupFormatException();
         var settings = NormalizeSettings(data.Settings ?? new AppSettings());
         string settingsJson = JsonConvert.SerializeObject(CreateSettingsPayload(settings));
 
@@ -195,45 +195,57 @@ public partial class StorageService
 
     private void NormalizeImportedData(ShuffleTaskExportEnvelope envelope)
     {
+        var data = envelope.Data ?? throw BackupFormatException();
+
         if (envelope.TaskSchemaVersion < CurrentTaskSchemaVersion)
         {
             DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
 
-            foreach (var task in envelope.Data!.Tasks)
+            foreach (var task in data.Tasks)
             {
-                task.CreatedAt = task.CreatedAt == default ? nowUtc : EnsureUtc(task.CreatedAt);
-                task.UpdatedAt = task.UpdatedAt == default ? task.CreatedAt : EnsureUtc(task.UpdatedAt);
-                task.EventVersion = Math.Max(1, task.EventVersion);
-
-                if (task.Repeat == RepeatType.Interval && task.IntervalDays < 1)
-                {
-                    task.IntervalDays = 1;
-                }
-
-                if (!string.IsNullOrWhiteSpace(task.UserId))
-                {
-                    task.DeviceId = null;
-                }
-                else if (string.IsNullOrWhiteSpace(task.DeviceId))
-                {
-                    task.DeviceId = Environment.MachineName;
-                }
+                NormalizeImportedTask(task, nowUtc);
             }
         }
 
         if (envelope.PeriodSchemaVersion < CurrentPeriodSchemaVersion)
         {
-            foreach (var definition in envelope.Data!.PeriodDefinitions)
+            foreach (var definition in data.PeriodDefinitions)
             {
-                if (definition.Weekdays == Weekdays.None)
-                {
-                    definition.Weekdays = PeriodDefinitionCatalog.AllWeekdays;
-                }
-
-                definition.Weekdays = (Weekdays)((int)definition.Weekdays & ValidWeekdayMask);
-                definition.Mode = (PeriodDefinitionMode)((int)definition.Mode & ValidPeriodModeMask);
+                NormalizeImportedPeriodDefinition(definition);
             }
         }
+    }
+
+    private static void NormalizeImportedTask(TaskItemRecord task, DateTime nowUtc)
+    {
+        task.CreatedAt = task.CreatedAt == default ? nowUtc : EnsureUtc(task.CreatedAt);
+        task.UpdatedAt = task.UpdatedAt == default ? task.CreatedAt : EnsureUtc(task.UpdatedAt);
+        task.EventVersion = Math.Max(1, task.EventVersion);
+
+        if (task.Repeat == RepeatType.Interval && task.IntervalDays < 1)
+        {
+            task.IntervalDays = 1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(task.UserId))
+        {
+            task.DeviceId = null;
+        }
+        else if (string.IsNullOrWhiteSpace(task.DeviceId))
+        {
+            task.DeviceId = Environment.MachineName;
+        }
+    }
+
+    private static void NormalizeImportedPeriodDefinition(PeriodDefinitionRecord definition)
+    {
+        if (definition.Weekdays == Weekdays.None)
+        {
+            definition.Weekdays = PeriodDefinitionCatalog.AllWeekdays;
+        }
+
+        definition.Weekdays = (Weekdays)((int)definition.Weekdays & ValidWeekdayMask);
+        definition.Mode = (PeriodDefinitionMode)((int)definition.Mode & ValidPeriodModeMask);
     }
 
     private static void ValidateTasks(IEnumerable<TaskItemRecord> tasks)
@@ -242,42 +254,51 @@ public partial class StorageService
 
         foreach (var task in tasks)
         {
-            if (string.IsNullOrWhiteSpace(task.Id) || !ids.Add(task.Id))
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: task ids must be valid and unique.");
-            }
+            ValidateTaskIdentityAndTimestamps(task, ids);
+            ValidateTaskRules(task);
+        }
+    }
 
-            if (string.IsNullOrWhiteSpace(task.Title))
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: each task needs a title.");
-            }
+    private static void ValidateTaskIdentityAndTimestamps(TaskItemRecord task, ISet<string> ids)
+    {
+        if (string.IsNullOrWhiteSpace(task.Id) || !ids.Add(task.Id))
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: task ids must be valid and unique.");
+        }
 
-            if (task.CreatedAt == default || task.UpdatedAt == default)
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: task timestamps are missing.");
-            }
+        if (string.IsNullOrWhiteSpace(task.Title))
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: each task needs a title.");
+        }
 
-            if (!Enum.IsDefined(task.Repeat)
-                || !Enum.IsDefined(task.AllowedPeriod)
-                || !Enum.IsDefined(task.Status)
-                || !Enum.IsDefined(task.CutInLineMode)
-                || ((int)task.Weekdays & ~ValidWeekdayMask) != 0
-                || (task.CustomWeekdays.HasValue && ((int)task.CustomWeekdays.Value & ~ValidWeekdayMask) != 0)
-                || (task.AdHocWeekdays.HasValue && ((int)task.AdHocWeekdays.Value & ~ValidWeekdayMask) != 0)
-                || ((int)task.AdHocMode & ~ValidPeriodModeMask) != 0)
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: a task has invalid rules.");
-            }
+        if (task.CreatedAt == default || task.UpdatedAt == default)
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: task timestamps are missing.");
+        }
+    }
 
-            if (task.Repeat == RepeatType.Interval && task.IntervalDays < 1)
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: a repeating task has an invalid interval.");
-            }
+    private static void ValidateTaskRules(TaskItemRecord task)
+    {
+        if (!Enum.IsDefined(task.Repeat)
+            || !Enum.IsDefined(task.AllowedPeriod)
+            || !Enum.IsDefined(task.Status)
+            || !Enum.IsDefined(task.CutInLineMode)
+            || ((int)task.Weekdays & ~ValidWeekdayMask) != 0
+            || (task.CustomWeekdays.HasValue && ((int)task.CustomWeekdays.Value & ~ValidWeekdayMask) != 0)
+            || (task.AdHocWeekdays.HasValue && ((int)task.AdHocWeekdays.Value & ~ValidWeekdayMask) != 0)
+            || ((int)task.AdHocMode & ~ValidPeriodModeMask) != 0)
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: a task has invalid rules.");
+        }
 
-            if (task.Status == TaskLifecycleStatus.Snoozed && task.SnoozedUntil == null)
-            {
-                throw new InvalidDataException("This backup is damaged or incomplete: a snoozed task is missing its snooze time.");
-            }
+        if (task.Repeat == RepeatType.Interval && task.IntervalDays < 1)
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: a repeating task has an invalid interval.");
+        }
+
+        if (task.Status == TaskLifecycleStatus.Snoozed && task.SnoozedUntil == null)
+        {
+            throw new InvalidDataException("This backup is damaged or incomplete: a snoozed task is missing its snooze time.");
         }
     }
 

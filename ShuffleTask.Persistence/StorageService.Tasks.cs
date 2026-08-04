@@ -113,7 +113,7 @@ public partial class StorageService
     {
         await _taskLock.WaitAsync().ConfigureAwait(false);
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=add");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=add");
         if (string.IsNullOrWhiteSpace(item.Id))
         {
             item.Id = Guid.NewGuid().ToString("n");
@@ -132,7 +132,7 @@ public partial class StorageService
         {
             if (_taskSchemaIsFuture)
             {
-                _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=add; reason=future-schema");
+                _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=add; reason=future-schema");
                 return;
             }
 
@@ -141,7 +141,7 @@ public partial class StorageService
                 conn.Insert(record);
                 _faultInjector?.BeforeCommit("tasks.add");
             }).ConfigureAwait(false);
-            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=add; durationMs={stopwatch.ElapsedMilliseconds}");
+            _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=add; durationMs={stopwatch.ElapsedMilliseconds}");
         }
         finally
         {
@@ -155,10 +155,10 @@ public partial class StorageService
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=update");
+            _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=update");
             if (_taskSchemaIsFuture)
             {
-                _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=update; reason=future-schema");
+                _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=update; reason=future-schema");
                 return;
             }
 
@@ -189,7 +189,7 @@ public partial class StorageService
                 conn.Update(record);
                 _faultInjector?.BeforeCommit("tasks.update");
             }).ConfigureAwait(false);
-            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=update; durationMs={stopwatch.ElapsedMilliseconds}");
+            _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=update; durationMs={stopwatch.ElapsedMilliseconds}");
         }
         finally
         {
@@ -203,10 +203,10 @@ public partial class StorageService
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=delete");
+            _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=delete");
             if (_taskSchemaIsFuture)
             {
-                _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=delete; reason=future-schema");
+                _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=delete; reason=future-schema");
                 return;
             }
 
@@ -216,7 +216,7 @@ public partial class StorageService
                 conn.Delete<TaskItemRecord>(id);
                 _faultInjector?.BeforeCommit("tasks.delete");
             }).ConfigureAwait(false);
-            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=delete; durationMs={stopwatch.ElapsedMilliseconds}");
+            _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=delete; durationMs={stopwatch.ElapsedMilliseconds}");
         }
         finally
         {
@@ -232,10 +232,10 @@ public partial class StorageService
         }
 
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=migrate-device-owner");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=migrate-device-owner");
         if (_taskSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=migrate-device-owner; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=migrate-device-owner; reason=future-schema");
             return 0;
         }
 
@@ -260,7 +260,7 @@ public partial class StorageService
             _faultInjector?.BeforeCommit("tasks.migrate-owner");
         });
 
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=migrate-device-owner; updated={updated}; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=migrate-device-owner; updated={updated}; durationMs={stopwatch.ElapsedMilliseconds}");
         return updated;
     }
 
@@ -268,10 +268,10 @@ public partial class StorageService
     public async Task<TaskItem?> MarkTaskDoneAsync(string id)
     {
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=mark-done");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=mark-done");
         if (_taskSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=mark-done; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=mark-done; reason=future-schema");
             return null;
         }
 
@@ -314,17 +314,17 @@ public partial class StorageService
             _logger?.LogStateTransition(id, originalStatus, "Completed", "Task marked as done");
         }
 
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=mark-done; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=mark-done; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
         return updated;
     }
 
     public async Task<TaskItem?> SnoozeTaskAsync(string id, TimeSpan duration)
     {
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=snooze");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=snooze");
         if (_taskSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=snooze; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=snooze; reason=future-schema");
             return null;
         }
 
@@ -370,17 +370,17 @@ public partial class StorageService
             _logger?.LogStateTransition(id, originalStatus, "Snoozed", $"Snoozed for {duration:mm\\:ss}");
         }
 
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=snooze; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=snooze; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
         return updated;
     }
 
     public async Task<TaskItem?> ResumeTaskAsync(string id)
     {
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=tasks; operation=resume");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=tasks; operation=resume");
         if (_taskSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=tasks; operation=resume; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=tasks; operation=resume; reason=future-schema");
             return null;
         }
 
@@ -414,7 +414,7 @@ public partial class StorageService
             _logger?.LogStateTransition(id, originalStatus, "Active", "Task resumed");
         }
 
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=tasks; operation=resume; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=tasks; operation=resume; changed={updated != null}; durationMs={stopwatch.ElapsedMilliseconds}");
         return updated;
     }
 
@@ -439,7 +439,12 @@ public partial class StorageService
 
         foreach (var task in pending)
         {
-            DateTime nextUtc = EnsureUtc(task.NextEligibleAt!.Value);
+            if (!task.NextEligibleAt.HasValue)
+            {
+                continue;
+            }
+
+            DateTime nextUtc = EnsureUtc(task.NextEligibleAt.Value);
             if (nextUtc <= nowUtc)
             {
                 string originalStatus = task.Status.ToString();
@@ -472,47 +477,59 @@ public partial class StorageService
     {
         foreach (var record in records)
         {
-            bool dirty = false;
             if (string.IsNullOrWhiteSpace(record.Id))
             {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(record.Title))
-            {
-                record.Title = "Untitled";
-                dirty = true;
-            }
-
-            if (record.Status != TaskLifecycleStatus.Active &&
-                record.Status != TaskLifecycleStatus.Snoozed &&
-                record.Status != TaskLifecycleStatus.Completed)
-            {
-                record.Status = TaskLifecycleStatus.Active;
-                record.SnoozedUntil = null;
-                record.NextEligibleAt = null;
-                dirty = true;
-            }
-
-            if (record.Status == TaskLifecycleStatus.Completed && record.CompletedAt == null)
-            {
-                record.CompletedAt = record.UpdatedAt == default ? _clock.GetUtcNow().UtcDateTime : record.UpdatedAt;
-                dirty = true;
-            }
-
-            if (record.Status == TaskLifecycleStatus.Snoozed && record.SnoozedUntil == null)
-            {
-                record.Status = TaskLifecycleStatus.Active;
-                dirty = true;
-            }
-
+            bool dirty = RepairTaskContent(record);
+            dirty |= RepairTaskLifecycle(record);
             EnsureOwnership(record, null);
             if (dirty)
             {
-                _logger?.LogSyncEvent("PersistenceRecovery", $"Repaired invalid task id={record.Id}");
+                _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"Repaired invalid task id={record.Id}");
                 await Db.UpdateAsync(record).ConfigureAwait(false);
             }
         }
+    }
+
+    private static bool RepairTaskContent(TaskItemRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.Title))
+        {
+            return false;
+        }
+
+        record.Title = "Untitled";
+        return true;
+    }
+
+    private bool RepairTaskLifecycle(TaskItemRecord record)
+    {
+        bool repaired = false;
+        if (record.Status != TaskLifecycleStatus.Active
+            && record.Status != TaskLifecycleStatus.Snoozed
+            && record.Status != TaskLifecycleStatus.Completed)
+        {
+            record.Status = TaskLifecycleStatus.Active;
+            record.SnoozedUntil = null;
+            record.NextEligibleAt = null;
+            repaired = true;
+        }
+
+        if (record.Status == TaskLifecycleStatus.Completed && record.CompletedAt == null)
+        {
+            record.CompletedAt = record.UpdatedAt == default ? _clock.GetUtcNow().UtcDateTime : record.UpdatedAt;
+            repaired = true;
+        }
+
+        if (record.Status == TaskLifecycleStatus.Snoozed && record.SnoozedUntil == null)
+        {
+            record.Status = TaskLifecycleStatus.Active;
+            repaired = true;
+        }
+
+        return repaired;
     }
 
     private static void ApplyResume(TaskItemRecord task)

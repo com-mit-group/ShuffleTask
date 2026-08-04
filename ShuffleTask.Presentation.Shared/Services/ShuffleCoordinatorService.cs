@@ -129,7 +129,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             CancelTimerInternal();
@@ -165,7 +165,7 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task<T> RunWithGateAsync<T>(Func<Task<T>> action)
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             return await action().ConfigureAwait(false);
@@ -227,7 +227,7 @@ public class ShuffleCoordinatorService : IDisposable
         await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
     }
 
-    private bool HandleAutoShuffleDisabled(AppSettings settings)
+    private static bool HandleAutoShuffleDisabled(AppSettings settings)
     {
         if (ShouldAutoShuffle(settings))
         {
@@ -444,7 +444,7 @@ public class ShuffleCoordinatorService : IDisposable
             executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
-        if (executed && !_isPaused)
+        if (executed)
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
         }
@@ -475,7 +475,7 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         bool paused;
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             paused = _isPaused;
@@ -552,7 +552,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            await _networkSync.PublishTimeUpNotificationAsync().ConfigureAwait(false);
+            await _networkSync.PublishTimeUpNotificationAsync(CancellationToken.None).ConfigureAwait(false);
         }
         PersistedTimerState.Clear();
     }
@@ -608,7 +608,7 @@ public class ShuffleCoordinatorService : IDisposable
         EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
-        await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
+        await NotifyAsync(task, settings, effectiveSettings, cts.Token).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
     }
@@ -654,7 +654,11 @@ public class ShuffleCoordinatorService : IDisposable
         return null;
     }
 
-    private async Task NotifyAsync(TaskItem task, AppSettings settings, EffectiveTimerSettings effectiveSettings)
+    private async Task NotifyAsync(
+        TaskItem task,
+        AppSettings settings,
+        EffectiveTimerSettings effectiveSettings,
+        CancellationToken cancellationToken)
     {
         if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
         {
@@ -666,7 +670,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            await _networkSync.PublishTaskStartedAsync(task.Id, minutes).ConfigureAwait(false);
+            await _networkSync.PublishTaskStartedAsync(task.Id, minutes, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -151,7 +151,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         }
 
         var evt = new TaskUpsertedEvent(task, DeviceId, UserId);
-        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskDeletedAsync(string taskId, CancellationToken cancellationToken = default)
@@ -164,7 +164,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         }
 
         var evt = new TaskDeletedEvent(taskId, DeviceId, UserId);
-        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTaskStartedAsync(string taskId, int minutes = -1, CancellationToken cancellationToken = default)
@@ -177,7 +177,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         }
 
         var evt = new TaskStarted(DeviceId, UserId, taskId, minutes);
-        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishTimeUpNotificationAsync(CancellationToken cancellationToken = default)
@@ -190,7 +190,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         }
 
         var evt = new TimeUpNotificationEvent(DeviceId, UserId);
-        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishSettingsUpdatedAsync(AppSettings settings, CancellationToken cancellationToken = default)
@@ -207,7 +207,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         var payload = new AppSettings();
         payload.CopyFrom(settings);
         var evt = new SettingsUpdatedEvent(payload, DeviceId, UserId);
-        await PublishWithTrackingAsync(() => _aggregator!.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        await PublishWithTrackingAsync(() => _aggregator.PublishEventAsync(evt, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose()
@@ -300,7 +300,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
 
         SubscribeToInboundEvents();
 
-        await (_transport as GrpcEventTransport)!.StartListeningAsync(cancellationToken).ConfigureAwait(false);
+        await ((GrpcEventTransport)_transport).StartListeningAsync(cancellationToken).ConfigureAwait(false);
         await DebugToastAsync("Transport", $"Listening on port {NetworkOptions.ListeningPort}.").ConfigureAwait(false);
     }
 
@@ -309,7 +309,7 @@ public sealed class NetworkSyncService : INetworkSyncService, IDisposable
         _aggregator?.Dispose();
         if (_transport is not null)
         {
-            await (_transport as GrpcEventTransport)!.DisposeAsync().ConfigureAwait(false);
+            await ((GrpcEventTransport)_transport).DisposeAsync().ConfigureAwait(false);
         }
         CancelConnections();
     }

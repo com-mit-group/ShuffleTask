@@ -19,12 +19,14 @@ public partial class StorageService
             return;
         }
 
+        string persistedValue = kv.Value;
+
         var stopwatch = Stopwatch.StartNew();
         _logger?.LogSyncEvent("PersistenceLoadStarted", "domain=settings; operation=startup-validate");
 
         try
         {
-            var payload = DeserializeSettingsPayload(kv.Value);
+            var payload = DeserializeSettingsPayload(persistedValue);
             int originalSchema = payload.SchemaVersion;
             var migrated = MigrateSettingsPayload(payload);
             var normalized = NormalizeSettings(migrated.Data ?? new AppSettings());
@@ -32,7 +34,7 @@ public partial class StorageService
             if (originalSchema != migrated.SchemaVersion)
             {
                 await SaveSettingsPayloadAsync(normalized).ConfigureAwait(false);
-                _logger?.LogSyncEvent("PersistenceRecovery", $"domain=settings; operation=startup-migration-persisted; schema={migrated.SchemaVersion}");
+                _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"domain=settings; operation=startup-migration-persisted; schema={migrated.SchemaVersion}");
             }
 
             _logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=settings; operation=startup-validate; durationMs={stopwatch.ElapsedMilliseconds}");
@@ -43,9 +45,9 @@ public partial class StorageService
         }
         catch (Exception ex)
         {
-            await QuarantineSettingsValueAsync(kv.Value!, ex.Message).ConfigureAwait(false);
+            await QuarantineSettingsValueAsync(persistedValue, ex.Message).ConfigureAwait(false);
             await SaveSettingsPayloadAsync(new AppSettings()).ConfigureAwait(false);
-            _logger?.LogSyncEvent("PersistenceRecovery", $"domain=settings; operation=startup-corruption-defaulted; durationMs={stopwatch.ElapsedMilliseconds}", ex);
+            _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"domain=settings; operation=startup-corruption-defaulted; durationMs={stopwatch.ElapsedMilliseconds}", ex);
         }
     }
 
@@ -62,13 +64,15 @@ public partial class StorageService
             {
                 var defaults = new AppSettings();
                 await SetSettingsInternalAsync(defaults).ConfigureAwait(false);
-                _logger?.LogSyncEvent("PersistenceRecovery", "domain=settings; recovery=missing-defaulted");
+                _logger?.LogSyncEvent(PersistenceRecoveryEvent, "domain=settings; recovery=missing-defaulted");
                 return defaults;
             }
 
+            string persistedValue = kv.Value;
+
             try
             {
-                var payload = DeserializeSettingsPayload(kv.Value!);
+                var payload = DeserializeSettingsPayload(persistedValue);
                 int originalSchema = payload.SchemaVersion;
                 var migrated = MigrateSettingsPayload(payload);
                 var normalized = NormalizeSettings(migrated.Data ?? new AppSettings());
@@ -87,10 +91,10 @@ public partial class StorageService
             }
             catch (Exception ex)
             {
-                await QuarantineSettingsValueAsync(kv.Value!, ex.Message).ConfigureAwait(false);
+                await QuarantineSettingsValueAsync(persistedValue, ex.Message).ConfigureAwait(false);
                 var defaults = new AppSettings();
                 await SetSettingsInternalAsync(defaults).ConfigureAwait(false);
-                _logger?.LogSyncEvent("PersistenceRecovery", $"domain=settings; recovery=corrupt-defaulted; durationMs={stopwatch.ElapsedMilliseconds}");
+                _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"domain=settings; recovery=corrupt-defaulted; durationMs={stopwatch.ElapsedMilliseconds}");
                 return defaults;
             }
         }
@@ -103,13 +107,13 @@ public partial class StorageService
     public async Task SetSettingsAsync(AppSettings settings)
     {
         await _settingsLock.WaitAsync().ConfigureAwait(false);
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=settings; operation=set");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=settings; operation=set");
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
             await SetSettingsInternalAsync(settings).ConfigureAwait(false);
-            _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=settings; operation=set; durationMs={stopwatch.ElapsedMilliseconds}");
+            _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=settings; operation=set; durationMs={stopwatch.ElapsedMilliseconds}");
         }
         finally
         {
@@ -123,7 +127,7 @@ public partial class StorageService
 
         if (await HasFutureSettingsSchemaAsync().ConfigureAwait(false))
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "Skipped settings save because stored schema version is newer than supported.");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "Skipped settings save because stored schema version is newer than supported.");
             return;
         }
 

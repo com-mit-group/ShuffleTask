@@ -48,29 +48,6 @@ public static class TimeWindowService
         return AllowedNow(definition, now, s);
     }
 
-    public static bool AllowsWeekend(TaskItem task, AppSettings s)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-
-        PeriodDefinition definition = ResolveDefinition(task);
-        return AllowsWeekend(definition, s);
-    }
-
-    public static bool AllowsWeekend(PeriodDefinition definition, AppSettings s)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
-        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
-
-        if (weekdays.HasFlag(Weekdays.Sat) || weekdays.HasFlag(Weekdays.Sun))
-        {
-            return true;
-        }
-
-        return start > end && end > TimeSpan.Zero && weekdays.HasFlag(Weekdays.Fri);
-    }
-
     public static bool AllowedNow(PeriodDefinition definition, DateTimeOffset now, AppSettings s)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -117,6 +94,29 @@ public static class TimeWindowService
         }
 
         return IsWithinWorkHours(now, start, end);
+    }
+
+    public static bool AllowsWeekend(TaskItem task, AppSettings s)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        PeriodDefinition definition = ResolveDefinition(task);
+        return AllowsWeekend(definition, s);
+    }
+
+    public static bool AllowsWeekend(PeriodDefinition definition, AppSettings s)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        Weekdays weekdays = NormalizeWeekdays(definition.Weekdays);
+        (TimeSpan start, TimeSpan end) = ResolveTimeWindow(definition, s);
+
+        if (weekdays.HasFlag(Weekdays.Sat) || weekdays.HasFlag(Weekdays.Sun))
+        {
+            return true;
+        }
+
+        return start > end && end > TimeSpan.Zero && weekdays.HasFlag(Weekdays.Fri);
     }
 
     private static PeriodDefinition ResolveDefinition(TaskItem task)
