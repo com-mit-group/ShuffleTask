@@ -106,10 +106,16 @@ public class ShuffleCoordinatorServiceTests
     {
         using var service = CreateService();
         await service.StartAsync();
+        int scheduleCount = _background.ScheduleCount;
 
         service.SuspendInProcessTimer();
 
         await _background.TriggerAsyncCallbackAsync();
+
+        Assert.That(
+            _background.ScheduleCount,
+            Is.EqualTo(scheduleCount),
+            "A cancelled timer callback should exit without scheduling more work.");
     }
 
     [Test]

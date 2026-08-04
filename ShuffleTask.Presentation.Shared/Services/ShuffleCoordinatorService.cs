@@ -441,12 +441,8 @@ public class ShuffleCoordinatorService : IDisposable
     {
         CancelPersistentSchedule();
 
-        bool executed = false;
-
-        await RunWithGateAsync(async () =>
-        {
-            executed = await ExecuteShuffleUnsafeAsync(taskId, cts, timerToken).ConfigureAwait(false);
-        }).ConfigureAwait(false);
+        bool executed = await RunWithGateAsync(
+            () => ExecuteShuffleUnsafeAsync(taskId, cts, timerToken)).ConfigureAwait(false);
 
         if (executed)
         {
