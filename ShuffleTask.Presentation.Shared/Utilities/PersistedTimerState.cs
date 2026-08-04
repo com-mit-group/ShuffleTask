@@ -11,6 +11,7 @@ public static class PersistedTimerState
     public const string TimerEnvelopeKey = "pref.timerEnvelope";
     public const string TimerQuarantinePrefix = "pref.timerEnvelope.quarantine.";
     private const int CurrentSchemaVersion = 1;
+    private const string PersistenceLoadCompletedEvent = "PersistenceLoadCompleted";
 
 #if TEST
     public static Action<string>? FaultInjector { get; set; }
@@ -45,9 +46,9 @@ public static class PersistedTimerState
         var started = DateTimeOffset.UtcNow;
         logger?.LogSyncEvent("PersistenceLoadStarted", "domain=timer; operation=get-active");
 
-        if (TryReadEnvelope(out TimerEnvelope? envelope, logger))
+        if (TryReadEnvelope(out TimerEnvelope? envelope, logger) && envelope != null)
         {
-            var activeEnvelope = envelope!;
+            var activeEnvelope = envelope;
             taskId = activeEnvelope.TaskId;
             durationSeconds = activeEnvelope.DurationSeconds;
             expiresAt = activeEnvelope.ExpiresAt;
@@ -60,7 +61,7 @@ public static class PersistedTimerState
             }
 
             details = activeEnvelope.ToDetails();
-            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=canonical; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
+            logger?.LogSyncEvent(PersistenceLoadCompletedEvent, $"domain=timer; source=canonical; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return !string.IsNullOrWhiteSpace(taskId);
         }
 
@@ -74,7 +75,7 @@ public static class PersistedTimerState
 
         if (string.IsNullOrEmpty(taskId))
         {
-            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=empty; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
+            logger?.LogSyncEvent(PersistenceLoadCompletedEvent, $"domain=timer; source=empty; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return false;
         }
 
@@ -82,7 +83,7 @@ public static class PersistedTimerState
         if (!TryGetExpiration(expiresIso, out expiresAt))
         {
             QuarantineLegacyTimerState("invalid-legacy-expiration", logger);
-            logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=invalid-legacy; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
+            logger?.LogSyncEvent(PersistenceLoadCompletedEvent, $"domain=timer; source=invalid-legacy; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
             return false;
         }
 
@@ -98,7 +99,7 @@ public static class PersistedTimerState
             durationSeconds = Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds));
         }
 
-        logger?.LogSyncEvent("PersistenceLoadCompleted", $"domain=timer; source=legacy; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
+        logger?.LogSyncEvent(PersistenceLoadCompletedEvent, $"domain=timer; source=legacy; expired={expired}; durationMs={(DateTimeOffset.UtcNow - started).TotalMilliseconds:0}");
         return true;
     }
 

@@ -160,15 +160,19 @@ public partial class DashboardPage : ContentPage
             return;
         }
 
+        int? persistedPhase = null;
+        if (_currentRequest.Phase.HasValue)
+        {
+            persistedPhase = _currentRequest.Phase.Value == DashboardViewModel.PomodoroPhase.Break ? 1 : 0;
+        }
+
         PersistedTimerState.SaveActiveTimer(
             taskId,
             Math.Max(1, (int)Math.Ceiling(_currentRequest.Duration.TotalSeconds)),
             DateTimeOffset.UtcNow.Add(_remaining),
             new PersistedTimerState.TimerDetails(
                 (int)_currentRequest.Mode,
-                _currentRequest.Phase.HasValue
-                    ? (_currentRequest.Phase.Value == DashboardViewModel.PomodoroPhase.Break ? 1 : 0)
-                    : null,
+                persistedPhase,
                 _currentRequest.CycleIndex,
                 _currentRequest.CycleCount,
                 _currentRequest.FocusMinutes,

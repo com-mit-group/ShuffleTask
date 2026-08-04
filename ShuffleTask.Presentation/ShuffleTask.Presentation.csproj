@@ -36,6 +36,7 @@
         <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.51" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.51" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.5" />
+        <PackageReference Include="SIPSorcery" Version="10.0.12" />
         <PackageReference Include="Yaref92.Events" Version="2.1.0" />
         <PackageReference Include="Yaref92.Events.Transport.Grpc" Version="2.1.0" />
     </ItemGroup>

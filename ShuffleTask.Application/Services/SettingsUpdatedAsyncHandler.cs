@@ -117,7 +117,7 @@ internal class SettingsUpdatedAsyncHandler : IAsyncEventHandler<SettingsUpdatedE
         }
         else
         {
-            normalized!.Network?.UserId = existing?.Network?.UserId;
+            normalized.Network?.UserId = existing?.Network?.UserId;
         }
 
         if (existing is null)

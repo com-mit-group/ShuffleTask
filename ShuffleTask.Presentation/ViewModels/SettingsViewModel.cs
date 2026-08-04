@@ -430,6 +430,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         await UpsertPresetDefinitionAsync(_lunchDefinition, PeriodDefinitionCatalog.LunchBreak, LunchStart, LunchEnd);
     }
 
+#pragma warning disable S2325 // These methods synchronize source-generated instance properties with settings.
     private void ApplySlotSettingsFromSettings()
     {
         MorningStart = Settings.MorningStart;
@@ -473,6 +474,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         Settings.EveningStart = EveningStart;
         Settings.EveningEnd = EveningEnd;
     }
+#pragma warning restore S2325
 
     private void ApplyValidation()
     {

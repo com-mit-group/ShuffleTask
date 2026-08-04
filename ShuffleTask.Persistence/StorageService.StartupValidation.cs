@@ -20,7 +20,7 @@ public partial class StorageService
         }
         else
         {
-            _logger?.LogSyncEvent("PersistenceRecovery", "Skipped task validation because stored task schema is newer than supported.");
+            _logger?.LogSyncEvent(PersistenceRecoveryEvent, "Skipped task validation because stored task schema is newer than supported.");
         }
 
         if (!_periodSchemaIsFuture)
@@ -29,7 +29,7 @@ public partial class StorageService
         }
         else
         {
-            _logger?.LogSyncEvent("PersistenceRecovery", "Skipped period validation because stored period schema is newer than supported.");
+            _logger?.LogSyncEvent(PersistenceRecoveryEvent, "Skipped period validation because stored period schema is newer than supported.");
         }
 
         _logger?.LogSyncEvent("PersistenceValidationCompleted", $"domain=startup; durationMs={stopwatch.ElapsedMilliseconds}");
@@ -54,7 +54,7 @@ public partial class StorageService
             QuarantineDuplicateTaskIds(conn, validRows);
 
             var exposedRows = validRows
-                .GroupBy(row => row.Id!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(row => row.Id?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .Select(group => ChooseTaskRecordToKeep(group))
                 .ToList();
 
@@ -85,7 +85,7 @@ public partial class StorageService
                 .Where(row => !string.IsNullOrWhiteSpace(row.Id))
                 .ToList();
 
-            foreach (var group in validRows.GroupBy(row => row.Id!.Trim(), StringComparer.OrdinalIgnoreCase))
+            foreach (var group in validRows.GroupBy(row => row.Id?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
             {
                 var keep = ChoosePeriodRecordToKeep(group);
                 foreach (var duplicate in group.Where(row => row.RowId != keep.RowId))
@@ -110,7 +110,7 @@ public partial class StorageService
 
     private void QuarantineDuplicateTaskIds(SQLiteConnection conn, IReadOnlyList<TaskValidationRow> rows)
     {
-        foreach (var group in rows.GroupBy(row => row.Id!.Trim(), StringComparer.OrdinalIgnoreCase))
+        foreach (var group in rows.GroupBy(row => row.Id?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
         {
             var keep = ChooseTaskRecordToKeep(group);
             foreach (var duplicate in group.Where(row => row.RowId != keep.RowId))
@@ -141,7 +141,6 @@ public partial class StorageService
 
     private void RepairTaskRow(SQLiteConnection conn, TaskValidationRow row)
     {
-        bool repaired = false;
         DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
         DateTime createdAt = ParseOptionalDate(row.CreatedAt) ?? nowUtc;
         DateTime updatedAt = ParseOptionalDate(row.UpdatedAt) ?? createdAt;
@@ -150,30 +149,71 @@ public partial class StorageService
             updatedAt = createdAt;
         }
 
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Id", row.Id?.Trim());
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Title", string.IsNullOrWhiteSpace(row.Title) ? "Untitled" : row.Title);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Description", row.Description ?? string.Empty);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CreatedAt", EnsureUtc(createdAt));
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "UpdatedAt", EnsureUtc(updatedAt));
+        bool repaired = RepairTaskCoreColumns(conn, row, createdAt, updatedAt);
+        int status = NormalizeTaskStatus(row, ref repaired);
+        int repeat = NormalizeRepeat(row, ref repaired);
+        repaired |= RepairTaskSchedulingColumns(conn, row, repeat);
+        repaired |= RepairTaskRuleColumns(conn, row);
 
+        RepairDateColumn(conn, row, "Deadline", row.Deadline, nullable: true, ref repaired);
+        RepairDateColumn(conn, row, "LastDoneAt", row.LastDoneAt, nullable: true, ref repaired);
+        repaired |= RepairTaskLifecycleColumns(conn, row, status, repeat, nowUtc, updatedAt);
+        repaired |= RepairTaskOwnership(conn, row);
+        repaired |= RepairTimerOverrides(conn, row);
+
+        if (repaired)
+        {
+            _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"domain=tasks; rowid={row.RowId}; action=repaired");
+        }
+    }
+
+    private static bool RepairTaskCoreColumns(
+        SQLiteConnection conn,
+        TaskValidationRow row,
+        DateTime createdAt,
+        DateTime updatedAt)
+    {
+        bool repaired = false;
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "Id", row.Id?.Trim());
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "Title", string.IsNullOrWhiteSpace(row.Title) ? "Untitled" : row.Title);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "Description", row.Description ?? string.Empty);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CreatedAt", EnsureUtc(createdAt));
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "UpdatedAt", EnsureUtc(updatedAt));
+        return repaired;
+    }
+
+    private int NormalizeTaskStatus(TaskValidationRow row, ref bool repaired)
+    {
         int status = row.Status ?? (int)TaskLifecycleStatus.Active;
-        if (!IsValidTaskStatus(status))
+        if (IsValidTaskStatus(status))
         {
-            _logger?.LogSyncEvent("PersistenceValidationFailure", $"domain=tasks; rowid={row.RowId}; field=status; action=repair");
-            status = (int)TaskLifecycleStatus.Active;
-            repaired = true;
+            return status;
         }
 
+        _logger?.LogSyncEvent("PersistenceValidationFailure", $"domain=tasks; rowid={row.RowId}; field=status; action=repair");
+        repaired = true;
+        return (int)TaskLifecycleStatus.Active;
+    }
+
+    private int NormalizeRepeat(TaskValidationRow row, ref bool repaired)
+    {
         int repeat = row.Repeat ?? (int)RepeatType.None;
-        if (!IsValidRepeat(repeat))
+        if (IsValidRepeat(repeat))
         {
-            _logger?.LogSyncEvent("PersistenceValidationFailure", $"domain=tasks; rowid={row.RowId}; field=repeat; action=repair");
-            repeat = (int)RepeatType.None;
-            repaired = true;
+            return repeat;
         }
 
+        _logger?.LogSyncEvent("PersistenceValidationFailure", $"domain=tasks; rowid={row.RowId}; field=repeat; action=repair");
+        repaired = true;
+        return (int)RepeatType.None;
+    }
+
+    private static bool RepairTaskSchedulingColumns(SQLiteConnection conn, TaskValidationRow row, int repeat)
+    {
+        bool repaired = false;
         int weekdays = (row.Weekdays ?? 0) & ValidWeekdayMask;
         int intervalDays = Math.Max(0, row.IntervalDays ?? 0);
+
         if (repeat == (int)RepeatType.Interval && intervalDays < 1)
         {
             intervalDays = 1;
@@ -191,31 +231,40 @@ public partial class StorageService
             intervalDays = 0;
         }
 
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Repeat", repeat);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Weekdays", weekdays);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "IntervalDays", intervalDays);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "Repeat", repeat);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "Weekdays", weekdays);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "IntervalDays", intervalDays);
+        return repaired;
+    }
 
+    private static bool RepairTaskRuleColumns(SQLiteConnection conn, TaskValidationRow row)
+    {
         int allowedPeriod = row.AllowedPeriod ?? (int)AllowedPeriod.Any;
         if (!IsValidAllowedPeriod(allowedPeriod))
         {
             allowedPeriod = (int)AllowedPeriod.Any;
-            repaired = true;
         }
 
         int cutInLine = row.CutInLineMode ?? (int)CutInLineMode.None;
         if (!IsValidCutInLineMode(cutInLine))
         {
             cutInLine = (int)CutInLineMode.None;
-            repaired = true;
         }
 
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "AllowedPeriod", allowedPeriod);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CutInLineMode", cutInLine);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "EventVersion", Math.Max(1, row.EventVersion ?? 0));
+        bool repaired = SetIfChanged(conn, TaskTableName, row.RowId, "AllowedPeriod", allowedPeriod);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CutInLineMode", cutInLine);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "EventVersion", Math.Max(1, row.EventVersion ?? 0));
+        return repaired;
+    }
 
-        RepairDateColumn(conn, row, "Deadline", row.Deadline, nullable: true, ref repaired);
-        RepairDateColumn(conn, row, "LastDoneAt", row.LastDoneAt, nullable: true, ref repaired);
-
+    private static bool RepairTaskLifecycleColumns(
+        SQLiteConnection conn,
+        TaskValidationRow row,
+        int status,
+        int repeat,
+        DateTime nowUtc,
+        DateTime updatedAt)
+    {
         DateTime? completedAt = ParseOptionalDate(row.CompletedAt);
         DateTime? snoozedUntil = ParseOptionalDate(row.SnoozedUntil);
         DateTime? nextEligibleAt = ParseOptionalDate(row.NextEligibleAt);
@@ -251,18 +300,11 @@ public partial class StorageService
             nextEligibleAt = null;
         }
 
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "Status", status);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CompletedAt", completedAt);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "SnoozedUntil", snoozedUntil);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "NextEligibleAt", nextEligibleAt);
-
-        repaired |= RepairTaskOwnership(conn, row);
-        repaired |= RepairTimerOverrides(conn, row);
-
-        if (repaired)
-        {
-            _logger?.LogSyncEvent("PersistenceRecovery", $"domain=tasks; rowid={row.RowId}; action=repaired");
-        }
+        bool repaired = SetIfChanged(conn, TaskTableName, row.RowId, "Status", status);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CompletedAt", completedAt);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "SnoozedUntil", snoozedUntil);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "NextEligibleAt", nextEligibleAt);
+        return repaired;
     }
 
     private void RepairPeriodRow(SQLiteConnection conn, PeriodValidationRow row)
@@ -290,33 +332,33 @@ public partial class StorageService
             endTime = null;
         }
 
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "Id", id);
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "Name", string.IsNullOrWhiteSpace(row.Name) ? "Untitled period" : row.Name);
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "Weekdays", weekdays);
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "Mode", mode);
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "StartTime", startTime);
-        repaired |= SetIfChanged(conn, "PeriodDefinition", row.RowId, "EndTime", endTime);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "Id", id);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "Name", string.IsNullOrWhiteSpace(row.Name) ? "Untitled period" : row.Name);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "Weekdays", weekdays);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "Mode", mode);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "StartTime", startTime);
+        repaired |= SetIfChanged(conn, PeriodDefinitionTableName, row.RowId, "EndTime", endTime);
 
         if (repaired)
         {
-            _logger?.LogSyncEvent("PersistenceRecovery", $"domain=periods; rowid={row.RowId}; action=repaired");
+            _logger?.LogSyncEvent(PersistenceRecoveryEvent, $"domain=periods; rowid={row.RowId}; action=repaired");
         }
     }
 
-    private bool RepairTaskOwnership(SQLiteConnection conn, TaskValidationRow row)
+    private static bool RepairTaskOwnership(SQLiteConnection conn, TaskValidationRow row)
     {
         string? userId = string.IsNullOrWhiteSpace(row.UserId) ? null : row.UserId.Trim();
         string? deviceId = string.IsNullOrWhiteSpace(row.DeviceId) ? null : row.DeviceId.Trim();
 
         if (!string.IsNullOrWhiteSpace(userId))
         {
-            bool changedUser = SetIfChanged(conn, "TaskItem", row.RowId, "UserId", userId);
-            bool changedDevice = SetIfChanged(conn, "TaskItem", row.RowId, "DeviceId", null);
+            bool changedUser = SetIfChanged(conn, TaskTableName, row.RowId, "UserId", userId);
+            bool changedDevice = SetIfChanged(conn, TaskTableName, row.RowId, "DeviceId", null);
             return changedUser || changedDevice;
         }
 
-        bool userChanged = SetIfChanged(conn, "TaskItem", row.RowId, "UserId", null);
-        bool deviceChanged = SetIfChanged(conn, "TaskItem", row.RowId, "DeviceId", deviceId ?? Environment.MachineName);
+        bool userChanged = SetIfChanged(conn, TaskTableName, row.RowId, "UserId", null);
+        bool deviceChanged = SetIfChanged(conn, TaskTableName, row.RowId, "DeviceId", deviceId ?? Environment.MachineName);
         return userChanged || deviceChanged;
     }
 
@@ -329,11 +371,11 @@ public partial class StorageService
             timerMode = null;
         }
 
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CustomTimerMode", timerMode);
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CustomReminderMinutes", NormalizePositiveNullable(row.CustomReminderMinutes));
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CustomFocusMinutes", NormalizeRangeNullable(row.CustomFocusMinutes, 5, 120));
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CustomBreakMinutes", NormalizeRangeNullable(row.CustomBreakMinutes, 1, 60));
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, "CustomPomodoroCycles", NormalizeRangeNullable(row.CustomPomodoroCycles, 1, 8));
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CustomTimerMode", timerMode);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CustomReminderMinutes", NormalizePositiveNullable(row.CustomReminderMinutes));
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CustomFocusMinutes", NormalizeRangeNullable(row.CustomFocusMinutes, 5, 120));
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CustomBreakMinutes", NormalizeRangeNullable(row.CustomBreakMinutes, 1, 60));
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, "CustomPomodoroCycles", NormalizeRangeNullable(row.CustomPomodoroCycles, 1, 8));
         return repaired;
     }
 
@@ -362,7 +404,7 @@ public partial class StorageService
         }
 
         _logger?.LogSyncEvent("PersistenceValidationFailure", $"domain=tasks; rowid={row.RowId}; field={column}; action=repair");
-        repaired |= SetIfChanged(conn, "TaskItem", row.RowId, column, nullable ? null : _clock.GetUtcNow().UtcDateTime);
+        repaired |= SetIfChanged(conn, TaskTableName, row.RowId, column, nullable ? null : _clock.GetUtcNow().UtcDateTime);
     }
 
     private void QuarantineTaskRow(SQLiteConnection conn, TaskValidationRow row, string reason)

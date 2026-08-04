@@ -36,6 +36,8 @@ public partial class NotificationService
     private static int _nextAndroidNotificationId = 2000;
     private static readonly ConcurrentDictionary<int, byte> ScheduledNotificationIds = new();
 
+    private readonly record struct TimerAlignment(bool Enabled, string TaskId, string ExpiresAtUtc);
+
     partial void InitializePlatform(ref INotificationPlatform platform)
     {
         platform = new AndroidNotificationPlatform();
@@ -128,9 +130,7 @@ public partial class NotificationService
         TimeSpan delay,
         bool playSound,
         int notificationId,
-        bool alignWithActiveTimer,
-        string alignedTimerTaskId,
-        string alignedTimerExpiresAtUtc)
+        TimerAlignment timerAlignment)
     {
         EnsureChannels(context);
 
@@ -147,9 +147,9 @@ public partial class NotificationService
             .PutExtra(AndroidNotificationExtraMessage, message)
             .PutExtra(AndroidNotificationExtraSound, playSound)
             .PutExtra(AndroidNotificationExtraId, notificationId)
-            .PutExtra(AndroidNotificationExtraAlignWithActiveTimer, alignWithActiveTimer)
-            .PutExtra(AndroidNotificationExtraAlignedTimerTaskId, alignedTimerTaskId)
-            .PutExtra(AndroidNotificationExtraAlignedTimerExpiresAtUtc, alignedTimerExpiresAtUtc);
+            .PutExtra(AndroidNotificationExtraAlignWithActiveTimer, timerAlignment.Enabled)
+            .PutExtra(AndroidNotificationExtraAlignedTimerTaskId, timerAlignment.TaskId)
+            .PutExtra(AndroidNotificationExtraAlignedTimerExpiresAtUtc, timerAlignment.ExpiresAtUtc);
 
         var flags = PendingIntentFlags.UpdateCurrent;
         if (OperatingSystem.IsAndroidVersionAtLeast(23))
@@ -303,9 +303,7 @@ public partial class NotificationService
                     delay,
                     playSound,
                     notificationId,
-                    alignWithActiveTimer,
-                    alignedTimerTaskId,
-                    alignedTimerExpiresAtUtc);
+                    new TimerAlignment(alignWithActiveTimer, alignedTimerTaskId, alignedTimerExpiresAtUtc));
             }
 
             return Task.CompletedTask;
@@ -372,9 +370,7 @@ public partial class NotificationService
                     remaining,
                     playSound,
                     notificationId,
-                    alignWithActiveTimer: true,
-                    alignedTimerTaskId,
-                    alignedTimerExpiresAtUtc);
+                    new TimerAlignment(true, alignedTimerTaskId, alignedTimerExpiresAtUtc));
                 return;
             }
 

@@ -10,7 +10,7 @@ public partial class StorageService
     {
         if (_periodSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=periods; operation=ensure-presets; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=periods; operation=ensure-presets; reason=future-schema");
             return;
         }
 
@@ -107,11 +107,11 @@ public partial class StorageService
     {
         ArgumentNullException.ThrowIfNull(definition);
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=periods; operation=add");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=periods; operation=add");
 
         if (_periodSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=periods; operation=add; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=periods; operation=add; reason=future-schema");
             return;
         }
 
@@ -126,18 +126,18 @@ public partial class StorageService
             conn.Insert(record);
             _faultInjector?.BeforeCommit("periods.add");
         }).ConfigureAwait(false);
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=periods; operation=add; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=periods; operation=add; durationMs={stopwatch.ElapsedMilliseconds}");
     }
 
     public async Task UpdatePeriodDefinitionAsync(PeriodDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=periods; operation=update");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=periods; operation=update");
 
         if (_periodSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=periods; operation=update; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=periods; operation=update; reason=future-schema");
             return;
         }
 
@@ -157,13 +157,13 @@ public partial class StorageService
 
             _faultInjector?.BeforeCommit("periods.update");
         }).ConfigureAwait(false);
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=periods; operation=update; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=periods; operation=update; durationMs={stopwatch.ElapsedMilliseconds}");
     }
 
     public async Task DeletePeriodDefinitionAsync(string id)
     {
         var stopwatch = Stopwatch.StartNew();
-        _logger?.LogSyncEvent("PersistenceSaveStarted", "domain=periods; operation=delete");
+        _logger?.LogSyncEvent(PersistenceSaveStartedEvent, "domain=periods; operation=delete");
         if (string.IsNullOrWhiteSpace(id))
         {
             return;
@@ -171,7 +171,7 @@ public partial class StorageService
 
         if (_periodSchemaIsFuture)
         {
-            _logger?.LogSyncEvent("PersistenceSaveSkipped", "domain=periods; operation=delete; reason=future-schema");
+            _logger?.LogSyncEvent(PersistenceSaveSkippedEvent, "domain=periods; operation=delete; reason=future-schema");
             return;
         }
 
@@ -180,7 +180,7 @@ public partial class StorageService
             conn.Delete<PeriodDefinitionRecord>(id);
             _faultInjector?.BeforeCommit("periods.delete");
         }).ConfigureAwait(false);
-        _logger?.LogSyncEvent("PersistenceSaveCompleted", $"domain=periods; operation=delete; durationMs={stopwatch.ElapsedMilliseconds}");
+        _logger?.LogSyncEvent(PersistenceSaveCompletedEvent, $"domain=periods; operation=delete; durationMs={stopwatch.ElapsedMilliseconds}");
     }
 
 }

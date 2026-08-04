@@ -111,7 +111,7 @@ public partial class MainPage : TabbedPage
         return navigationPage;
     }
 
-    private async void OnExitAndStopBackgroundClicked(object sender, EventArgs e)
+    private static async void OnExitAndStopBackgroundClicked(object sender, EventArgs e)
     {
         IServiceProvider? services = ResolveServiceProvider();
         if (services == null)

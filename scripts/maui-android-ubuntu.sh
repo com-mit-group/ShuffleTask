@@ -21,13 +21,16 @@ USAGE
 }
 
 fail() {
-  printf 'ERROR: %s\n' "$1" >&2
+  local message="$1"
+  printf 'ERROR: %s\n' "$message" >&2
   exit 1
 }
 
 require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    fail "$2"
+  local command_name="$1"
+  local install_message="$2"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    fail "$install_message"
   fi
 }
 

@@ -1,6 +1,7 @@
 namespace ShuffleTask.Domain.Entities;
 
 [Flags]
+#pragma warning disable S2342 // Public enum name is retained for source compatibility.
 public enum PeriodDefinitionMode
 {
     None = 0,
@@ -10,6 +11,7 @@ public enum PeriodDefinitionMode
     Lunch = 8,
     Evening = 16
 }
+#pragma warning restore S2342
 
 public class PeriodDefinition
 {
@@ -147,8 +149,9 @@ public static class PeriodDefinitionCatalog
 
     public static bool TryGet(string? id, out PeriodDefinition definition)
     {
-        if (!string.IsNullOrWhiteSpace(id) && BuiltIns.TryGetValue(id, out definition!))
+        if (!string.IsNullOrWhiteSpace(id) && BuiltIns.TryGetValue(id, out PeriodDefinition? match))
         {
+            definition = match;
             return true;
         }
 

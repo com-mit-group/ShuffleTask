@@ -13,6 +13,18 @@ using ShuffleTask.Presentation.Utilities;
 
 namespace ShuffleTask.ViewModels;
 
+public sealed class DashboardViewModelDependencies
+{
+    public required IStorageService Storage { get; init; }
+    public required ISchedulerService Scheduler { get; init; }
+    public required INotificationService Notifications { get; init; }
+    public required ShuffleCoordinatorService Coordinator { get; init; }
+    public required TimeProvider Clock { get; init; }
+    public required INetworkSyncService NetworkSyncService { get; init; }
+    public required AppSettings Settings { get; init; }
+    public IShuffleLogger? Logger { get; init; }
+}
+
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly IStorageService _storage;
@@ -34,14 +46,15 @@ public partial class DashboardViewModel : ObservableObject
     private const string DefaultDescription = "Tap Shuffle to pick what comes next.";
     private const string DefaultSchedule = "No schedule yet.";
 
-    public DashboardViewModel(IStorageService storage, ISchedulerService scheduler, INotificationService notifications, ShuffleCoordinatorService coordinator, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings, IShuffleLogger? logger = null)
+    public DashboardViewModel(DashboardViewModelDependencies dependencies)
     {
-        _storage = storage;
-        _scheduler = scheduler;
-        _notifications = notifications;
-        _coordinator = coordinator;
-        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        ArgumentNullException.ThrowIfNull(dependencies);
+        _storage = dependencies.Storage;
+        _scheduler = dependencies.Scheduler;
+        _notifications = dependencies.Notifications;
+        _coordinator = dependencies.Coordinator;
+        _clock = dependencies.Clock;
+        _settings = dependencies.Settings;
 
         Title = DefaultTitle;
         Description = DefaultDescription;
@@ -49,8 +62,8 @@ public partial class DashboardViewModel : ObservableObject
         TimerText = "--:--";
         CycleStatus = string.Empty;
         PhaseBadge = string.Empty;
-        _networkSyncService = networkSyncService;
-        _logger = logger;
+        _networkSyncService = dependencies.NetworkSyncService;
+        _logger = dependencies.Logger;
     }
 
     public event EventHandler<TimerRequest>? CountdownRequested;
@@ -122,8 +135,10 @@ public partial class DashboardViewModel : ObservableObject
     private bool isPomodoroVisible;
 
     public string? ActiveTaskId => _activeTask?.Id;
+#pragma warning disable S2325 // These bindable properties depend on source-generated instance properties.
     public bool CanActOnTask => HasTask && !IsBusy;
     public bool CanShuffle => !IsBusy;
+#pragma warning restore S2325
 
     partial void OnHasTaskChanged(bool value) => OnPropertyChanged(nameof(CanActOnTask));
 
@@ -188,102 +203,19 @@ public partial class DashboardViewModel : ObservableObject
 
         IsBusy = true;
         OperationState.SetLoading("Finding the next task…");
-        bool? localDataSaved = null;
+        var context = new ShuffleOperationContext();
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await InitializeAsync(cancellationToken);
-            if (!_isInitialized)
-            {
-                return;
-            }
-
-            var settings = _settings;
-
-            if (!settings.Active)
-            {
-                ShowMessage("Scheduling paused", "Enable the scheduler from Settings to shuffle tasks.");
-                OperationState.SetValidation("Scheduling is paused. Enable it in Settings before shuffling.");
-                return;
-            }
-
-            var network = _settings.Network;
-            var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty);
-            DateTimeOffset now = _clock.GetUtcNow();
-            string? previousId = _activeTask?.Id;
-
-            var next = PickNextCandidate(tasks, settings, now, previousId);
-            if (next == null)
-            {
-                ShowMessage("No tasks ready", "Add a task or adjust filters to get started.");
-                OperationState.SetEmpty("No tasks are ready. Add a task or adjust its schedule.");
-                return;
-            }
-
-            bool isSameTask = !string.IsNullOrEmpty(previousId) && next.Id == previousId;
-            if (isSameTask && !allowRepeat)
-            {
-                OperationState.SetSuccess("The current task is still the best available task.");
-                return;
-            }
-
-            bool clearsOneTimePriority = next.CutInLineMode == CutInLineMode.Once;
-            try
-            {
-                bool cleared = await CutInLineUtilities.ClearCutInLineOnceAsync(next, _storage);
-                localDataSaved = clearsOneTimePriority ? cleared : null;
-            }
-            catch
-            {
-                localDataSaved = false;
-                throw;
-            }
-
-            BindTask(next);
-
-            var effectiveSettings = TaskTimerSettings.Resolve(next, settings);
-            var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = effectiveSettings;
-
-            if (mode == TimerMode.Pomodoro)
-            {
-                _pomodoroSession = PomodoroSession.Create(focusMinutes, breakMinutes, pomodoroCycles);
-                var request = _pomodoroSession.CurrentRequest();
-                _currentTimer = request;
-                UpdateIndicators(request);
-                TimerText = FormatTimerText(request.Duration);
-                CountdownRequested?.Invoke(this, request);
-
-                if (settings.EnableNotifications)
-                {
-                    await _notifications.NotifyTaskAsync(next, _pomodoroSession.FocusMinutes, settings);
-                    await SchedulePomodoroNotificationsAsync(next, _pomodoroSession, settings);
-                }
-            }
-            else
-            {
-                _pomodoroSession = null;
-                int minutes = Math.Max(1, reminderMinutes);
-                var request = TimerRequest.LongIntervalFromMinutes(minutes);
-                _currentTimer = request;
-                UpdateIndicators(request);
-                TimerText = FormatTimerText(request.Duration);
-                CountdownRequested?.Invoke(this, request);
-
-                if (settings.EnableNotifications)
-                {
-                    await _notifications.NotifyTaskAsync(next, minutes, settings);
-                }
-            }
-
-            OperationState.SetSuccess("Next task selected.", localDataSaved);
+            await ExecuteShuffleSelectionAsync(allowRepeat, context, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             OperationState.SetTransientFailure(
-                localDataSaved == true
+                context.LocalDataSaved == true
                     ? "Shuffle was canceled after local task data was saved. Retry to refresh the selection."
                     : "Shuffle was canceled. No local task data was saved.",
-                localDataSaved,
+                context.LocalDataSaved,
                 token => ShuffleInternalAsync(allowRepeat, token),
                 isBlocking: !HasTask);
         }
@@ -291,10 +223,10 @@ public partial class DashboardViewModel : ObservableObject
         {
             _logger?.LogOperation(LogLevel.Error, "ShuffleTask", "Failed while selecting or notifying the next task.", ex);
             OperationState.SetTransientFailure(
-                localDataSaved == true
+                context.LocalDataSaved == true
                     ? "The operation failed after local task data was saved. Retry the remaining work."
                     : "A task could not be selected. No local task data was saved. Try again.",
-                localDataSaved,
+                context.LocalDataSaved,
                 token => ShuffleInternalAsync(allowRepeat, token),
                 isBlocking: !HasTask);
         }
@@ -302,6 +234,128 @@ public partial class DashboardViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private async Task ExecuteShuffleSelectionAsync(
+        bool allowRepeat,
+        ShuffleOperationContext context,
+        CancellationToken cancellationToken)
+    {
+        await InitializeAsync(cancellationToken);
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        AppSettings settings = _settings;
+        if (!settings.Active)
+        {
+            ShowMessage("Scheduling paused", "Enable the scheduler from Settings to shuffle tasks.");
+            OperationState.SetValidation("Scheduling is paused. Enable it in Settings before shuffling.");
+            return;
+        }
+
+        TaskItem? next = await SelectNextTaskAsync(settings, allowRepeat);
+        if (next == null)
+        {
+            return;
+        }
+
+        await ClearOneTimePriorityAsync(next, context);
+        BindTask(next);
+        await StartTaskTimerAsync(next, settings);
+        OperationState.SetSuccess("Next task selected.", context.LocalDataSaved);
+    }
+
+    private async Task<TaskItem?> SelectNextTaskAsync(AppSettings settings, bool allowRepeat)
+    {
+        var network = settings.Network;
+        var tasks = await _storage.GetTasksAsync(network?.UserId, network?.DeviceId ?? string.Empty);
+        DateTimeOffset now = _clock.GetUtcNow();
+        string? previousId = _activeTask?.Id;
+        TaskItem? next = PickNextCandidate(tasks, settings, now, previousId);
+
+        if (next == null)
+        {
+            ShowMessage("No tasks ready", "Add a task or adjust filters to get started.");
+            OperationState.SetEmpty("No tasks are ready. Add a task or adjust its schedule.");
+            return null;
+        }
+
+        bool isSameTask = !string.IsNullOrEmpty(previousId) && next.Id == previousId;
+        if (isSameTask && !allowRepeat)
+        {
+            OperationState.SetSuccess("The current task is still the best available task.");
+            return null;
+        }
+
+        return next;
+    }
+
+    private async Task ClearOneTimePriorityAsync(TaskItem task, ShuffleOperationContext context)
+    {
+        bool clearsOneTimePriority = task.CutInLineMode == CutInLineMode.Once;
+        try
+        {
+            bool cleared = await CutInLineUtilities.ClearCutInLineOnceAsync(task, _storage);
+            context.LocalDataSaved = clearsOneTimePriority ? cleared : null;
+        }
+        catch
+        {
+            context.LocalDataSaved = false;
+            throw;
+        }
+    }
+
+    private async Task StartTaskTimerAsync(TaskItem task, AppSettings settings)
+    {
+        var (mode, reminderMinutes, focusMinutes, breakMinutes, pomodoroCycles) = TaskTimerSettings.Resolve(task, settings);
+        if (mode == TimerMode.Pomodoro)
+        {
+            await StartPomodoroTimerAsync(task, settings, focusMinutes, breakMinutes, pomodoroCycles);
+            return;
+        }
+
+        _pomodoroSession = null;
+        int minutes = Math.Max(1, reminderMinutes);
+        var request = TimerRequest.LongIntervalFromMinutes(minutes);
+        StartCountdown(request);
+
+        if (settings.EnableNotifications)
+        {
+            await _notifications.NotifyTaskAsync(task, minutes, settings);
+        }
+    }
+
+    private async Task StartPomodoroTimerAsync(
+        TaskItem task,
+        AppSettings settings,
+        int focusMinutes,
+        int breakMinutes,
+        int pomodoroCycles)
+    {
+        _pomodoroSession = PomodoroSession.Create(focusMinutes, breakMinutes, pomodoroCycles);
+        TimerRequest request = _pomodoroSession.CurrentRequest();
+        StartCountdown(request);
+
+        if (settings.EnableNotifications)
+        {
+            await _notifications.NotifyTaskAsync(task, _pomodoroSession.FocusMinutes, settings);
+            await SchedulePomodoroNotificationsAsync(task, _pomodoroSession, settings);
+        }
+    }
+
+    private void StartCountdown(TimerRequest request)
+    {
+        _currentTimer = request;
+        UpdateIndicators(request);
+        TimerText = FormatTimerText(request.Duration);
+        CountdownRequested?.Invoke(this, request);
+    }
+
+    private sealed class ShuffleOperationContext
+    {
+        public bool? LocalDataSaved { get; set; }
     }
 
     [RelayCommand]
@@ -514,6 +568,7 @@ public partial class DashboardViewModel : ObservableObject
         CountdownCleared?.Invoke(this, EventArgs.Empty);
     }
 
+#pragma warning disable S2325 // These methods update source-generated instance properties used by the UI.
     private void UpdateIndicators(TimerRequest? request)
     {
         if (request?.Mode == TimerMode.Pomodoro && request.Phase.HasValue)
@@ -540,6 +595,7 @@ public partial class DashboardViewModel : ObservableObject
             ? $"{cycles} cycle(s) finished"
             : "Session complete";
     }
+#pragma warning restore S2325
 
     private void ResetTimerState()
     {

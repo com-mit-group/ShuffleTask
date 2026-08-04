@@ -296,11 +296,11 @@ public partial class TasksViewModel : ObservableObject
     private bool IsAllowedDuringWindow(TaskItem task, DateTimeOffset localNow, TimeSpan start, TimeSpan end)
     {
         DateTimeOffset windowStartLocal = new(localNow.Date + start, localNow.Offset);
-        DateTimeOffset windowEndLocal = start == end
-            ? windowStartLocal.AddDays(1)
-            : (start < end
-                ? new DateTimeOffset(localNow.Date + end, localNow.Offset)
-                : new DateTimeOffset(localNow.Date + end, localNow.Offset).AddDays(1));
+        DateTimeOffset windowEndLocal = new(localNow.Date + end, localNow.Offset);
+        if (start == end || start > end)
+        {
+            windowEndLocal = windowEndLocal.AddDays(1);
+        }
 
         if (windowEndLocal <= windowStartLocal)
         {
@@ -308,15 +308,9 @@ public partial class TasksViewModel : ObservableObject
         }
 
         HashSet<DateTimeOffset> probes = BuildAllowedWindowProbes(task, windowStartLocal, windowEndLocal);
-        foreach (DateTimeOffset probe in probes.OrderBy(value => value))
-        {
-            if (TimeWindowService.AllowedNow(task, probe.ToOffset(TimeSpan.Zero), _settings))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return probes
+            .OrderBy(value => value)
+            .Any(probe => TimeWindowService.AllowedNow(task, probe.ToOffset(TimeSpan.Zero), _settings));
     }
 
     private HashSet<DateTimeOffset> BuildAllowedWindowProbes(TaskItem task, DateTimeOffset windowStartLocal, DateTimeOffset windowEndLocal)

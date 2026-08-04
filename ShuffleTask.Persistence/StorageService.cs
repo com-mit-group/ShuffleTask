@@ -15,6 +15,12 @@ public partial class StorageService : IStorageService
     private const int CurrentTaskSchemaVersion = 2;
     private const int CurrentPeriodSchemaVersion = 2;
     private const string IntegerSqlType = "INTEGER";
+    private const string TaskTableName = "TaskItem";
+    private const string PeriodDefinitionTableName = "PeriodDefinition";
+    private const string PersistenceRecoveryEvent = "PersistenceRecovery";
+    private const string PersistenceSaveStartedEvent = "PersistenceSaveStarted";
+    private const string PersistenceSaveSkippedEvent = "PersistenceSaveSkipped";
+    private const string PersistenceSaveCompletedEvent = "PersistenceSaveCompleted";
     private const int ValidWeekdayMask = (int)(Weekdays.Sun | Weekdays.Mon | Weekdays.Tue | Weekdays.Wed | Weekdays.Thu | Weekdays.Fri | Weekdays.Sat);
     private const int ValidPeriodModeMask = (int)(PeriodDefinitionMode.AlignWithWorkHours
         | PeriodDefinitionMode.OffWorkRelativeToWorkHours

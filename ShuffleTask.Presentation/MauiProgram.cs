@@ -83,7 +83,17 @@ public static partial class MauiProgram
             var networkSync = sp.GetRequiredService<INetworkSyncService>();
             var appSettings = sp.GetRequiredService<AppSettings>();
             var shuffleLogger = sp.GetRequiredService<IShuffleLogger>();
-            var dashboardViewModel = new DashboardViewModel(storage, scheduler, notifications, shuffleCoordinator, timeProvider, networkSync, appSettings, shuffleLogger);
+            var dashboardViewModel = new DashboardViewModel(new DashboardViewModelDependencies
+            {
+                Storage = storage,
+                Scheduler = scheduler,
+                Notifications = notifications,
+                Coordinator = shuffleCoordinator,
+                Clock = timeProvider,
+                NetworkSyncService = networkSync,
+                Settings = appSettings,
+                Logger = shuffleLogger
+            });
             var taskStartedHandler = sp.GetRequiredService<TaskStartedAsyncHandler>();
             taskStartedHandler.RegisterDashboard(dashboardViewModel);
             return dashboardViewModel;
@@ -167,14 +177,15 @@ public static partial class MauiProgram
 
     private static void InitNetworkSync()
     {
-        INetworkSyncService networkSyncService = _services!.GetRequiredService<INetworkSyncService>(); // force eager initialization
-        var aggregator = _services!.GetRequiredService<NetworkedEventAggregator>();
+        IServiceProvider services = Services;
+        INetworkSyncService networkSyncService = services.GetRequiredService<INetworkSyncService>(); // force eager initialization
+        var aggregator = services.GetRequiredService<NetworkedEventAggregator>();
         Task initTask = Task.Run(() => networkSyncService.InitAsync());
 
         initTask.ContinueWith((t, o) =>
         {
-            aggregator.SubscribeToEventType(_services!.GetRequiredService<TaskStartedAsyncHandler>());
-            aggregator.SubscribeToEventType(_services!.GetRequiredService<TimeUpNotificationAsyncHandler>());
+            aggregator.SubscribeToEventType(services.GetRequiredService<TaskStartedAsyncHandler>());
+            aggregator.SubscribeToEventType(services.GetRequiredService<TimeUpNotificationAsyncHandler>());
         }, TaskScheduler.Default);
     }
 

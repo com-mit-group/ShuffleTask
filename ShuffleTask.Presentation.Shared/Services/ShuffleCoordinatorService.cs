@@ -129,7 +129,7 @@ public class ShuffleCoordinatorService : IDisposable
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
 
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             CancelTimerInternal();
@@ -165,7 +165,7 @@ public class ShuffleCoordinatorService : IDisposable
 
     private async Task<T> RunWithGateAsync<T>(Func<Task<T>> action)
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             return await action().ConfigureAwait(false);
@@ -227,7 +227,7 @@ public class ShuffleCoordinatorService : IDisposable
         await ScheduleFromAvailableTasksAsync(settings, now).ConfigureAwait(false);
     }
 
-    private bool HandleAutoShuffleDisabled(AppSettings settings)
+    private static bool HandleAutoShuffleDisabled(AppSettings settings)
     {
         if (ShouldAutoShuffle(settings))
         {
@@ -388,6 +388,7 @@ public class ShuffleCoordinatorService : IDisposable
     private void ScheduleInProcessTimer(DateTimeOffset scheduledAt, string? taskId)
     {
         var cts = new CancellationTokenSource();
+        CancellationToken timerToken = cts.Token;
         _timerCts = cts;
 
         TimeSpan delay = scheduledAt - GetCurrentInstant();
@@ -396,9 +397,9 @@ public class ShuffleCoordinatorService : IDisposable
             delay = TimeSpan.Zero;
         }
 
-        _ = _backgroundService.ScheduleAsync(delay, cts.Token, async () =>
+        _ = _backgroundService.ScheduleAsync(delay, timerToken, async () =>
         {
-            if (cts.Token.IsCancellationRequested)
+            if (timerToken.IsCancellationRequested)
             {
                 Debug.WriteLine("ShuffleCoordinatorService timer cancelled");
                 return;
@@ -410,7 +411,7 @@ public class ShuffleCoordinatorService : IDisposable
             }
             else
             {
-                await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+                await ExecuteShuffleAsync(taskId, cts, timerToken).ConfigureAwait(false);
             }
         });
     }
@@ -433,18 +434,17 @@ public class ShuffleCoordinatorService : IDisposable
         await ScheduleNextShuffleAsync().ConfigureAwait(false);
     }
 
-    private async Task ExecuteShuffleAsync(string taskId, CancellationTokenSource cts)
+    private async Task ExecuteShuffleAsync(
+        string taskId,
+        CancellationTokenSource cts,
+        CancellationToken timerToken)
     {
         CancelPersistentSchedule();
 
-        bool executed = false;
+        bool executed = await RunWithGateAsync(
+            () => ExecuteShuffleUnsafeAsync(taskId, cts, timerToken)).ConfigureAwait(false);
 
-        await RunWithGateAsync(async () =>
-        {
-            executed = await ExecuteShuffleUnsafeAsync(taskId, cts).ConfigureAwait(false);
-        }).ConfigureAwait(false);
-
-        if (executed && !_isPaused)
+        if (executed)
         {
             await ScheduleNextShuffleAsync().ConfigureAwait(false);
         }
@@ -475,7 +475,7 @@ public class ShuffleCoordinatorService : IDisposable
         }
 
         bool paused;
-        await _gate.WaitAsync().ConfigureAwait(false);
+        await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
             paused = _isPaused;
@@ -519,7 +519,8 @@ public class ShuffleCoordinatorService : IDisposable
         {
             await NotifyExpiredTimerAsync().ConfigureAwait(false);
             using var cts = new CancellationTokenSource();
-            await ExecuteShuffleAsync(taskId, cts).ConfigureAwait(false);
+            CancellationToken timerToken = cts.Token;
+            await ExecuteShuffleAsync(taskId, cts, timerToken).ConfigureAwait(false);
         }
     }
 
@@ -552,12 +553,15 @@ public class ShuffleCoordinatorService : IDisposable
         await _notifications.ShowToastAsync(TimeUpTitle, TimeUpMessage, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            await _networkSync.PublishTimeUpNotificationAsync().ConfigureAwait(false);
+            await _networkSync.PublishTimeUpNotificationAsync(CancellationToken.None).ConfigureAwait(false);
         }
         PersistedTimerState.Clear();
     }
 
-    private async Task<bool> ExecuteShuffleUnsafeAsync(string taskId, CancellationTokenSource cts)
+    private async Task<bool> ExecuteShuffleUnsafeAsync(
+        string taskId,
+        CancellationTokenSource cts,
+        CancellationToken timerToken)
     {
         if (ReferenceEquals(_timerCts, cts))
         {
@@ -608,7 +612,7 @@ public class ShuffleCoordinatorService : IDisposable
         EffectiveTimerSettings effectiveSettings = TaskTimerSettings.Resolve(task, settings);
         PersistActiveTask(task, effectiveSettings);
         await HandleCutInLineModeAsync(task).ConfigureAwait(false);
-        await NotifyAsync(task, settings, effectiveSettings).ConfigureAwait(false);
+        await NotifyAsync(task, settings, effectiveSettings, timerToken).ConfigureAwait(false);
         IncrementDailyCount(now);
         return true;
     }
@@ -654,7 +658,11 @@ public class ShuffleCoordinatorService : IDisposable
         return null;
     }
 
-    private async Task NotifyAsync(TaskItem task, AppSettings settings, EffectiveTimerSettings effectiveSettings)
+    private async Task NotifyAsync(
+        TaskItem task,
+        AppSettings settings,
+        EffectiveTimerSettings effectiveSettings,
+        CancellationToken cancellationToken)
     {
         if (_dashboardRef != null && _dashboardRef.TryGetTarget(out var dashboard))
         {
@@ -666,7 +674,7 @@ public class ShuffleCoordinatorService : IDisposable
         await _notifications.NotifyTaskAsync(task, minutes, settings).ConfigureAwait(false);
         if (_networkSync != null)
         {
-            await _networkSync.PublishTaskStartedAsync(task.Id, minutes).ConfigureAwait(false);
+            await _networkSync.PublishTaskStartedAsync(task.Id, minutes, cancellationToken).ConfigureAwait(false);
         }
     }
 

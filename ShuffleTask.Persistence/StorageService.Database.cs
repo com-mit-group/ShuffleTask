@@ -8,7 +8,6 @@ public partial class StorageService
 {
     private async Task InitializeDatabaseWithRecoveryAsync()
     {
-        SQLitePCL.Batteries_V2.Init();
         _databaseExistedBeforeOpen = File.Exists(_dbPath) && new FileInfo(_dbPath).Length > 0;
 
         try
