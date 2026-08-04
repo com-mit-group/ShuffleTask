@@ -91,6 +91,7 @@ public class OnboardingViewModelTests
             Assert.That(viewModel.OperationState.Kind, Is.EqualTo(OperationStateKind.TransientFailure));
             Assert.That(viewModel.OperationState.CanRetry, Is.True);
             Assert.That(viewModel.IsVisible, Is.True);
+            Assert.That(viewModel.CanChoose, Is.False);
             Assert.That(completionCount, Is.Zero);
         });
 
@@ -127,6 +128,22 @@ public class OnboardingViewModelTests
         await viewModel.CompleteCreatedTaskAsync();
 
         await onboarding.Received(1).CompleteAsync(OnboardingViewModel.CurrentVersion);
+    }
+
+    [Test]
+    public void StartupFailure_DisablesChoicesAndLeavesSingleRetry()
+    {
+        var onboarding = Substitute.For<IOnboardingService>();
+        var viewModel = new OnboardingViewModel(onboarding, TimeProvider.System);
+
+        viewModel.SetStartupFailure(_ => Task.CompletedTask);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.CanChoose, Is.False);
+            Assert.That(viewModel.OperationState.CanRetry, Is.True);
+            Assert.That(viewModel.OperationState.Kind, Is.EqualTo(OperationStateKind.TransientFailure));
+        });
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

@@ -25,6 +25,7 @@ public partial class OnboardingViewModel : ObservableObject
     private readonly IOnboardingService _onboarding;
     private readonly TimeProvider _clock;
     private int _operationRunning;
+    private bool _choicesReady;
 
     public OnboardingViewModel(IOnboardingService onboarding, TimeProvider clock)
     {
@@ -40,12 +41,14 @@ public partial class OnboardingViewModel : ObservableObject
     [ObservableProperty]
     private bool isVisible = true;
 
-    public bool CanChoose => IsVisible
+    public bool CanChoose => _choicesReady
+        && IsVisible
         && Volatile.Read(ref _operationRunning) == 0
         && !OperationState.IsLoading;
 
     public void SetStartupLoading()
     {
+        _choicesReady = false;
         IsVisible = true;
         OperationState.SetLoading("Preparing your workspace…");
         RefreshCommands();
@@ -61,17 +64,20 @@ public partial class OnboardingViewModel : ObservableObject
             int completedVersion = await _onboarding.GetCompletedVersionAsync();
             if (completedVersion >= CurrentVersion)
             {
+                _choicesReady = false;
                 IsVisible = false;
                 OperationState.SetIdle();
                 return false;
             }
 
+            _choicesReady = true;
             IsVisible = true;
             OperationState.SetSuccess("Choose how you want to start ShuffleTask.");
             return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _choicesReady = false;
             IsVisible = true;
             OperationState.SetTransientFailure(
                 "Setup was canceled. Retry to continue.",
@@ -82,6 +88,7 @@ public partial class OnboardingViewModel : ObservableObject
         }
         catch
         {
+            _choicesReady = false;
             IsVisible = true;
             OperationState.SetTransientFailure(
                 "ShuffleTask could not read first-run setup. Your existing data is unchanged.",
@@ -99,6 +106,7 @@ public partial class OnboardingViewModel : ObservableObject
     public void SetStartupFailure(Func<CancellationToken, Task> retry)
     {
         ArgumentNullException.ThrowIfNull(retry);
+        _choicesReady = false;
         IsVisible = true;
         OperationState.SetTransientFailure(
             "ShuffleTask could not initialize local storage safely. Check storage access and retry.",
@@ -110,6 +118,7 @@ public partial class OnboardingViewModel : ObservableObject
 
     public void ReturnToChoices()
     {
+        _choicesReady = true;
         IsVisible = true;
         OperationState.SetSuccess("No task was created. Choose how you want to continue.");
         RefreshCommands();
@@ -123,6 +132,7 @@ public partial class OnboardingViewModel : ObservableObject
             return;
         }
 
+        _choicesReady = false;
         OperationState.SetLoading("Opening the new task editor…");
         RefreshCommands();
         CreateTaskRequested?.Invoke(this, EventArgs.Empty);
@@ -166,6 +176,7 @@ public partial class OnboardingViewModel : ObservableObject
             return;
         }
 
+        _choicesReady = false;
         OperationState.SetLoading(loadingMessage);
         RefreshCommands();
         try
