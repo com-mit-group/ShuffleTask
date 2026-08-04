@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xaml-comp compile="true"?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:ShuffleTask.ViewModels;assembly=ShuffleTask.Presentation.Shared"
+             x:Class="ShuffleTask.Views.OnboardingPage"
+             x:DataType="vm:OnboardingViewModel"
+             Title="Welcome to ShuffleTask"
+             BackgroundColor="{AppThemeBinding Light=#f4f5f7, Dark=#121212}">
+    <ScrollView>
+        <Grid Padding="24"
+              MinimumHeightRequest="420">
+            <Border MaximumWidthRequest="560"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center"
+                    Padding="28"
+                    StrokeShape="RoundRectangle 18"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark=#242424}"
+                    Stroke="{AppThemeBinding Light=#d8dce2, Dark=#4a4a4a}">
+                <VerticalStackLayout Spacing="18">
+                    <Label x:Name="OnboardingHeading"
+                           Text="Start with data you trust"
+                           FontSize="28"
+                           FontAttributes="Bold"
+                           LineBreakMode="WordWrap"
+                           SemanticProperties.HeadingLevel="Level1"
+                           SemanticProperties.Description="Welcome to ShuffleTask. Start with data you trust." />
+
+                    <Label Text="Choose once how to begin. ShuffleTask will preserve this choice and will never recreate deleted sample tasks."
+                           FontSize="16"
+                           LineBreakMode="WordWrap" />
+
+                    <Button x:Name="CreateTaskButton"
+                            Text="Create a task"
+                            Command="{Binding CreateTaskCommand}"
+                            IsEnabled="{Binding CanChoose}"
+                            MinimumHeightRequest="44"
+                            FontAttributes="Bold"
+                            SemanticProperties.Description="Create your first task in the full task editor" />
+
+                    <Button Text="Add sample tasks"
+                            Command="{Binding AddSampleTasksCommand}"
+                            IsEnabled="{Binding CanChoose}"
+                            MinimumHeightRequest="44"
+                            SemanticProperties.Description="Add four editable sample tasks" />
+
+                    <Button Text="Continue without samples"
+                            Command="{Binding ContinueWithoutSamplesCommand}"
+                            IsEnabled="{Binding CanChoose}"
+                            MinimumHeightRequest="44"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#334155, Dark=#e2e8f0}"
+                            SemanticProperties.Description="Continue with an empty task list" />
+
+                    <Border Padding="12"
+                            StrokeShape="RoundRectangle 8"
+                            IsVisible="{Binding OperationState.HasMessage}"
+                            SemanticProperties.Description="{Binding OperationState.Announcement}">
+                        <Grid ColumnDefinitions="*,Auto"
+                              ColumnSpacing="8">
+                            <Label x:Name="OperationStateMessage"
+                                   Text="{Binding OperationState.Message}"
+                                   LineBreakMode="WordWrap"
+                                   VerticalTextAlignment="Center" />
+                            <Button Grid.Column="1"
+                                    Text="Retry"
+                                    Command="{Binding OperationState.RetryCommand}"
+                                    IsVisible="{Binding OperationState.CanRetry}"
+                                    MinimumHeightRequest="44"
+                                    MinimumWidthRequest="72" />
+                        </Grid>
+                    </Border>
+
+                    <ActivityIndicator IsVisible="{Binding OperationState.IsLoading}"
+                                       IsRunning="{Binding OperationState.IsLoading}"
+                                       SemanticProperties.Description="First-run setup is loading" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </ScrollView>
+</ContentPage>

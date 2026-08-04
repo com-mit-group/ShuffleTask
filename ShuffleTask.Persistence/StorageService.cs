@@ -6,9 +6,10 @@ using ShuffleTask.Domain.Entities;
 
 namespace ShuffleTask.Persistence;
 
-public partial class StorageService : IStorageService
+public partial class StorageService : IStorageService, IOnboardingService
 {
     private const string SettingsKey = "app_settings";
+    private const string OnboardingVersionKey = "onboarding_completed_version";
     private const string TaskSchemaVersionKey = "schema_tasks";
     private const string PeriodSchemaVersionKey = "schema_periods";
     private const int CurrentSettingsSchemaVersion = 2;
@@ -34,6 +35,7 @@ public partial class StorageService : IStorageService
     private SQLiteAsyncConnection? _db;
     private readonly SemaphoreSlim _settingsLock = new(1, 1);
     private readonly SemaphoreSlim _taskLock = new(1, 1);
+    private readonly SemaphoreSlim _onboardingLock = new(1, 1);
     private bool _taskSchemaIsFuture;
     private bool _periodSchemaIsFuture;
     private bool _databaseExistedBeforeOpen;

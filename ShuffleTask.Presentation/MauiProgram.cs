@@ -66,6 +66,7 @@ public static partial class MauiProgram
             return new StorageService(clock, dbPath, shuffleLogger);
         });
         builder.Services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<StorageService>());
+        builder.Services.AddSingleton<IOnboardingService>(sp => sp.GetRequiredService<StorageService>());
         builder.Services.AddSingleton<INotificationService, NotificationService>();
         builder.Services.AddSingleton<IPersistentBackgroundService, PersistentBackgroundService>();
         SetupEventAggregation(builder);
@@ -102,6 +103,7 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<EditTaskViewModel>();
         builder.Services.AddSingleton<PeriodDefinitionEditorViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
+        builder.Services.AddSingleton<OnboardingViewModel>();
 
         // Views
         builder.Services.AddSingleton<DashboardPage>();
@@ -111,6 +113,7 @@ public static partial class MauiProgram
         builder.Services.AddSingleton<TasksPage>();
         builder.Services.AddSingleton<EditTaskPage>();
         builder.Services.AddSingleton<PeriodDefinitionEditorPage>();
+        builder.Services.AddSingleton<OnboardingPage>();
 
 #if DEBUG
         var loggingBuilder = builder.Logging;

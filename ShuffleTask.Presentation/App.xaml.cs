@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using ShuffleTask.Application.Abstractions;
 using ShuffleTask.Application.Models;
-using ShuffleTask.Domain.Entities;
 using ShuffleTask.Presentation;
 using ShuffleTask.Presentation.Models;
 using ShuffleTask.Presentation.Services;
@@ -18,8 +17,10 @@ public partial class App : Microsoft.Maui.Controls.Application
     private readonly TimeProvider _clock;
     private readonly AppSettings _settings;
     private readonly IShuffleLogger? _logger;
+    private readonly MainPage _mainPage;
     private bool _startupRunning;
     private bool _resumeRunning;
+    private bool _backgroundStartupAllowed;
 
     public OperationState StartupOperationState { get; } = new();
 
@@ -32,6 +33,7 @@ public partial class App : Microsoft.Maui.Controls.Application
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger;
+        _mainPage = mainPage;
         StartupOperationState.PropertyChanged += OnStartupOperationStateChanged;
         RequestedThemeChanged += (_, __) => { };
     }
@@ -61,13 +63,17 @@ public partial class App : Microsoft.Maui.Controls.Application
         }
 
         _startupRunning = true;
+        _backgroundStartupAllowed = false;
         StartupOperationState.SetLoading("Starting ShuffleTask…");
         try
         {
+            await _mainPage.ShowOnboardingLoadingAsync();
             cancellationToken.ThrowIfCancellationRequested();
-            await EnsureSeedDataAsync();
+            await _storage.InitializeAsync();
             await PersistedTimerState.RecoverAgainstStorageAsync(_storage, _logger);
-            if (_settings.BackgroundActivityEnabled)
+            bool onboardingRequired = await _mainPage.ResolveOnboardingAsync(cancellationToken);
+            _backgroundStartupAllowed = !onboardingRequired;
+            if (_backgroundStartupAllowed && _settings.BackgroundActivityEnabled)
             {
                 await _coordinator.StartAsync();
             }
@@ -81,6 +87,7 @@ public partial class App : Microsoft.Maui.Controls.Application
                 null,
                 StartAsync,
                 isBlocking: true);
+            await _mainPage.ShowOnboardingFailureAsync(StartAsync);
         }
         catch (Exception ex)
         {
@@ -89,6 +96,7 @@ public partial class App : Microsoft.Maui.Controls.Application
                 "ShuffleTask could not start safely. Check local storage access and retry.",
                 null,
                 StartAsync);
+            await _mainPage.ShowOnboardingFailureAsync(StartAsync);
         }
         finally
         {
@@ -104,7 +112,7 @@ public partial class App : Microsoft.Maui.Controls.Application
 
     internal async Task ResumeAsync(CancellationToken cancellationToken = default)
     {
-        if (_resumeRunning || !_settings.BackgroundActivityEnabled)
+        if (_resumeRunning || !_backgroundStartupAllowed || !_settings.BackgroundActivityEnabled)
         {
             return;
         }
@@ -145,48 +153,4 @@ public partial class App : Microsoft.Maui.Controls.Application
         _coordinator.SuspendInProcessTimer();
     }
 
-    private async Task EnsureSeedDataAsync()
-    {
-        await _storage.InitializeAsync();
-        var existing = await _storage.GetTasksAsync();
-        if (existing.Count > 0)
-        {
-            return;
-        }
-
-        DateTime nowUtc = _clock.GetUtcNow().UtcDateTime;
-
-        var samples = new List<TaskItem>
-        {
-            new TaskItem { Title = "Dishes", Importance = 3, Repeat = RepeatType.Daily, AllowedPeriod = AllowedPeriod.OffWork },
-            new TaskItem { Title = "Inbox Zero", Importance = 4, Repeat = RepeatType.Interval, IntervalDays = 2, AllowedPeriod = AllowedPeriod.Work },
-            new TaskItem { Title = "Laundry", Importance = 2, Repeat = RepeatType.Weekly, Weekdays = Weekdays.Sat, AllowedPeriod = AllowedPeriod.OffWork },
-            new TaskItem { Title = "Tax paperwork", Importance = 5, Repeat = RepeatType.None, Deadline = nowUtc.AddDays(3), AllowedPeriod = AllowedPeriod.Any }
-        };
-
-        foreach (var task in samples)
-        {
-            await _storage.AddTaskAsync(task);
-        }
-
-        _settings.WorkStart = new TimeSpan(9, 0, 0);
-        _settings.WorkEnd = new TimeSpan(17, 0, 0);
-        _settings.EnableNotifications = true;
-        _settings.SoundOn = true;
-        _settings.Active = true;
-        _settings.BackgroundActivityEnabled = true;
-        _settings.AutoShuffleEnabled = true;
-        _settings.ReminderMinutes = 60;
-        _settings.MaxDailyShuffles = 6;
-        _settings.QuietHoursStart = new TimeSpan(22, 0, 0);
-        _settings.QuietHoursEnd = new TimeSpan(7, 0, 0);
-        _settings.StreakBias = 0.3;
-        _settings.StableRandomnessPerDay = true;
-        _settings.Touch(_clock);
-        await _storage.SetSettingsAsync(_settings);
-
-        PersistedTimerState.Clear(_logger);
-        PersistedSchedulerState.ClearPendingShuffle(_logger);
-        PersistedSchedulerState.SaveDailyCount(new DateTimeOffset(nowUtc.Date, TimeSpan.Zero), 0, _logger);
-    }
 }

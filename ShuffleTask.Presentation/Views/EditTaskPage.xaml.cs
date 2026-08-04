@@ -13,6 +13,8 @@ public partial class EditTaskPage : ContentPage
     private EditTaskViewModel? _viewModel;
     private bool _eventsSubscribed;
 
+    internal bool WasSavedBeforeClosing { get; private set; }
+
     public EditTaskPage(EditTaskViewModel vm)
     {
         InitializeComponent();
@@ -22,6 +24,7 @@ public partial class EditTaskPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        WasSavedBeforeClosing = false;
 
         if (BindingContext is EditTaskViewModel vm)
         {
@@ -30,6 +33,10 @@ public partial class EditTaskPage : ContentPage
         }
 
         UpdateTitle();
+        if (_viewModel?.IsNew == true)
+        {
+            Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(250), () => TitleEntry.Focus());
+        }
     }
 
     protected override void OnBindingContextChanged()
@@ -43,12 +50,14 @@ public partial class EditTaskPage : ContentPage
 
     private async void OnSaved(object? sender, EventArgs e)
     {
+        WasSavedBeforeClosing = true;
         UnsubscribeFromViewModel();
         await Navigation.PopAsync();
     }
 
     private async void OnCancelClicked(object sender, EventArgs e)
     {
+        WasSavedBeforeClosing = false;
         UnsubscribeFromViewModel();
         await Navigation.PopAsync();
     }
