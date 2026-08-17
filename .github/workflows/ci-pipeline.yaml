@@ -397,7 +397,7 @@ jobs:
       if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
       shell: pwsh
       env:
-        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
+        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN }}
       run: |
         dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
           -n github `
