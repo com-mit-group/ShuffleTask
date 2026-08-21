@@ -40,8 +40,7 @@ jobs:
     with:
       ref: ${{ github.sha }}
       runner: windows-latest
-      global_json_file: ''
-      dotnet_version: 10.0.202
+      global_json_file: global.json
       setup_command: bash scripts/ci-configure-nuget.sh
       restore_command: dotnet restore ShuffleTask.NoGUI.slnf
       build_command: dotnet build ShuffleTask.NoGUI.slnf --configuration Debug --no-restore
@@ -70,8 +69,7 @@ jobs:
     uses: yaron-E92/AutoDev/.github/workflows/profile-maui.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
     with:
       ref: ${{ github.sha }}
-      global_json_file: ''
-      dotnet_version: 10.0.202
+      global_json_file: global.json
       headless_enabled: false
 
       android_enabled: true
