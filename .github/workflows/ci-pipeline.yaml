@@ -59,7 +59,7 @@ jobs:
       test_results_path: artifacts/ci/headless/**
       artifact_name: shuffletask-headless-results
     secrets:
-      nuget_token: ${{ secrets.GITHUB_TOKEN }}
+      nuget_token: ${{ secrets.YARE92_NUGET_TOKEN }}
     permissions:
       contents: read
       packages: read
@@ -101,7 +101,7 @@ jobs:
           --verbosity normal
       windows_test_results_path: artifacts/ci/maui-windows/**
     secrets:
-      nuget_token: ${{ secrets.GITHUB_TOKEN }}
+      nuget_token: ${{ secrets.YARE92_NUGET_TOKEN }}
     permissions:
       contents: read
       packages: read
