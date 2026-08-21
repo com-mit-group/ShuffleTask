@@ -40,8 +40,9 @@ jobs:
             $version = $manualVersion
             Write-Host "Using manual version: $version"
           } elseif ("${{ github.ref }}" -like "refs/tags/*") {
-            $version = "${{ github.ref }}".Substring(10)
-            Write-Host "Using tag version: $version"
+            $tagVersion = "${{ github.ref }}".Substring(10)
+            $version = $tagVersion -replace '^v', ''
+            Write-Host "Using tag version: $tagVersion -> $version"
           } else {
             throw "Version input is required when the workflow is not run from a tag."
           }
@@ -115,7 +116,7 @@ jobs:
         id: setup-dotnet
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Restore cached .NET workloads
         if: steps.check-artifacts.outputs.exists == 'false'
