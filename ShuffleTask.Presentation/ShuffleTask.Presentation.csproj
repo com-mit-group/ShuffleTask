@@ -9,9 +9,6 @@
         <TargetFrameworks Condition="'$(ShuffleTaskWindowsOnly)' != 'true' and $([MSBuild]::IsOSPlatform('ios'))">$(TargetFrameworks);net10.0-ios</TargetFrameworks>
         <TargetFrameworks Condition="'$(ShuffleTaskWindowsOnly)' != 'true' and $([MSBuild]::IsOSPlatform('maccatalyst'))">$(TargetFrameworks);net10.0-maccatalyst</TargetFrameworks>
 
-        <!-- Keep the target RID local to the app project so referenced MAUI libraries are not evaluated under the app RID. -->
-        <RuntimeIdentifier Condition="'$(RuntimeIdentifierOverride)' != ''">$(RuntimeIdentifierOverride)</RuntimeIdentifier>
-
         <OutputType>Exe</OutputType>
         <RootNamespace>ShuffleTask.Presentation</RootNamespace>
         <UseMaui>true</UseMaui>
