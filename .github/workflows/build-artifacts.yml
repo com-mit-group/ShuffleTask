@@ -184,7 +184,7 @@ jobs:
         if: steps.check-artifacts.outputs.exists == 'false'
         shell: bash
         env:
-          NUGET_AUTH_TOKEN: ${{ github.token }}
+          NUGET_AUTH_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN }}
         run: bash scripts/ci-configure-nuget.sh
 
       - name: Restore Windows runtime packs
