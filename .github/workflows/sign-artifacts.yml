@@ -12,9 +12,18 @@ on:
         type: boolean
         default: false
 
+permissions: {}
+
+concurrency:
+  group: sign-artifacts-${{ github.repository }}-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   sign:
     runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
       version: ${{ github.event.inputs.version }}
       sign-status: ${{ steps.sign-status.outputs.status }}
@@ -28,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -45,7 +54,7 @@ jobs:
         id: check-signed
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -74,7 +83,7 @@ jobs:
         id: check-build
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -101,7 +110,7 @@ jobs:
         if: steps.check-signed.outputs.exists == 'false'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -132,8 +141,6 @@ jobs:
           if (Test-Path $winZip) { Remove-Item $winZip -Force }
           if (Test-Path $androidZip) { Remove-Item $androidZip -Force }
 
-          # GitHub requires application/vnd.github+json for artifact downloads; any other
-          # Accept header (including application/octet-stream) returns 415.
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = "application/vnd.github+json"
@@ -172,7 +179,7 @@ jobs:
 
       - name: Debug signing session
         if: steps.check-signed.outputs.exists == 'false' && github.event.inputs.debug_session == 'true'
-        uses: mxschmitt/action-tmate@v3
+        uses: mxschmitt/action-tmate@6c825b152dccd2b807a1dc877bca3b17a42d10c3 # v3.22
         with:
           limit-access-to-actor: true
           sudo: false
@@ -391,7 +398,6 @@ jobs:
           }
 
           Write-Host "Signing Android APK..."
-          # Use the call operator (&) so we can execute the resolved apksigner path stored in $apksignerPath.
           & $apksignerPath sign `
             --key $signingKeyPath `
             --cert $signingCertPath `
@@ -435,7 +441,7 @@ jobs:
 
       - name: Upload signed Windows artifact
         if: steps.check-signed.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-windows
           path: artifacts/win
@@ -443,7 +449,7 @@ jobs:
 
       - name: Upload signed Android artifact
         if: steps.check-signed.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-android
           path: artifacts/android/*.apk
@@ -451,7 +457,7 @@ jobs:
 
       - name: Upload metadata
         if: steps.check-signed.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-metadata
           path: artifacts/VERSION.txt
@@ -472,24 +478,27 @@ jobs:
     if: always()
     steps:
       - name: Sign summary
+        shell: bash
         run: |
-          echo "## Sign Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.sign.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ needs.sign.outputs.sign-status }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.sign.outputs.sign-status }}" == "success" ]; then
-            echo "✓ Signing completed successfully." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts uploaded with names prefixed by \`signed-${{ needs.sign.outputs.version }}\`." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-            echo "Run the **Release** workflow with version: \`${{ needs.sign.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.sign.outputs.sign-status }}" == "skipped" ]; then
-            echo "✓ Signed artifacts already exist for this version." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts: \`signed-${{ needs.sign.outputs.version }}-windows\`, \`signed-${{ needs.sign.outputs.version }}-android\`, and \`signed-${{ needs.sign.outputs.version }}-metadata\`." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✗ Signing failed or status unknown." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Sign Pipeline Summary"
+            echo
+            echo "**Version:** ${{ needs.sign.outputs.version }}"
+            echo "**Status:** ${{ needs.sign.outputs.sign-status }}"
+            echo
+            if [ "${{ needs.sign.outputs.sign-status }}" == "success" ]; then
+              echo "✓ Signing completed successfully."
+              echo
+              echo "Artifacts uploaded with names prefixed by \`signed-${{ needs.sign.outputs.version }}\`."
+              echo
+              echo "### Next Steps"
+              echo "Run the **Release** workflow with version: \`${{ needs.sign.outputs.version }}\`"
+            elif [ "${{ needs.sign.outputs.sign-status }}" == "skipped" ]; then
+              echo "✓ Signed artifacts already exist for this version."
+              echo
+              echo "Artifacts: \`signed-${{ needs.sign.outputs.version }}-windows\`, \`signed-${{ needs.sign.outputs.version }}-android\`, and \`signed-${{ needs.sign.outputs.version }}-metadata\`."
+            else
+              echo "✗ Signing failed or status unknown."
+            fi
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"

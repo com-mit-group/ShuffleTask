@@ -12,6 +12,12 @@ on:
         type: string
         required: false
 
+permissions: {}
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -24,41 +30,54 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - name: Validate version input
+      - name: Validate trusted version tag
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION="${{ github.event.inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            echo "✗ Version is required. Please provide a semantic version (e.g., 1.0.0)"
+          if [[ -z "$VERSION" ]]; then
+            echo "Version is required. Please provide a semantic version (e.g., 1.0.0)" >&2
             exit 1
           fi
-          echo "Processing version: $VERSION"
+
+          TAG="v$VERSION"
+          git fetch --force --tags origin
+          if ! git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" >/dev/null; then
+            echo "Trusted version tag '$TAG' does not exist. Version advancement must complete after successful main CI before release publication." >&2
+            exit 1
+          fi
+
+          echo "Processing trusted version: $TAG"
 
       - name: Check if release already exists
         id: check-release
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION="${{ github.event.inputs.version }}"
-          echo "Checking for existing release for version: $VERSION"
+          TAG="v$VERSION"
+          echo "Checking for existing release for tag: $TAG"
 
-          if gh release view "$VERSION" &>/dev/null; then
-            echo "✓ Release already exists for version $VERSION"
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if gh release view "$TAG" &>/dev/null; then
+            echo "✓ Release already exists for $TAG"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "No existing release found"
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Check if signed artifacts exist
         if: steps.check-release.outputs.exists == 'false'
         id: check-signed
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ github.event.inputs.version }}"
@@ -92,10 +111,8 @@ jobs:
         if: steps.check-release.outputs.exists == 'false'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ github.event.inputs.version }}"
-
           $downloadRoot = Join-Path (Get-Location) 'release-downloads'
           if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
@@ -206,7 +223,9 @@ jobs:
       - name: Create release notes
         if: steps.check-release.outputs.exists == 'false'
         id: release-notes
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION="${{ github.event.inputs.version }}"
           USER_NOTES="${{ github.event.inputs.notes }}"
 
@@ -218,14 +237,14 @@ jobs:
           ## Installation
 
           ### Windows
-          Download \`ShuffleTask-$VERSION-windows.zip\`, extract the contents, and run \`ShuffleTask-$VERSION.exe\` from the unpacked folder.
+          Download \`ShuffleTask-$VERSION-windows.zip\`, extract the contents, and run the ShuffleTask executable from the unpacked folder.
 
           ### Android
           Download \`ShuffleTask-$VERSION.apk\` and install it on your Android device. You may need to enable "Install from unknown sources" in your device settings.
 
           ## What's Changed
 
-          See the [full changelog](https://github.com/yaron-E92/ShuffleTask/compare/v$VERSION...main) for details.
+          See the full repository history for changes included in this release.
 
           ---
 
@@ -236,11 +255,15 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check-release.outputs.exists == 'false'
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION="${{ github.event.inputs.version }}"
-          echo "Creating GitHub release for version: $VERSION"
+          TAG="v$VERSION"
+          echo "Creating GitHub release for trusted tag: $TAG"
 
-          gh release create "$VERSION" \
+          gh release create "$TAG" \
+            --verify-tag \
             --title "ShuffleTask v$VERSION" \
             --notes-file release-notes.md \
             ./release-artifacts/ShuffleTask-$VERSION-windows.zip \
@@ -249,27 +272,29 @@ jobs:
 
           echo "✓ Release created successfully"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Mark release status
         id: release-status
         if: always()
+        shell: bash
         run: |
           if [ "${{ job.status }}" != "success" ]; then
-            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "status=failed" >> "$GITHUB_OUTPUT"
           elif [ "${{ steps.check-release.outputs.exists }}" = "true" ]; then
-            echo "status=skipped" >> $GITHUB_OUTPUT
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
           else
-            echo "status=success" >> $GITHUB_OUTPUT
+            echo "status=success" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Skip message
         if: steps.check-release.outputs.exists == 'true'
+        shell: bash
         run: |
           echo "================================================"
-          echo "Release already exists for version ${{ github.event.inputs.version }}"
+          echo "Release already exists for v${{ github.event.inputs.version }}"
           echo "Skipping release creation."
-          echo "To create a new release, use a different version number."
+          echo "To create a new release, use a different trusted version."
           echo "================================================"
 
   summary:
@@ -278,22 +303,25 @@ jobs:
     if: always()
     steps:
       - name: Release summary
+        shell: bash
         run: |
-          echo "## Release Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ needs.release.outputs.release-status }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.release.outputs.release-status }}" == "success" ]; then
-            echo "✓ Release created successfully." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The release is now public and available for download." >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.release.outputs.release-status }}" == "skipped" ]; then
-            echo "✓ Release already exists for this version." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Release URL:** https://github.com/yaron-E92/ShuffleTask/releases/tag/${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✗ Release failed or status unknown." >> $GITHUB_STEP_SUMMARY
-          fi
+          {
+            echo "## Release Pipeline Summary"
+            echo
+            echo "**Version:** ${{ needs.release.outputs.version }}"
+            echo "**Status:** ${{ needs.release.outputs.release-status }}"
+            echo
+            if [ "${{ needs.release.outputs.release-status }}" == "success" ]; then
+              echo "✓ Release created successfully."
+              echo
+              echo "**Release tag:** \`v${{ needs.release.outputs.version }}\`"
+              echo
+              echo "The release is now public and available for download."
+            elif [ "${{ needs.release.outputs.release-status }}" == "skipped" ]; then
+              echo "✓ Release already exists for this version."
+              echo
+              echo "**Release tag:** \`v${{ needs.release.outputs.version }}\`"
+            else
+              echo "✗ Release failed or status unknown."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

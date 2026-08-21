@@ -8,16 +8,26 @@ on:
         type: string
         required: false
 
+permissions: {}
+
+concurrency:
+  group: build-artifacts-${{ github.repository }}-${{ github.event.inputs.version || github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
+      packages: read
     outputs:
       version: ${{ steps.set-version.outputs.version }}
       build-status: ${{ steps.build-status.outputs.status }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -30,8 +40,9 @@ jobs:
             $version = $manualVersion
             Write-Host "Using manual version: $version"
           } elseif ("${{ github.ref }}" -like "refs/tags/*") {
-            $version = "${{ github.ref }}".Substring(10)
-            Write-Host "Using tag version: $version"
+            $tagVersion = "${{ github.ref }}".Substring(10)
+            $version = $tagVersion -replace '^v', ''
+            Write-Host "Using tag version: $tagVersion -> $version"
           } else {
             throw "Version input is required when the workflow is not run from a tag."
           }
@@ -76,7 +87,7 @@ jobs:
         if: always()
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SHUFFLE_TASK_ARTIFACT_ACCESS_EXPIRES_03OCT2026 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $repo = "${{ github.repository }}"
           $version = "${{ steps.set-version.outputs.version }}"
@@ -103,14 +114,14 @@ jobs:
       - name: Set up .NET 10 SDK
         if: steps.check-artifacts.outputs.exists == 'false'
         id: setup-dotnet
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Restore cached .NET workloads
         if: steps.check-artifacts.outputs.exists == 'false'
         id: restore-dotnet-workloads
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             'C:\Program Files\dotnet\packs'
@@ -125,12 +136,12 @@ jobs:
       - name: Restore cached Android SDK
         if: steps.check-artifacts.outputs.exists == 'false'
         id: restore-android-sdk
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ${{ env.ANDROID_HOME }}
             ${{ env.ANDROID_SDK_ROOT }}
-            C:\\Users\\runneradmin\\.android
+            C:\Users\runneradmin\.android
           key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
           restore-keys: |
             ${{ runner.os }}-android-sdk-
@@ -151,7 +162,7 @@ jobs:
 
       - name: Save .NET workloads cache
         if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-dotnet-workloads.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             'C:\Program Files\dotnet\packs'
@@ -162,24 +173,20 @@ jobs:
 
       - name: Save Android SDK cache
         if: steps.check-artifacts.outputs.exists == 'false' && steps.restore-android-sdk.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ${{ env.ANDROID_HOME }}
             ${{ env.ANDROID_SDK_ROOT }}
-            C:\\Users\\runneradmin\\.android
+            C:\Users\runneradmin\.android
           key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
 
-      - name: Ensure GitHub NuGet Source
-        shell: pwsh
+      - name: Configure GitHub Packages
+        if: steps.check-artifacts.outputs.exists == 'false'
+        shell: bash
         env:
-          NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN_EXP_17JUN2026 }}
-        run: |
-          dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
-            -n github `
-            -u Yaron-E92 `
-            -p $env:NUGET_TOKEN `
-            --store-password-in-clear-text
+          NUGET_AUTH_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN }}
+        run: bash scripts/ci-configure-nuget.sh
 
       - name: Restore Windows runtime packs
         if: steps.check-artifacts.outputs.exists == 'false'
@@ -235,7 +242,7 @@ jobs:
 
       - name: Upload Windows artifact
         if: steps.check-artifacts.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: build-${{ steps.set-version.outputs.version }}-windows-unsigned
           path: artifacts/win/*.exe
@@ -243,7 +250,7 @@ jobs:
 
       - name: Upload Android artifact
         if: steps.check-artifacts.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: build-${{ steps.set-version.outputs.version }}-android-unsigned
           path: artifacts/android/*.apk
@@ -251,7 +258,7 @@ jobs:
 
       - name: Upload metadata
         if: steps.check-artifacts.outputs.exists == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: build-${{ steps.set-version.outputs.version }}-metadata
           path: artifacts/VERSION.txt
@@ -276,23 +283,26 @@ jobs:
     if: always()
     steps:
       - name: Build summary
+        shell: bash
         run: |
-          echo "## Build Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ needs.build.outputs.build-status }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.build.outputs.build-status }}" == "skipped" ]; then
-            echo "✓ Build artifacts already exist for this version." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts: \`build-${{ needs.build.outputs.version }}-windows-unsigned\`, \`build-${{ needs.build.outputs.version }}-android-unsigned\`, and \`build-${{ needs.build.outputs.version }}-metadata\`." >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ needs.build.outputs.build-status }}" == "success" ]; then
-            echo "✓ Build completed successfully." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Artifacts uploaded with names prefixed by \`build-${{ needs.build.outputs.version }}\`." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✗ Build status unknown or failed." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "Run the **Sign Artifacts** workflow with version: \`${{ needs.build.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Build Pipeline Summary"
+            echo
+            echo "**Version:** ${{ needs.build.outputs.version }}"
+            echo "**Status:** ${{ needs.build.outputs.build-status }}"
+            echo
+            if [ "${{ needs.build.outputs.build-status }}" == "skipped" ]; then
+              echo "✓ Build artifacts already exist for this version."
+              echo
+              echo "Artifacts: \`build-${{ needs.build.outputs.version }}-windows-unsigned\`, \`build-${{ needs.build.outputs.version }}-android-unsigned\`, and \`build-${{ needs.build.outputs.version }}-metadata\`."
+            elif [ "${{ needs.build.outputs.build-status }}" == "success" ]; then
+              echo "✓ Build completed successfully."
+              echo
+              echo "Artifacts uploaded with names prefixed by \`build-${{ needs.build.outputs.version }}\`."
+            else
+              echo "✗ Build status unknown or failed."
+            fi
+            echo
+            echo "### Next Steps"
+            echo "Run the **Sign Artifacts** workflow with version: \`${{ needs.build.outputs.version }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

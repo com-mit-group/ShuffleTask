@@ -1,574 +1,152 @@
-# This workflow will build and test a .NET project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-
-name: Continuous integration pipeline
+name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  gitVersion:
-    name: Determine Version
-    runs-on: ubuntu-latest
-    outputs:
-      branchName: ${{ steps.version.outputs.branchName }}
-      semVer: ${{ steps.version.outputs.semVer }}
-      sha: ${{ steps.version.outputs.sha }}
-      nugetVersion: ${{ steps.version.outputs.nugetVersion }}
-      assemblySemFileVer: ${{ steps.version.outputs.assemblySemFileVer }}
-      informationalVersion: ${{ steps.version.outputs.informationalVersion }}
+  baseline:
+    name: Shared workflow policy
+    uses: yaron-E92/AutoDev/.github/workflows/profile-baseline.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
+    with:
+      ref: ${{ github.sha }}
+      require_concurrency: true
+    permissions:
+      contents: read
 
-    steps:
-    - name: Checkout
-      # Retrieve full repository history so tags and commit metadata are available for versioning.
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+  version-intent:
+    name: Version intent
+    if: github.event_name == 'pull_request'
+    uses: yaron-E92/AutoDev/.github/workflows/version-intent.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
+    with:
+      pr_body: ${{ github.event.pull_request.body }}
+      head: ${{ github.sha }}
+    permissions:
+      contents: read
 
-    - name: Ensure tags and main history are available
-      # Make sure the workflow has access to the latest tags from the main branch.
-      run: |
-        git fetch --force --tags origin main
-
-    - name: Determine semantic version
-      # Compute the next semantic version and expose it via job outputs and environment variables.
-      id: version
-      env:
-        EVENT_NAME: ${{ github.event_name }}
-        PR_NUMBER: ${{ github.event.pull_request.number || '' }}
-        PR_TITLE: ${{ github.event.pull_request.title || '' }}
-        PR_BODY: ${{ github.event.pull_request.body || '' }}
-        HEAD_COMMIT_MSG: ${{ github.event.head_commit.message || '' }}
-      shell: bash
-      run: |
+  headless:
+    name: Headless .NET validation
+    needs: [baseline]
+    uses: yaron-E92/AutoDev/.github/workflows/profile-dotnet.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
+    with:
+      ref: ${{ github.sha }}
+      runner: windows-latest
+      global_json_file: global.json
+      setup_command: bash scripts/ci-configure-nuget.sh
+      restore_command: dotnet restore ShuffleTask.NoGUI.slnf
+      build_command: dotnet build ShuffleTask.NoGUI.slnf --configuration Debug --no-restore
+      test_command: |
         set -euo pipefail
-
-        latest_tag=""
-        for ref in origin/main main HEAD; do
-          if tag=$(git describe --tags --abbrev=0 "$ref" 2>/dev/null); then
-            latest_tag="$tag"
-            break
-          fi
-        done
-
-        if [ -z "$latest_tag" ]; then
-          if tag=$(git describe --tags --abbrev=0 2>/dev/null); then
-            latest_tag="$tag"
-          fi
-        fi
-
-        clean_tag="$latest_tag"
-        clean_tag="${clean_tag%%-*}"
-        clean_tag="${clean_tag%%+*}"
-
-        parse_numbers() {
-          local version="$1"
-          if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            major="${BASH_REMATCH[1]}"
-            minor="${BASH_REMATCH[2]}"
-            patch="${BASH_REMATCH[3]}"
-            return
-          fi
-
-          mapfile -t numbers < <(grep -oE '[0-9]+' <<<"$version" || true)
-          case "${#numbers[@]}" in
-            0)
-              major=0 minor=1 patch=0 ;;
-            1)
-              major="${numbers[0]}" minor=0 patch=0 ;;
-            2)
-              major="${numbers[0]}" minor="${numbers[1]}" patch=0 ;;
-            *)
-              major="${numbers[0]}" minor="${numbers[1]}" patch="${numbers[2]}" ;;
-          esac
-        }
-
-        initial_release=false
-        if [ -n "$clean_tag" ]; then
-          parse_numbers "$clean_tag"
-        else
-          initial_release=true
-          major=0
-          minor=1
-          patch=0
-        fi
-
-        base_version="$major.$minor.$patch"
-
-        message=""
-        if [ "${EVENT_NAME}" = "pull_request" ]; then
-          number="${PR_NUMBER:-}"
-          title="${PR_TITLE:-}"
-          body="${PR_BODY:-}"
-          if [ -n "$number" ]; then
-            message="Merge pull request #$number"
-          fi
-          if [ -n "$title" ]; then
-            if [ -n "$message" ]; then message+=$'\n'; fi
-            message+="$title"
-          fi
-          if [ -n "$body" ]; then
-            if [ -n "$message" ]; then message+=$'\n'; fi
-            message+="$body"
-          fi
-        else
-          message="${HEAD_COMMIT_MSG:-}"
-          if [ -z "$message" ]; then
-            message="$(git log -1 --pretty=%B)"
-          fi
-        fi
-
-        bump=$(tr '[:upper:]' '[:lower:]' <<<"$message" \
-          | grep -oE '\+semver:[[:space:]]*(none|patch|minor|major)' \
-          | tail -n1 \
-          | cut -d: -f2 \
-          | sed 's/^[[:space:]]*//' \
-          || true)
-        bump=${bump:-patch}
-
-        case "$bump" in
-          major)
-            major=$((major + 1))
-            minor=0
-            patch=0
-            ;;
-          minor)
-            minor=$((minor + 1))
-            patch=0
-            ;;
-          patch)
-            if [ "$initial_release" = true ]; then
-              :
-            else
-              patch=$((patch + 1))
-            fi
-            ;;
-          none)
-            ;;
-        esac
-
-        new_version="$major.$minor.$patch"
-        nuget_version="$new_version"
-        assembly_sem_file="$major.$minor.$patch.0"
-        sha="${GITHUB_SHA:-}"
-        if [ -n "$sha" ]; then
-          informational="$new_version+${sha:0:7}"
-        else
-          informational="$new_version"
-        fi
-
-        ref="${GITHUB_REF:-}"
-        branch_name="$ref"
-        if [[ "$ref" == refs/heads/* ]]; then
-          branch_name="${ref#refs/heads/}"
-        elif [[ "$ref" == refs/pull/* ]]; then
-          branch_name="${ref#refs/}"
-        elif [ -z "$branch_name" ]; then
-          branch_name="${GITHUB_REF_NAME:-}"
-        fi
-
-        echo "Latest tag: ${latest_tag:-none}"
-        echo "Base version: $base_version"
-        echo "Bump type: $bump"
-        echo "New version: $new_version"
-
-        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-          {
-            echo "### Versioning"
-            echo "- Latest tag: ${latest_tag:-none}"
-            echo "- Bump: $bump"
-            echo "- New version: $new_version"
-          } >>"$GITHUB_STEP_SUMMARY"
-        fi
-
-        {
-          echo "branchName=$branch_name"
-          echo "semVer=$new_version"
-          echo "sha=$sha"
-          echo "nugetVersion=$nuget_version"
-          echo "assemblySemFileVer=$assembly_sem_file"
-          echo "informationalVersion=$informational"
-        } >>"$GITHUB_OUTPUT"
-
-        echo "VersionPrefix=$new_version" >>"$GITHUB_ENV"
-  buildAndTestWithoutGUI:
-    name: Build and Test (No GUI)
-    needs: [gitVersion]
-    runs-on: windows-latest
+        mkdir -p artifacts/ci/headless
+        dotnet test ShuffleTask.NoGUI.slnf \
+          --configuration Debug \
+          --no-build \
+          --no-restore \
+          --logger 'trx;LogFilePrefix=headless' \
+          --results-directory artifacts/ci/headless \
+          --collect:'XPlat Code Coverage;Format=opencover' \
+          --verbosity normal
+      test_results_path: artifacts/ci/headless/**
+      artifact_name: shuffletask-headless-results
+    secrets:
+      nuget_token: ${{ secrets.YARE92_NUGET_TOKEN }}
     permissions:
-      checks: write
-      pull-requests: write
       contents: read
       packages: read
-    outputs:
-      build_outcome: ${{ steps.expose.outputs.build_outcome }}
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        persist-credentials: false
+  maui:
+    name: MAUI product validation
+    needs: [baseline]
+    uses: yaron-E92/AutoDev/.github/workflows/profile-maui.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
+    with:
+      ref: ${{ github.sha }}
+      global_json_file: global.json
+      headless_enabled: false
 
-    - name: Setup .NET
-      id: setupDotnet
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.x
+      android_enabled: true
+      android_runner: ubuntu-latest
+      android_setup_command: |
+        bash scripts/ci-configure-nuget.sh
+        dotnet workload install maui-android --skip-manifest-update
+      android_restore_command: dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --runtime android-arm64
+      android_build_command: dotnet build ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --configuration Release --framework net10.0-android --runtime android-arm64 --no-restore
+      android_test_command: find ShuffleTask.Presentation/bin/Release/net10.0-android -type f -name 'ShuffleTask.Presentation.dll' -print -quit | grep -q .
 
-    - name: Ensure GitHub NuGet Source
-      env:
-        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN }}
-      run: |
-        dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
-          -n github `
-          -u Yaron-E92 `
-          -p $env:NUGET_TOKEN `
-          --store-password-in-clear-text
-
-    - name: Restore Dependencies
-      run: dotnet restore ShuffleTask.NoGUI.slnf
-
-    - name: Build
-      id: build
-      run: dotnet build -c Debug --no-restore ShuffleTask.NoGUI.slnf
-
-    - name: Test
-      run: |
-        dotnet test --logger "trx" --no-build -c Debug --verbosity normal --collect:"XPlat Code Coverage;Format=opencover" `
-          /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} `
-          /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} `
-          /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }} `
-          ShuffleTask.NoGUI.slnf
-
-    - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action/windows@v2
-      if: ${{ steps.build.outcome == 'success' }}
-      with:
-        files: |
-          ./**/TestResults/*.trx
-        check_name: "Test Results (No GUI)"
-
-    - name: Generate Coverage Summary
-      if: ${{ steps.build.outcome == 'success' }}
-      uses: danielpalme/ReportGenerator-GitHub-Action@5.4.16
-      with:
-        reports: ./**/TestResults/**/coverage*.opencover.xml
-        targetdir: coverage-report
-        reporttypes: MarkdownSummaryGithub;Badges
-        title: 'Coverage report (No GUI)'
-
-    - name: Publish coverage in build summary
-      if: ${{ steps.build.outcome == 'success' }}
-      run: cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
-      shell: bash
-
-    - name: Comment coverage summary on PR
-      if: ${{ steps.build.outcome == 'success' && github.event_name == 'pull_request' }}
-      run: gh pr comment $PR_NUMBER --edit-last --create-if-none --body-file coverage-report/SummaryGithub.md
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        PR_NUMBER: ${{ github.event.number }}
-      shell: bash
-
-  checkWhetherGUIBuildNeeded:
-    name: Check GUI Build Requirements
-    needs: [gitVersion]
-    runs-on: ubuntu-latest
-    outputs:
-      diff: ${{steps.checkDiff.outputs.diff}}
-      override: ${{steps.determineOverride.outputs.override}}
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        persist-credentials: false
-
-    - name: Check diff
-      id: checkDiff
-      run: |
-        DIFF=$(git diff origin/main~1 HEAD -- ShuffleTask.Presentation/**/*.cs ShuffleTask.Presentation/*.cs ShuffleTask.Presentation/**/*.xaml ShuffleTask.Presentation/*.xaml | head -n 1)
-        echo "diff=$DIFF" >> $GITHUB_OUTPUT
-        echo "Diff found: $DIFF"
-
-    - name: Check for override in PR description
-      id: checkOverridePR
-      if: contains(needs.gitVersion.outputs.branchName, 'pull')
-      env:
-        PR_DESCRIPTION: ${{ github.event.pull_request.body }}
-      run: |
-        guiLine=$(awk -F'+includeGUI: ' '{print $2}' <<< $PR_DESCRIPTION | xargs)
-        echo "guiLine=$guiLine" >> $GITHUB_OUTPUT
-        echo "PR GUI override: $guiLine"
-
-    - name: Check for override in merge commit
-      if: contains(needs.gitVersion.outputs.branchName, 'main')
-      id: checkOverrideMerge
-      env:
-        MERGE_COMMIT: ${{ github.event.head_commit.message }}
-      run: |
-        guiLine=$(awk -F'+includeGUI: ' '{print $2}' <<< $MERGE_COMMIT | xargs)
-        echo "guiLine=$guiLine" >> $GITHUB_OUTPUT
-        echo "Merge GUI override: $guiLine"
-
-    - name: Determine override
-      id: determineOverride
-      if: |
-        steps.checkOverridePR.outputs.guiLine != '' ||
-        steps.checkOverrideMerge.outputs.guiLine != ''
-      env:
-        PR_GUILINE: ${{steps.checkOverridePR.outputs.guiLine}}
-        MERGE_GUILINE: ${{steps.checkOverrideMerge.outputs.guiLine}}
-      run: |
-        if [[ "$PR_GUILINE" == "false" || "$MERGE_GUILINE" == "false" ]]; then
-          echo "override=false" >> $GITHUB_OUTPUT
-        elif [[ "$PR_GUILINE" == "true" || "$MERGE_GUILINE" == "true" ]]; then
-          echo "override=true" >> $GITHUB_OUTPUT
-        else
-          echo "override=" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Echo override
-      id: echoOverride
-      if: |
-        steps.checkOverridePR.outputs.guiLine != '' ||
-        steps.checkOverrideMerge.outputs.guiLine != ''
-      run: |
-        echo "Final override value: ${{ steps.determineOverride.outputs.override }}"
-
-  buildAndTestGUI:
-    name: Build and Test GUI
-    needs: [checkWhetherGUIBuildNeeded, gitVersion]
-    runs-on: windows-latest
+      windows_enabled: true
+      windows_runner: windows-latest
+      windows_setup_command: |
+        bash scripts/ci-configure-nuget.sh
+        mkdir -p artifacts/ci/maui-windows
+        printf 'Windows MAUI CI diagnostics\n' > artifacts/ci/maui-windows/ci-started.txt
+        dotnet workload install maui-windows --skip-manifest-update
+      windows_restore_command: |
+        set -euo pipefail
+        dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj -p:ShuffleTaskWindowsOnly=true -p:SelfContained=false -p:PublishReadyToRun=false
+        dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --runtime win-x64 -p:ShuffleTaskWindowsOnly=true -p:SelfContained=false -p:PublishReadyToRun=false -p:RestoreRecursive=false
+      windows_build_command: dotnet build ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --configuration Release --framework net10.0-windows10.0.19041.0 --no-restore -p:ShuffleTaskWindowsOnly=true -p:SelfContained=false -p:PublishReadyToRun=false
+      windows_test_command: |
+        set -euo pipefail
+        find ShuffleTask.Presentation/bin/Release/net10.0-windows10.0.19041.0 -type f -name 'ShuffleTask.Presentation.dll' -print -quit | grep -q .
+        dotnet test ShuffleTask.Presentation.Tests/ShuffleTask.Presentation.Tests.csproj \
+          --configuration Release \
+          --logger 'trx;LogFilePrefix=presentation' \
+          --results-directory artifacts/ci/maui-windows \
+          --verbosity normal
+      windows_test_results_path: artifacts/ci/maui-windows/**
+    secrets:
+      nuget_token: ${{ secrets.YARE92_NUGET_TOKEN }}
     permissions:
-      checks: write
-      pull-requests: write
       contents: read
       packages: read
-    env:
-      GUI_BUILD_REQUIRED: ${{ (needs.checkWhetherGUIBuildNeeded.outputs.diff != '' && needs.checkWhetherGUIBuildNeeded.outputs.override != 'false') || needs.checkWhetherGUIBuildNeeded.outputs.override == 'true' }}
 
-    steps:
-    - name: Checkout
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        persist-credentials: false
-
-    - name: Setup .NET
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      id: setupDotnet
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 10.0.x
-
-    - name: Ensure workload cache directories
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      shell: pwsh
-      run: |
-        $dotnetRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\\dotnet'
-        foreach ($dir in @('packs', 'sdk-manifests', 'workloadinstall', 'metadata')) {
-          $fullPath = Join-Path $dotnetRoot $dir
-          if (-not (Test-Path $fullPath)) {
-            New-Item -ItemType Directory -Path $fullPath | Out-Null
-          }
-        }
-
-    - name: Restore cached Android SDK
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      id: restore-android-sdk
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          ${{ env.ANDROID_HOME }}
-          ${{ env.ANDROID_SDK_ROOT }}
-          C:\\Users\\runneradmin\\.android
-        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
-        restore-keys: |
-          ${{ runner.os }}-android-sdk-
-
-    - name: Ensure GitHub NuGet Source
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      shell: pwsh
-      env:
-        NUGET_TOKEN: ${{ secrets.YARE92_NUGET_TOKEN }}
-      run: |
-        dotnet nuget add source https://nuget.pkg.github.com/yaron-E92/index.json `
-          -n github `
-          -u Yaron-E92 `
-          -p $env:NUGET_TOKEN `
-          --store-password-in-clear-text
-
-    - name: Detect missing workloads
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      id: detect-workloads
-      shell: pwsh
-      run: |
-        $required = @('android', 'maui-android', 'wasi-experimental')
-        $installedOutput = dotnet workload list --include-previews
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to list workloads"
-          exit 1
-        }
-
-        $missing = @()
-        foreach ($workload in $required) {
-          if (-not ($installedOutput | Select-String -Pattern "^$workload\s" -SimpleMatch:$false)) {
-            $missing += $workload
-          }
-        }
-
-        if ($missing.Count -gt 0) {
-          Write-Host "Missing workloads: $($missing -join ', ')"
-          "missing=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        } else {
-          Write-Host "All required workloads already installed."
-          "missing=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        }
-
-    - name: Resolve workload cache buster when missing workloads
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.detect-workloads.outputs.missing == 'true' }}
-      shell: pwsh
-      run: |
-        $effective = "workload-cache-${{ github.run_id }}-$(New-Guid)"
-
-        "DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE=$effective" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        Write-Host "Using workload cache buster: '$effective'"
-
-    - name: Restore cached .NET workloads
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      id: restore-dotnet-workloads
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          'C:\Program Files\dotnet\packs'
-          'C:\Program Files\dotnet\sdk-manifests'
-          C:\ProgramData\dotnet\workload*
-          'C:\Program Files\dotnet\metadata'
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}
-        restore-keys: |
-          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}-
-          ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-
-          ${{ runner.os }}-dotnet-
-
-    - name: Install workload
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && (steps.detect-workloads.outputs.missing == 'true' || steps.restore-dotnet-workloads.outputs.cache-hit != 'true') }}
-      shell: pwsh
-      run: |
-        $workloads = @('android', 'maui-android', 'wasi-experimental')
-
-        dotnet workload install $workloads --skip-manifest-update
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to install workloads"
-          exit 1
-        }
-
-    - name: Setup Android SDK
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
-      shell: pwsh
-      run: |
-        Write-Host "Checking GUI changes: ${{needs.checkWhetherGUIBuildNeeded.outputs.diff}}"
-        & "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" "tools"
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to setup Android SDK"
-          exit 1
-        }
-
-    - name: Save .NET workloads cache
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && (steps.detect-workloads.outputs.missing == 'true' || steps.restore-dotnet-workloads.outputs.cache-hit != 'true') }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          'C:\Program Files\dotnet\packs'
-          'C:\Program Files\dotnet\sdk-manifests'
-          C:\ProgramData\dotnet\workload*
-          'C:\Program Files\dotnet\metadata'
-        key: ${{ runner.os }}-dotnet-${{ steps.setupDotnet.outputs.dotnet-version }}-${{ hashFiles('**/global.json') }}-${{ env.DOTNET_WORKLOAD_CACHE_BUSTER_EFFECTIVE }}
-
-    - name: Save Android SDK cache
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.restore-android-sdk.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v4
-      with:
-        path: |
-          ${{ env.ANDROID_HOME }}
-          ${{ env.ANDROID_SDK_ROOT }}
-          C:\\Users\\runneradmin\\.android
-        key: ${{ runner.os }}-android-sdk-${{ hashFiles('**/global.json') }}
-
-    - name: Restore dependencies
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      shell: pwsh
-      run: |
-        dotnet restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Failed to restore dependencies"
-          exit 1
-        }
-
-    - name: Build
-      id: build
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      shell: pwsh
-      run: |
-        dotnet build --no-restore ./ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
-        if ($LASTEXITCODE -ne 0) {
-          Write-Error "Build failed"
-          exit 1
-        }
-
-    - name: Test
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' }}
-      run: dotnet test ./ShuffleTask.Presentation.Tests/ShuffleTask.Presentation.Tests.csproj --logger "trx" --verbosity normal /p:AssemblyVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:FileVersion=${{ needs.gitVersion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ needs.gitVersion.outputs.informationalVersion }}
-    - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action/windows@v2
-      if: ${{ env.GUI_BUILD_REQUIRED == 'true' && steps.build.outcome == 'success' }}
-      with:
-        files: |
-          ShuffleTask.Presentation.Tests/TestResults/*.xml
-          ShuffleTask.Presentation.Tests/TestResults/*.trx
-          ShuffleTask.Presentation.Tests/TestResults/*.json
-
-    - name: GUI build not required
-      if: ${{ env.GUI_BUILD_REQUIRED != 'true' }}
-      run: echo "GUI build not required"
-
-  tagVersion:
-    name: Tag version on main if new
-    needs: [gitVersion, buildAndTestWithoutGUI, buildAndTestGUI]
-    if:  |
-      (needs.buildAndTestGUI.result == 'skipped' || needs.buildAndTestGUI.result == 'success') &&
-      contains(needs.gitVersion.outputs.branchName, 'main')
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs: [baseline, version-intent, headless, maui]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require version policy and product validation
+        shell: bash
+        env:
+          BASELINE: ${{ needs.baseline.result }}
+          VERSION_INTENT: ${{ needs.version-intent.result }}
+          HEADLESS: ${{ needs.headless.result }}
+          MAUI: ${{ needs.maui.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASELINE" != 'success' ||
+                "$HEADLESS" != 'success' ||
+                "$MAUI" != 'success' ]]; then
+            echo "Required CI failed: baseline=$BASELINE headless=$HEADLESS maui=$MAUI" >&2
+            exit 1
+          fi
+
+          if [[ "$VERSION_INTENT" != 'success' && "$VERSION_INTENT" != 'skipped' ]]; then
+            echo "Version intent validation failed: $VERSION_INTENT" >&2
+            exit 1
+          fi
+
+          echo 'ShuffleTask authoritative CI passed.'
+
+  version-tag:
+    name: Advance version tag
+    needs: [ci-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci-gate.result == 'success'
+    uses: yaron-E92/AutoDev/.github/workflows/version-tag.yml@7190410c74ab6674d1c8cc647b178bbc4b5cdd54
+    with:
+      head: ${{ github.sha }}
+      branch: main
     permissions:
       contents: write
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Fetch all tags
-      run: git fetch --tags --force
-    - name: Tag on main
-      id: tag_release
-      run: |
-          git config --global user.name "Github actions: gitversion"
-          git config --global user.email "gitversion@github-actions.com"
-          # Check if tag already exists
-          if git rev-parse "${{ needs.gitVersion.outputs.semVer}}" >/dev/null 2>&1; then
-            echo "Tag ${{ needs.gitVersion.outputs.semVer}} already exists, skipping tag creation"
-            echo "created=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Creating tag ${{ needs.gitVersion.outputs.semVer}}"
-            git tag -a "${{ needs.gitVersion.outputs.semVer}}" -m "Version ${{ needs.gitVersion.outputs.semVer}}"
-            git push --tags
-            echo "created=true" >> "$GITHUB_OUTPUT"
-          fi
-    - name: Export semantic version as VersionPrefix
-      if: steps.tag_release.outputs.created == 'true'
-      run: |
-        echo "Stamping VersionPrefix with ${{ needs.gitVersion.outputs.semVer }} for downstream automation"
-        echo "VersionPrefix=${{ needs.gitVersion.outputs.semVer }}" >> $GITHUB_ENV
+      pull-requests: read
