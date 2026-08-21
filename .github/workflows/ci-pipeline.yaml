@@ -86,8 +86,8 @@ jobs:
       windows_setup_command: |
         bash scripts/ci-configure-nuget.sh
         dotnet workload install maui-windows --skip-manifest-update
-      windows_restore_command: dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj -p:ShuffleTaskWindowsOnly=true
-      windows_build_command: dotnet build ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --configuration Release --framework net10.0-windows10.0.19041.0 --no-restore -p:ShuffleTaskWindowsOnly=true
+      windows_restore_command: dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj -p:ShuffleTaskWindowsOnly=true -p:RuntimeIdentifierOverride=win-x64
+      windows_build_command: dotnet build ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --configuration Release --framework net10.0-windows10.0.19041.0 --no-restore -p:ShuffleTaskWindowsOnly=true -p:RuntimeIdentifierOverride=win-x64
       windows_test_command: |
         set -euo pipefail
         find ShuffleTask.Presentation/bin/Release/net10.0-windows10.0.19041.0 -type f -name 'ShuffleTask.Presentation.dll' -print -quit | grep -q .
