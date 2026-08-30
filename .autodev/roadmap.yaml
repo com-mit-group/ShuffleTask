@@ -1,17 +1,15 @@
 version: 1
 priority:
-  # Immediate build/release foundations.
+  # Release/build safety foundation.
   - issue: 338
   - issue: 336
+  - issue: 323
+  - issue: 333
 
   # M1 — Frictionless, Trustworthy Task Flow.
   - issue: 308
   - issue: 309
   - issue: 334
-  - issue: 323
-
-  # Release pipeline after artifact and CI foundations.
-  - issue: 333
 
   # M2 — Explainable Decision Support.
   - issue: 311
@@ -37,11 +35,11 @@ priority:
   - issue: 326
   - issue: 327
 
-  # M6/M7 — First hosted integration and proven action.
+  # M6/M7 — First usable hosted integration and one proven action.
   - issue: 328
   - issue: 329
 
-  # Explicitly low-priority follow-up after the release pipeline is sound.
+  # R2 — Distribution polish after the signed release path is stable.
   - issue: 339
 
 fallback: oldest
