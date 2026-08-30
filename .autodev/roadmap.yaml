@@ -1,0 +1,47 @@
+version: 1
+priority:
+  # Immediate build/release foundations.
+  - issue: 338
+  - issue: 336
+
+  # M1 — Frictionless, Trustworthy Task Flow.
+  - issue: 308
+  - issue: 309
+  - issue: 334
+  - issue: 323
+
+  # Release pipeline after artifact and CI foundations.
+  - issue: 333
+
+  # M2 — Explainable Decision Support.
+  - issue: 311
+  - issue: 312
+  - issue: 313
+  - issue: 314
+
+  # M3 — Find, Edit, and Scale.
+  - issue: 316
+  - issue: 310
+  - issue: 315
+  - issue: 317
+  - issue: 318
+
+  # M4 — Coherent and Accessible Product.
+  - issue: 321
+  - issue: 322
+  - issue: 320
+  - issue: 319
+
+  # M5 — Module-Ready Application Boundary.
+  - issue: 324
+  - issue: 326
+  - issue: 327
+
+  # M6/M7 — First hosted integration and proven action.
+  - issue: 328
+  - issue: 329
+
+  # Explicitly low-priority follow-up after the release pipeline is sound.
+  - issue: 339
+
+fallback: oldest
