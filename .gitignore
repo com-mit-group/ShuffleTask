@@ -361,3 +361,11 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# AutoDev repository policy is versioned; other .autodev files stay local.
+.autodev/*
+!.autodev/
+!.autodev/repo.json
+!.autodev/queue.json
+!.autodev/roadmap.yaml
+!.autodev/privacy.json
