@@ -93,7 +93,7 @@ cd "$REPO_ROOT"
 
 require_command dotnet "Install the .NET SDK that matches the repo target, then rerun this command."
 
-if ! dotnet workload list 2>/dev/null | grep -Eq '(^|[[:space:]])maui($|[[:space:]]|-)|(^|[[:space:]])maui-android($|[[:space:]])'; then
+if ! dotnet workload list 2>/dev/null | grep -Eq '(^|[[:space:]])(maui(-android)?|android)($|[[:space:]])'; then
   fail "Install the .NET MAUI workload with: dotnet workload install maui"
 fi
 

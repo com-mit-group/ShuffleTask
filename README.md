@@ -38,6 +38,49 @@ Use `bash scripts/maui-android-ubuntu.sh run --device SERIAL` when more than one
 
 Windows, iOS, and MacCatalyst targets remain native-host paths. Build Windows on Windows, iOS on macOS with the Apple toolchain, and MacCatalyst on macOS.
 
+### Build and release outputs
+
+The repository enables the .NET SDK artifacts layout centrally. Restore, build, test, publish, and package outputs are generated under `artifacts/` rather than project-local `bin/` and `obj/` directories:
+
+```text
+artifacts/
+├── bin/<project>/<configuration>_<target-framework>[_<runtime-id>]/
+├── obj/<project>/...
+├── publish/<project>/<configuration>_<target-framework>_<runtime-id>/
+├── package/<project>/...
+└── release/
+    ├── win-x64/          # complete Windows deployment ZIP
+    └── android-arm64/    # Android APK
+```
+
+The SDK-managed `bin`, `obj`, `publish`, and `package` directories are intermediate or publish outputs. Only final distributables are staged for build → sign → release handoff under `artifacts/release/<platform-rid>/`. The Windows input is a ZIP of the complete self-contained publish directory, not a standalone executable.
+
+To validate the layout from a clean checkout, delete `artifacts/` and run the normal commands again:
+
+```bash
+rm -rf artifacts
+dotnet restore ShuffleTask.NoGUI.slnf
+dotnet build ShuffleTask.NoGUI.slnf --configuration Debug --no-restore
+dotnet test ShuffleTask.NoGUI.slnf --configuration Debug --no-build --no-restore
+```
+
+Publish Android on a host with the MAUI Android workload and Android SDK:
+
+```bash
+dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj \
+  --configuration Release --framework net10.0-android --runtime android-arm64
+```
+
+Publish Windows on Windows with the MAUI Windows workload:
+
+```powershell
+dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj `
+  --configuration Release --framework net10.0-windows10.0.19041.0 `
+  --runtime win-x64 --self-contained true /p:UseMonoRuntime=false
+```
+
+These publishes are discoverable under `artifacts/publish/ShuffleTask.Presentation/`. The **Build Artifacts** workflow validates those explicit paths and recreates the complete release handoff in `artifacts/release/win-x64/` and `artifacts/release/android-arm64/`; the signing and release workflows consume only those directories. The entire `artifacts/` tree is generated, Git-ignored, contains no source of record, and is always safe to delete before rebuilding.
+
 ### Core Flows
 
 **Task Selection Flow:**

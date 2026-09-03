@@ -94,7 +94,7 @@ Tasks progress through well-defined states with structured logging:
 **State Transitions:**
 - `Active → Snoozed`: User snoozes task for specified duration
 - `Active → Completed`: User marks task as done
-- `Snoozed → Active`: Auto-resume when snooze period expires  
+- `Snoozed → Active`: Auto-resume when snooze period expires
 - `Completed → Active`: For repeating tasks based on schedule
 - `* → Active`: Manual resume via ResumeTaskAsync
 
@@ -196,7 +196,7 @@ Structured logging provides comprehensive debugging information:
 6. User completes → `StorageService.MarkTaskDoneAsync()` → `Completed` state
 7. If repeating → Auto-transition to `Active` based on schedule
 
-### Notification Flow  
+### Notification Flow
 1. Timer expires → `ShuffleCoordinatorService.NotifyAsync()`
 2. `NotificationService` attempts platform-specific notification
 3. Fallback to XAML alert if platform notification fails
