@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
     <!-- CI can override VersionPrefix/Version to stamp builds; default keeps local builds consistent. -->
     <VersionPrefix Condition="'$(VersionPrefix)' == ''">0.4.3</VersionPrefix>
     <Version Condition="'$(Version)' == ''">$(VersionPrefix)</Version>

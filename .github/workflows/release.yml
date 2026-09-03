@@ -113,13 +113,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $downloadRoot = Join-Path (Get-Location) 'release-downloads'
-          if (Test-Path $downloadRoot) { Remove-Item $downloadRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $downloadRoot | Out-Null
+          $releaseRoot = Join-Path (Get-Location) 'artifacts/release'
+          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
+          $windowsTarget = Join-Path $releaseRoot 'win-x64'
+          $androidTarget = Join-Path $releaseRoot 'android-arm64'
+          New-Item -ItemType Directory -Force -Path $windowsTarget, $androidTarget | Out-Null
 
-          $winZip = Join-Path $downloadRoot 'signed-windows.zip'
-          $androidZip = Join-Path $downloadRoot 'signed-android.zip'
-          $metadataZip = Join-Path $downloadRoot 'signed-metadata.zip'
+          $winZip = Join-Path $env:RUNNER_TEMP 'signed-windows.zip'
+          $androidZip = Join-Path $env:RUNNER_TEMP 'signed-android.zip'
+          $metadataZip = Join-Path $env:RUNNER_TEMP 'signed-metadata.zip'
 
           $headers = @{
             'Authorization' = "Bearer $env:GH_TOKEN"
@@ -130,94 +132,32 @@ jobs:
           Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.android_url }}" -Headers $headers -OutFile $androidZip
           Invoke-WebRequest -Uri "${{ steps.check-signed.outputs.metadata_url }}" -Headers $headers -OutFile $metadataZip
 
-          $winExtract = Join-Path $downloadRoot 'windows'
-          $androidExtract = Join-Path $downloadRoot 'android'
-          $metadataExtract = Join-Path $downloadRoot 'metadata'
-          New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
-          New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
-          New-Item -ItemType Directory -Force -Path $metadataExtract | Out-Null
-
-          Expand-Archive -Path $winZip -DestinationPath $winExtract -Force
-          Expand-Archive -Path $androidZip -DestinationPath $androidExtract -Force
-          Expand-Archive -Path $metadataZip -DestinationPath $metadataExtract -Force
-
-          $releaseRoot = Join-Path (Get-Location) 'release-artifacts'
-          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
-
-          $windowsTarget = Join-Path $releaseRoot 'windows'
-          $androidTarget = Join-Path $releaseRoot 'android'
-          New-Item -ItemType Directory -Force -Path $windowsTarget | Out-Null
-          New-Item -ItemType Directory -Force -Path $androidTarget | Out-Null
-
-          $windowsExe = Get-ChildItem -Path $winExtract -Filter *.exe -Recurse |
-            Where-Object { $_.Name -like 'ShuffleTask*.exe' } |
-            Select-Object -First 1
-          if (-not $windowsExe) {
-            $windowsExe = Get-ChildItem -Path $winExtract -Filter *.exe -Recurse | Select-Object -First 1
-          }
-          if (-not $windowsExe) {
-            throw "Signed Windows executable not found under $winExtract"
-          }
-
-          $windowsSource = $windowsExe.Directory.FullName
-          $windowsRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $windowsSource)
-          Write-Host "Windows artifact root: $windowsRelative"
-
-          $androidApk = Get-ChildItem -Path $androidExtract -Filter *.apk -Recurse | Select-Object -First 1
-          if (-not $androidApk) {
-            throw "Signed Android APK not found under $androidExtract"
-          }
-
-          $androidSource = $androidApk.Directory.FullName
-          $androidRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $androidSource)
-          Write-Host "Android artifact root: $androidRelative"
-
-          $metadataFile = Get-ChildItem -Path $metadataExtract -Filter VERSION.txt -Recurse | Select-Object -First 1
-          if (-not $metadataFile) {
-            throw "VERSION.txt not found under $metadataExtract"
-          }
-
-          Copy-Item -Path (Join-Path $windowsSource '*') -Destination $windowsTarget -Recurse -Force
-          Copy-Item -Path (Join-Path $androidSource '*') -Destination $androidTarget -Recurse -Force
-          Copy-Item -Path $metadataFile.FullName -Destination (Join-Path $releaseRoot 'VERSION.txt') -Force
+          Expand-Archive -Path $winZip -DestinationPath $windowsTarget -Force
+          Expand-Archive -Path $androidZip -DestinationPath $androidTarget -Force
+          Expand-Archive -Path $metadataZip -DestinationPath $releaseRoot -Force
 
           Remove-Item $winZip, $androidZip, $metadataZip -Force
-          Remove-Item $downloadRoot -Recurse -Force
+          Get-ChildItem -Path ./artifacts/release -Recurse
 
-          Get-ChildItem -Path ./release-artifacts -Recurse
-
-      - name: Prepare packaged assets
+      - name: Validate standardized release inputs
         if: steps.check-release.outputs.exists == 'false'
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          $releaseRoot = Join-Path (Get-Location) 'release-artifacts'
-          $windowsDir = Join-Path $releaseRoot 'windows'
-          $androidDir = Join-Path $releaseRoot 'android'
+          $releaseRoot = Join-Path (Get-Location) 'artifacts/release'
+          $windowsDir = Join-Path $releaseRoot 'win-x64'
+          $androidDir = Join-Path $releaseRoot 'android-arm64'
           $versionFile = Join-Path $releaseRoot 'VERSION.txt'
+          $winZip = Join-Path $windowsDir "ShuffleTask-$version-windows.zip"
+          $apkFile = Join-Path $androidDir "ShuffleTask-$version.apk"
 
-          if (-not (Test-Path $windowsDir)) { throw "Windows payload directory missing at $windowsDir" }
-          if (-not (Test-Path $androidDir)) { throw "Android payload directory missing at $androidDir" }
+          if (-not (Test-Path $winZip)) { throw "Complete Windows deployment archive missing at artifacts/release/win-x64/ShuffleTask-$version-windows.zip" }
+          if (-not (Test-Path $apkFile)) { throw "Signed Android APK missing at artifacts/release/android-arm64/ShuffleTask-$version.apk" }
           if (-not (Test-Path $versionFile)) { throw "VERSION.txt missing at $versionFile" }
 
-          $winExe = Get-ChildItem $windowsDir -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
-          if (-not $winExe) { $winExe = Get-ChildItem $windowsDir -Filter *.exe -Recurse | Select-Object -First 1 }
-          if (-not $winExe) { throw "No Windows executable found under $windowsDir" }
-
-          $winZip = Join-Path $releaseRoot "ShuffleTask-$version-windows.zip"
-          if (Test-Path $winZip) { Remove-Item $winZip -Force }
-          Compress-Archive -Path (Join-Path $windowsDir '*') -DestinationPath $winZip -Force
-
-          $apkFile = Get-ChildItem $androidDir -Filter *.apk -Recurse | Select-Object -First 1
-          if (-not $apkFile) { throw "No Android APK found under $androidDir" }
-
-          $apkTarget = Join-Path $releaseRoot "ShuffleTask-$version.apk"
-          Copy-Item $apkFile.FullName $apkTarget -Force
-
-          Write-Host "Prepared packaged assets:"
+          Write-Host "Validated standardized release inputs:"
           Write-Host "  Windows ZIP: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $winZip))"
-          Write-Host "  Android APK: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $apkTarget))"
+          Write-Host "  Android APK: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $apkFile))"
           Write-Host "  VERSION.txt: $([System.IO.Path]::GetRelativePath((Get-Location).Path, $versionFile))"
 
       - name: Create release notes
@@ -266,9 +206,9 @@ jobs:
             --verify-tag \
             --title "ShuffleTask v$VERSION" \
             --notes-file release-notes.md \
-            ./release-artifacts/ShuffleTask-$VERSION-windows.zip \
-            ./release-artifacts/ShuffleTask-$VERSION.apk \
-            ./release-artifacts/VERSION.txt
+            ./artifacts/release/win-x64/ShuffleTask-$VERSION-windows.zip \
+            ./artifacts/release/android-arm64/ShuffleTask-$VERSION.apk \
+            ./artifacts/release/VERSION.txt
 
           echo "✓ Release created successfully"
         env:

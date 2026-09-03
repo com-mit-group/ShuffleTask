@@ -127,12 +127,10 @@ jobs:
           if (-not $windowsArtifact) { throw "Windows artifact $windowsName not found." }
           if (-not $androidArtifact) { throw "Android artifact $androidName not found." }
 
-          $artifactsRoot = Join-Path (Get-Location) 'artifacts'
-          if (Test-Path $artifactsRoot) { Remove-Item $artifactsRoot -Recurse -Force }
-          New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
-
-          $winExtract = Join-Path $artifactsRoot 'win'
-          $androidExtract = Join-Path $artifactsRoot 'android'
+          $releaseRoot = Join-Path (Get-Location) 'artifacts/release'
+          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
+          $winExtract = Join-Path $releaseRoot 'win-x64'
+          $androidExtract = Join-Path $releaseRoot 'android-arm64'
           New-Item -ItemType Directory -Force -Path $winExtract | Out-Null
           New-Item -ItemType Directory -Force -Path $androidExtract | Out-Null
 
@@ -156,26 +154,30 @@ jobs:
 
           Remove-Item $winZip, $androidZip -Force
 
-          $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Where-Object { $_.Name -like 'ShuffleTask*.exe' } | Select-Object -First 1
-          if (-not $winExe) {
-            $winExe = Get-ChildItem ./artifacts/win -Filter *.exe -Recurse | Select-Object -First 1
-          }
-          $androidApk = Get-ChildItem ./artifacts/android -Filter *.apk -Recurse | Select-Object -First 1
+          $winArchive = Join-Path $winExtract "ShuffleTask-$version-windows-unsigned.zip"
+          $androidApk = Join-Path $androidExtract "ShuffleTask-$version-unsigned.apk"
+          if (-not (Test-Path $winArchive)) { throw "Windows deployment archive missing at artifacts/release/win-x64/ShuffleTask-$version-windows-unsigned.zip" }
+          if (-not (Test-Path $androidApk)) { throw "Android APK missing at artifacts/release/android-arm64/ShuffleTask-$version-unsigned.apk" }
 
-          if (-not $winExe) { throw "Windows .exe not found in downloaded artifacts" }
-          if (-not $androidApk) { throw "Android .apk not found in downloaded artifacts" }
+          $deployment = Join-Path $env:RUNNER_TEMP 'windows-deployment'
+          if (Test-Path $deployment) { Remove-Item $deployment -Recurse -Force }
+          Expand-Archive -Path $winArchive -DestinationPath $deployment -Force
+          $winExe = Join-Path $deployment 'ShuffleTask.Presentation.exe'
+          if (-not (Test-Path $winExe)) { throw "Windows deployment archive is missing ShuffleTask.Presentation.exe" }
 
-          $winRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $winExe.FullName)
-          $androidRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $androidApk.FullName)
+          $winRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $winExe)
+          $androidRelative = [System.IO.Path]::GetRelativePath((Get-Location).Path, $androidApk)
 
           Add-Content -Path $env:GITHUB_ENV -Value @(
             "WINDOWS_UNSIGNED_EXE=$winRelative",
-            "ANDROID_UNSIGNED_APK=$androidRelative"
+            "ANDROID_UNSIGNED_APK=$androidRelative",
+            "WINDOWS_DEPLOYMENT_DIR=$deployment",
+            "WINDOWS_UNSIGNED_ARCHIVE=$winArchive"
           )
 
           Write-Host "✓ Downloaded artifacts:"
-          Write-Host "  Windows: $($winExe.Name)"
-          Write-Host "  Android: $($androidApk.Name)"
+          Write-Host "  Windows: artifacts/release/win-x64/ShuffleTask-$version-windows-unsigned.zip"
+          Write-Host "  Android: $androidRelative"
 
       - name: Debug signing session
         if: steps.check-signed.outputs.exists == 'false' && github.event.inputs.debug_session == 'true'
@@ -335,10 +337,12 @@ jobs:
 
           $signedName = "ShuffleTask-$version.exe"
           $signedPath = Join-Path (Split-Path $exeFile.FullName -Parent) $signedName
-          if (Test-Path $signedPath) { Remove-Item $signedPath -Force }
           Rename-Item -Path $exeFile.FullName -NewName $signedName -Force
-          $relativeSigned = [System.IO.Path]::GetRelativePath((Get-Location).Path, $signedPath)
-          Write-Host "✓ Signed and renamed to: $relativeSigned"
+
+          $signedArchive = Join-Path (Get-Location) "artifacts/release/win-x64/ShuffleTask-$version-windows.zip"
+          Compress-Archive -Path (Join-Path $env:WINDOWS_DEPLOYMENT_DIR '*') -DestinationPath $signedArchive -Force
+          Remove-Item $env:WINDOWS_UNSIGNED_ARCHIVE -Force
+          Write-Host "✓ Signed complete Windows deployment: artifacts/release/win-x64/ShuffleTask-$version-windows.zip"
 
       - name: Align and sign Android APK
         if: steps.check-signed.outputs.exists == 'false'
@@ -423,8 +427,8 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.inputs.version }}"
-          New-Item -ItemType Directory -Force -Path ./artifacts | Out-Null
-          Set-Content -Path ./artifacts/VERSION.txt -Value $version
+          New-Item -ItemType Directory -Force -Path ./artifacts/release | Out-Null
+          Set-Content -Path ./artifacts/release/VERSION.txt -Value $version
 
       - name: Mark signing status as success
         id: sign-status
@@ -444,7 +448,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-windows
-          path: artifacts/win
+          path: artifacts/release/win-x64/*.zip
           if-no-files-found: error
 
       - name: Upload signed Android artifact
@@ -452,7 +456,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-android
-          path: artifacts/android/*.apk
+          path: artifacts/release/android-arm64/*.apk
           if-no-files-found: error
 
       - name: Upload metadata
@@ -460,7 +464,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: signed-${{ github.event.inputs.version }}-metadata
-          path: artifacts/VERSION.txt
+          path: artifacts/release/VERSION.txt
           if-no-files-found: error
 
       - name: Skip message
