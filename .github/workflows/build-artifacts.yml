@@ -208,7 +208,6 @@ jobs:
           -r win-x64
           --self-contained true
           -f net10.0-windows10.0.19041.0
-          -o ./artifacts/win
           /p:UseMonoRuntime=false
           /p:AssemblyVersion=${{ steps.set-version.outputs.version }}
 
@@ -218,34 +217,43 @@ jobs:
           dotnet publish ShuffleTask.Presentation/ShuffleTask.Presentation.csproj
           -c Release
           -f net10.0-android
+          -r android-arm64
           /p:AndroidPackageFormat=apk
           /p:ApplicationVersion=${{ steps.set-version.outputs.android_version_code }}
-          -o ./artifacts/android
 
-      - name: Normalize artifact names
+      - name: Stage release inputs
         if: steps.check-artifacts.outputs.exists == 'false'
         shell: pwsh
         run: |
           $version = "${{ steps.set-version.outputs.version }}"
+          $winPublish = 'artifacts/publish/ShuffleTask.Presentation/release_net10.0-windows10.0.19041.0_win-x64'
+          $androidPublish = 'artifacts/publish/ShuffleTask.Presentation/release_net10.0-android_android-arm64'
+          if (-not (Test-Path $winPublish)) { throw "Windows publish directory missing at $winPublish" }
+          if (-not (Test-Path (Join-Path $winPublish 'ShuffleTask.Presentation.exe'))) {
+            throw "Windows publish output missing ShuffleTask.Presentation.exe at $winPublish"
+          }
+          if (-not (Test-Path $androidPublish)) { throw "Android publish directory missing at $androidPublish" }
 
-          $winOutput = Get-ChildItem 'artifacts/win' -Filter *.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $winOutput) { throw 'Windows publish output missing expected .exe file.' }
-          $winName = "ShuffleTask-$version-unsigned.exe"
-          Rename-Item -Path $winOutput.FullName -NewName $winName -Force
-          Write-Host "Renamed Windows artifact to: $winName"
+          $apks = @(Get-ChildItem $androidPublish -Filter *.apk -File | Where-Object { $_.Name -notlike '*-Signed.apk' })
+          if ($apks.Count -ne 1) { throw "Expected exactly one unsigned Android APK at $androidPublish; found $($apks.Count)." }
 
-          $apkOutput = Get-ChildItem 'artifacts/android' -Filter *.apk | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $apkOutput) { throw 'Android publish output missing expected .apk file.' }
-          $apkName = "ShuffleTask-$version-unsigned.apk"
-          Rename-Item -Path $apkOutput.FullName -NewName $apkName -Force
-          Write-Host "Renamed Android artifact to: $apkName"
+          $winRelease = 'artifacts/release/win-x64'
+          $androidRelease = 'artifacts/release/android-arm64'
+          New-Item -ItemType Directory -Force -Path $winRelease, $androidRelease | Out-Null
+
+          $winArchive = Join-Path $winRelease "ShuffleTask-$version-windows-unsigned.zip"
+          Compress-Archive -Path (Join-Path $winPublish '*') -DestinationPath $winArchive -Force
+          $apkTarget = Join-Path $androidRelease "ShuffleTask-$version-unsigned.apk"
+          Copy-Item $apks[0].FullName $apkTarget -Force
+          Write-Host "Staged complete Windows deployment at $winArchive"
+          Write-Host "Staged Android APK at $apkTarget"
 
       - name: Upload Windows artifact
         if: steps.check-artifacts.outputs.exists == 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: build-${{ steps.set-version.outputs.version }}-windows-unsigned
-          path: artifacts/win/*.exe
+          path: artifacts/release/win-x64/*.zip
           if-no-files-found: error
 
       - name: Upload Android artifact
@@ -253,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: build-${{ steps.set-version.outputs.version }}-android-unsigned
-          path: artifacts/android/*.apk
+          path: artifacts/release/android-arm64/*.apk
           if-no-files-found: error
 
       - name: Upload metadata
