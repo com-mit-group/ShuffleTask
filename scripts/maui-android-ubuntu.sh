@@ -9,11 +9,12 @@ DEVICE_SERIAL=""
 
 usage() {
   cat <<'USAGE'
-Usage: bash scripts/maui-android-ubuntu.sh [build|run] [--configuration Debug|Release] [--device SERIAL]
+Usage: bash scripts/maui-android-ubuntu.sh [doctor|build|run] [--configuration Debug|Release] [--device SERIAL]
 
 Build or run the MAUI host from Ubuntu through the Android target.
 
 Examples:
+  bash scripts/maui-android-ubuntu.sh doctor
   bash scripts/maui-android-ubuntu.sh build
   bash scripts/maui-android-ubuntu.sh run
   bash scripts/maui-android-ubuntu.sh run --device emulator-5554
@@ -55,11 +56,11 @@ resolve_android_sdk() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    build|run)
+    doctor|build|run)
       MODE="$1"
       shift
       ;;
-    --configuration)
+    -c|--configuration)
       [[ $# -ge 2 ]] || fail "--configuration requires Debug or Release."
       CONFIGURATION="$2"
       shift 2
@@ -100,6 +101,11 @@ ANDROID_SDK="$(resolve_android_sdk)" || fail "Install the Android SDK and set AN
 [[ -d "$ANDROID_SDK" ]] || fail "Android SDK path does not exist: $ANDROID_SDK"
 [[ -d "$ANDROID_SDK/platforms" ]] || fail "Android SDK platforms are missing. Install an Android platform with sdkmanager, for example: sdkmanager \"platforms;android-35\""
 [[ -d "$ANDROID_SDK/platform-tools" ]] || fail "Android SDK platform-tools are missing. Install them with: sdkmanager \"platform-tools\""
+
+if [[ "$MODE" == "doctor" ]]; then
+  printf 'Android build prerequisites are available.\n'
+  exit 0
+fi
 
 BUILD_ARGS=(
   "$PROJECT"
