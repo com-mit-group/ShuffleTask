@@ -79,7 +79,7 @@ jobs:
         dotnet workload install maui-android --skip-manifest-update
       android_restore_command: dotnet restore ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --runtime android-arm64
       android_build_command: dotnet build ShuffleTask.Presentation/ShuffleTask.Presentation.csproj --configuration Release --framework net10.0-android --runtime android-arm64 --no-restore
-      android_test_command: find artifacts/bin/ShuffleTask.Presentation/release_net10.0-android_android-arm64 -type f -name 'ShuffleTask.Presentation.dll' -print -quit | grep -q .
+      android_test_command: find artifacts/bin/ShuffleTask.Presentation/release_android-arm64 -type f -name 'ShuffleTask.Presentation.dll' -print -quit | grep -q .
 
       windows_enabled: true
       windows_runner: windows-latest
