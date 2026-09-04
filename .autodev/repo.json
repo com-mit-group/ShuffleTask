@@ -2,5 +2,10 @@
   "opencode": {
     "enabled": true
   },
+  "ux": {
+    "enabled": true,
+    "artifact": "oci://ghcr.io/yaron-e92/ux/shuffletask@sha256:4327a6d6da98733043287fb5b51faa533b7553733168a6aa11628fe43036aae6",
+    "product": "shuffletask"
+  },
   "version": 1
 }
