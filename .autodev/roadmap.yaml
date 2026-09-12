@@ -1,14 +1,18 @@
 version: 1
 priority:
-  # Release/build safety foundation.
-  - issue: 338
-  - issue: 336
+  # Safety gate before another product wave: every current test project and the
+  # Android/Windows product shapes must actually run for relevant changes.
   - issue: 323
-  - issue: 333
 
-  # M1 — Frictionless, Trustworthy Task Flow.
+  # M1 — Frictionless, Trustworthy Daily Task Flow.
+  # Capture quickly, complete safely, expose the advanced editor, then make
+  # recurrence mean what users actually ask for: obligations within flexible
+  # periods rather than accidental fixed dates. Automatic prompting remains a
+  # separate stochastic cadence that selects from current eligibility at delivery.
   - issue: 308
   - issue: 309
+  - issue: 316
+  - issue: 351
   - issue: 334
 
   # M2 — Explainable Decision Support.
@@ -17,18 +21,28 @@ priority:
   - issue: 313
   - issue: 314
 
-  # M3 — Find, Edit, and Scale.
-  - issue: 316
+  # M3 — Find, Act, and Scale the daily loop.
   - issue: 310
   - issue: 315
   - issue: 317
   - issue: 318
+
+  # Recompose first-run only after the title-first capture, editor, no-eligible,
+  # and V2 Now/Tasks/Settings foundations it consumes are available.
+  - issue: 347
 
   # M4 — Coherent and Accessible Product.
   - issue: 321
   - issue: 322
   - issue: 320
   - issue: 319
+
+  # Release/build work remains important, but it no longer displaces the product
+  # loop merely because it is infrastructure. Build/sign/release correctness is
+  # addressed once the standalone daily-use surface is coherent and useful.
+  - issue: 338
+  - issue: 336
+  - issue: 333
 
   # M5 — Module-Ready Application Boundary.
   - issue: 324
@@ -38,6 +52,12 @@ priority:
   # M6/M7 — First usable hosted integration and one proven action.
   - issue: 328
   - issue: 329
+
+  # M8 — Consume source-owned executable readiness without becoming a workflow
+  # planner. #352 stays blocked until Streamline exposes a stable ready-work
+  # provider contract; ShuffleTask receives executable leaves only and continues
+  # to own scheduling, snooze, recurrence, and Now selection.
+  - issue: 352
 
   # R2 — Distribution polish after the signed release path is stable.
   - issue: 339
