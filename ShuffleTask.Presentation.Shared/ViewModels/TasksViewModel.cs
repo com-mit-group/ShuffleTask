@@ -31,6 +31,7 @@ public partial class TasksViewModel : ObservableObject
     private bool _pendingSort;
     private bool _pendingRefresh;
     private bool _suppressRefresh;
+    private int _quickAddRunning;
     private List<TaskListItem> _allTasks = [];
 
     public TasksViewModel(IStorageService storage, TimeProvider clock, INetworkSyncService networkSyncService, AppSettings settings, IShuffleLogger? logger = null)
@@ -50,13 +51,24 @@ public partial class TasksViewModel : ObservableObject
     public IReadOnlyList<string> SortOptions { get; } = new[] { SortScore, SortImportance, SortDeadline };
     public IReadOnlyList<string> RepeatFilterOptions { get; } = new[] { RepeatFilterAll, RepeatFilterRepeating, RepeatFilterNonRepeating };
     public OperationState OperationState { get; } = new();
+    public OperationState QuickAddOperationState { get; } = new();
 
     public bool HasActiveTasks => ActiveTasks.Count > 0;
     public bool HasDoneTasks => DoneTasks.Count > 0;
     public bool HasTasks => HasActiveTasks || HasDoneTasks;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanQuickAdd))]
     private bool isBusy;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanQuickAdd))]
+    private bool isQuickAdding;
+
+    [ObservableProperty]
+    private string quickAddTitle = string.Empty;
+
+    public bool CanQuickAdd => !IsBusy && !IsQuickAdding;
 
     [ObservableProperty]
     private string selectedSort = SortScore;
@@ -186,6 +198,134 @@ public partial class TasksViewModel : ObservableObject
         SelectedRepeatFilter = RepeatFilterAll;
         _suppressRefresh = false;
         ApplySortToCollections();
+    }
+
+    public Task QuickAddAsync(CancellationToken cancellationToken = default)
+        => SubmitQuickAddAsync(QuickAddTitle, cancellationToken);
+
+    public void ClearQuickAdd()
+    {
+        if (IsQuickAdding)
+        {
+            return;
+        }
+
+        QuickAddTitle = string.Empty;
+        QuickAddOperationState.SetIdle();
+    }
+
+    private async Task SubmitQuickAddAsync(string submittedText, CancellationToken cancellationToken)
+    {
+        if (IsBusy || Interlocked.CompareExchange(ref _quickAddRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        string title = submittedText.Trim();
+        if (title.Length == 0)
+        {
+            QuickAddOperationState.SetValidation("Enter a task title before adding.");
+            Interlocked.Exchange(ref _quickAddRunning, 0);
+            return;
+        }
+
+        IsQuickAdding = true;
+        QuickAddOperationState.SetLoading("Saving task…");
+        var task = CreateDefaultTask(title);
+        bool locallySaved = false;
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _storage.InitializeAsync();
+            await _storage.AddTaskAsync(task);
+            locallySaved = true;
+
+            TaskListItem item = TaskListItem.From(task, _settings, _clock.GetUtcNow());
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                _allTasks.RemoveAll(existing => string.Equals(existing.Task.Id, task.Id, StringComparison.OrdinalIgnoreCase));
+                _allTasks.Add(item);
+                ApplySortToCollections();
+                if (string.Equals(QuickAddTitle, submittedText, StringComparison.Ordinal))
+                {
+                    QuickAddTitle = string.Empty;
+                }
+
+                return Task.CompletedTask;
+            });
+
+            bool visible = Tasks.Any(existing => string.Equals(existing.Task.Id, task.Id, StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                await _networkSyncService.PublishTaskUpsertAsync(task, cancellationToken);
+                QuickAddOperationState.SetSuccess(
+                    visible ? $"Task saved: {title}" : $"Task saved: {title}. It is hidden by the current filters.",
+                    true);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogOperation(LogLevel.Warning, "QuickAddTaskSync", $"Task '{task.Id}' was saved locally but could not be published.", ex);
+                QuickAddOperationState.SetSuccess($"Task saved: {title}. Saved on this device; sync pending.", true);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested && !locallySaved)
+        {
+            QuickAddOperationState.SetTransientFailure(
+                "The task was not saved. Try again.",
+                false,
+                token => SubmitQuickAddAsync(submittedText, token),
+                isBlocking: false);
+        }
+        catch (Exception ex) when (!locallySaved)
+        {
+            _logger?.LogOperation(LogLevel.Error, "QuickAddTask", "Failed to save a quick-capture task.", ex);
+            QuickAddOperationState.SetTransientFailure(
+                "The task was not saved on this device. Check storage access and try again.",
+                false,
+                token => SubmitQuickAddAsync(submittedText, token),
+                isBlocking: false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogOperation(LogLevel.Warning, "QuickAddTaskRefresh", $"Task '{task.Id}' was saved locally but the Tasks view could not be updated.", ex);
+            if (string.Equals(QuickAddTitle, submittedText, StringComparison.Ordinal))
+            {
+                QuickAddTitle = string.Empty;
+            }
+
+            QuickAddOperationState.SetSuccess($"Task saved: {title}. Saved on this device; refresh pending.", true);
+        }
+        finally
+        {
+            IsQuickAdding = false;
+            Interlocked.Exchange(ref _quickAddRunning, 0);
+        }
+    }
+
+    private TaskItem CreateDefaultTask(string title)
+    {
+        var task = new TaskItem
+        {
+            Title = title,
+            Importance = 1,
+            SizePoints = 3.0,
+            AutoShuffleAllowed = true,
+            Status = TaskLifecycleStatus.Active
+        };
+
+        if (!string.IsNullOrWhiteSpace(_settings.Network.UserId))
+        {
+            task.UserId = _settings.Network.UserId;
+            task.DeviceId = string.Empty;
+        }
+        else
+        {
+            task.UserId = string.Empty;
+            task.DeviceId = _settings.Network.DeviceId;
+        }
+
+        return task;
     }
 
     private void RequestRefresh(bool isSortChange = false)

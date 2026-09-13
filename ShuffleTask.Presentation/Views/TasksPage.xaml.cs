@@ -11,6 +11,10 @@ public partial class TasksPage : ContentPage
     private readonly TasksViewModel _vm;
     private readonly IServiceProvider _services;
     private bool _onboardingEditorOpen;
+    private bool _skipNextAppearingLoad;
+#if WINDOWS
+    private Microsoft.UI.Xaml.Controls.TextBox? _quickAddPlatformEntry;
+#endif
 
     public event EventHandler<OnboardingTaskEditorClosedEventArgs>? OnboardingTaskEditorClosed;
 
@@ -23,6 +27,23 @@ public partial class TasksPage : ContentPage
 
         Appearing += OnAppearing;
         _vm.OperationState.PropertyChanged += OnOperationStateChanged;
+        _vm.QuickAddOperationState.PropertyChanged += OnQuickAddOperationStateChanged;
+        QuickAddEntry.HandlerChanged += OnQuickAddEntryHandlerChanged;
+    }
+
+    private void OnQuickAddOperationStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OperationState.Announcement)
+            || string.IsNullOrWhiteSpace(_vm.QuickAddOperationState.Announcement))
+        {
+            return;
+        }
+
+        OperationStateAccessibility.Announce(Dispatcher, QuickAddStateMessage, _vm.QuickAddOperationState);
+        if (_vm.QuickAddOperationState.LocalDataSaved == true)
+        {
+            Dispatcher.Dispatch(() => QuickAddEntry.Focus());
+        }
     }
 
     private void OnOperationStateChanged(object? sender, PropertyChangedEventArgs e)
@@ -38,6 +59,12 @@ public partial class TasksPage : ContentPage
 
     private async void OnAppearing(object? sender, EventArgs e)
     {
+        if (_skipNextAppearingLoad)
+        {
+            _skipNextAppearingLoad = false;
+            return;
+        }
+
         await _vm.LoadAsync();
     }
 
@@ -45,6 +72,60 @@ public partial class TasksPage : ContentPage
     {
         await OpenEditorAsync(null);
     }
+
+    private async void OnQuickAddClicked(object? sender, EventArgs e)
+    {
+        await SubmitQuickAddAsync();
+    }
+
+    private async void OnQuickAddCompleted(object? sender, EventArgs e)
+    {
+        await SubmitQuickAddAsync();
+    }
+
+    private async Task SubmitQuickAddAsync()
+    {
+        await _vm.QuickAddAsync();
+        QuickAddEntry.Focus();
+    }
+
+    private void OnQuickAddEntryHandlerChanged(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        if (_quickAddPlatformEntry is not null)
+        {
+            _quickAddPlatformEntry.KeyDown -= OnQuickAddPlatformKeyDown;
+        }
+
+        _quickAddPlatformEntry = QuickAddEntry.Handler?.PlatformView as Microsoft.UI.Xaml.Controls.TextBox;
+        if (_quickAddPlatformEntry is not null)
+        {
+            _quickAddPlatformEntry.KeyDown += OnQuickAddPlatformKeyDown;
+        }
+#endif
+    }
+
+#if WINDOWS
+    private void OnQuickAddPlatformKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Escape || string.IsNullOrEmpty(_vm.QuickAddTitle))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        Dispatcher.Dispatch(async () =>
+        {
+            bool clear = await DisplayAlert("Clear quick add?", "Discard the quick task title?", "Clear", "Keep editing");
+            if (clear)
+            {
+                _vm.ClearQuickAdd();
+            }
+
+            QuickAddEntry.Focus();
+        });
+    }
+#endif
 
     public async Task OpenNewTaskForOnboardingAsync()
     {
@@ -171,8 +252,10 @@ public partial class TasksPage : ContentPage
 
             editorVm.Saved -= OnEditorSaved;
             navigationPage.Popped -= OnEditorPopped;
+            _skipNextAppearingLoad = true;
             if (!_onboardingEditorOpen)
             {
+                Dispatcher.Dispatch(() => QuickAddEntry.Focus());
                 return;
             }
 

@@ -178,15 +178,70 @@
         </DataTemplate>
     </ContentPage.Resources>
     <ContentPage.ToolbarItems>
-        <ToolbarItem Text="+"
-                     Priority="0"
-                     Order="Primary"
-                     IsEnabled="{Binding OperationState.IsNotLoading}"
-                     Clicked="OnAddClicked" />
+        <ToolbarItem Text="Add details"
+                      Priority="0"
+                      Order="Primary"
+                      IsEnabled="{Binding OperationState.IsNotLoading}"
+                      Clicked="OnAddClicked" />
     </ContentPage.ToolbarItems>
 
-    <Grid RowDefinitions="Auto,Auto,*">
-        <VerticalStackLayout Padding="12,8"
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+        <Border Grid.Row="0"
+                Margin="12,12,12,4"
+                Padding="12"
+                StrokeShape="RoundRectangle 12"
+                BackgroundColor="{AppThemeBinding Light=#f7fafc, Dark=#1a202c}"
+                Stroke="{AppThemeBinding Light=#cbd5e0, Dark=#4a5568}">
+            <VerticalStackLayout Spacing="8"
+                                 SemanticProperties.Description="Quick add task">
+                <Label Text="Quick add task"
+                       FontSize="16"
+                       FontAttributes="Bold" />
+                <Grid ColumnDefinitions="*,Auto"
+                      ColumnSpacing="8">
+                    <Entry x:Name="QuickAddEntry"
+                           Grid.Column="0"
+                           Text="{Binding QuickAddTitle}"
+                           Placeholder="What needs doing?"
+                           ReturnType="Done"
+                           MinimumHeightRequest="48"
+                           IsEnabled="{Binding CanQuickAdd}"
+                           Completed="OnQuickAddCompleted"
+                           SemanticProperties.Description="Quick add task title" />
+                    <Button Grid.Column="1"
+                            Text="Add"
+                            MinimumWidthRequest="64"
+                            MinimumHeightRequest="48"
+                            IsEnabled="{Binding CanQuickAdd}"
+                            Clicked="OnQuickAddClicked"
+                            SemanticProperties.Description="Add quick task" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <Border Grid.Row="1"
+                Margin="12,4"
+                Padding="12"
+                StrokeShape="RoundRectangle 8"
+                IsVisible="{Binding QuickAddOperationState.HasMessage}"
+                SemanticProperties.Description="{Binding QuickAddOperationState.Announcement}">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <ActivityIndicator IsVisible="{Binding QuickAddOperationState.IsLoading}"
+                                   IsRunning="{Binding QuickAddOperationState.IsLoading}" />
+                <Label x:Name="QuickAddStateMessage"
+                       Grid.Column="1"
+                       Text="{Binding QuickAddOperationState.Message}"
+                       VerticalTextAlignment="Center" />
+                <Button Grid.Column="2"
+                        Text="Retry"
+                        MinimumHeightRequest="44"
+                        Command="{Binding QuickAddOperationState.RetryCommand}"
+                        IsVisible="{Binding QuickAddOperationState.CanRetry}" />
+            </Grid>
+        </Border>
+
+        <VerticalStackLayout Grid.Row="2"
+                             Padding="12,8"
                              Spacing="8">
             <HorizontalStackLayout Spacing="12">
                 <Label Text="Sort by"
@@ -250,7 +305,7 @@
             </VerticalStackLayout>
         </VerticalStackLayout>
 
-        <Border Grid.Row="1"
+        <Border Grid.Row="3"
                 Margin="12,4"
                 Padding="12"
                 StrokeShape="RoundRectangle 8"
@@ -270,7 +325,7 @@
             </Grid>
         </Border>
 
-        <CollectionView Grid.Row="2"
+        <CollectionView Grid.Row="4"
                         IsVisible="{Binding HasTasks}"
                         ItemsSource="{Binding TaskGroups}"
                         IsGrouped="True"
@@ -292,7 +347,7 @@
                 </DataTemplate>
             </CollectionView.GroupHeaderTemplate>
         </CollectionView>
-        <Grid Grid.Row="2"
+        <Grid Grid.Row="4"
               IsVisible="False">
             <Grid.Triggers>
                 <DataTrigger TargetType="Grid"
@@ -316,7 +371,7 @@
                        FontSize="18"
                        HorizontalTextAlignment="Center" />
                 <Label Grid.Row="1"
-                       Text="Tap + to add your first task"
+                       Text="Use Quick add task above or Add details for more options"
                        FontSize="14"
                        HorizontalTextAlignment="Center"
                        TextColor="Gray" />

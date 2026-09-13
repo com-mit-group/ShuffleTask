@@ -87,6 +87,39 @@ public class TasksViewModelTests
     }
 
     [Test]
+    public async Task QuickAddAsync_WhileLoadIsRunning_IsDisabledAndRetainsInput()
+    {
+        IStorageService storage = Substitute.For<IStorageService>();
+        storage.InitializeAsync().Returns(Task.CompletedTask);
+        var loadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseLoad = new TaskCompletionSource<List<TaskItem>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        storage.GetTasksAsync(Arg.Any<string?>(), Arg.Any<string>()).Returns(_ =>
+        {
+            loadStarted.TrySetResult();
+            return releaseLoad.Task;
+        });
+        var viewModel = new TasksViewModel(storage, _clock, Substitute.For<INetworkSyncService>(), _settings)
+        {
+            QuickAddTitle = "Keep this thought"
+        };
+
+        Task load = viewModel.LoadAsync();
+        await loadStarted.Task;
+
+        Assert.That(viewModel.CanQuickAdd, Is.False);
+        await viewModel.QuickAddAsync();
+        Assert.That(viewModel.QuickAddTitle, Is.EqualTo("Keep this thought"));
+        await storage.DidNotReceive().AddTaskAsync(Arg.Any<TaskItem>());
+
+        releaseLoad.SetResult([]);
+        await load;
+
+        Assert.That(viewModel.CanQuickAdd, Is.True);
+        await viewModel.QuickAddAsync();
+        await storage.Received(1).AddTaskAsync(Arg.Is<TaskItem>(task => task.Title == "Keep this thought"));
+    }
+
+    [Test]
     public async Task LoadAsync_WhenRefreshFails_PreservesTasksAndRetryRecovers()
     {
         IStorageService storage = Substitute.For<IStorageService>();
@@ -116,6 +149,179 @@ public class TasksViewModelTests
         {
             Assert.That(viewModel.Tasks.Select(item => item.Task.Id), Is.EqualTo(new[] { task.Id }));
             Assert.That(viewModel.OperationState.Kind, Is.EqualTo(OperationStateKind.Success));
+        });
+    }
+
+    [Test]
+    public async Task QuickAddAsync_CreatesOneDefaultActiveTaskAndClearsMatchingInput()
+    {
+        var networkSync = Substitute.For<INetworkSyncService>();
+        var viewModel = new TasksViewModel(_storage, _clock, networkSync, _settings)
+        {
+            QuickAddTitle = "  Send stand-up notes  "
+        };
+
+        await viewModel.QuickAddAsync();
+
+        TaskItem saved = (await _storage.GetTasksAsync()).Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(saved.Title, Is.EqualTo("Send stand-up notes"));
+            Assert.That(saved.Status, Is.EqualTo(TaskLifecycleStatus.Active));
+            Assert.That(saved.Importance, Is.EqualTo(1));
+            Assert.That(saved.SizePoints, Is.EqualTo(3.0));
+            Assert.That(saved.AutoShuffleAllowed, Is.True);
+            Assert.That(viewModel.Tasks.Select(item => item.Task.Id), Is.EqualTo(new[] { saved.Id }));
+            Assert.That(viewModel.QuickAddTitle, Is.Empty);
+            Assert.That(viewModel.QuickAddOperationState.LocalDataSaved, Is.True);
+        });
+        await networkSync.Received(1).PublishTaskUpsertAsync(Arg.Is<TaskItem>(task => task.Id == saved.Id), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task QuickAddAsync_ConcurrentSubmissionCreatesExactlyOneTask()
+    {
+        IStorageService storage = Substitute.For<IStorageService>();
+        storage.InitializeAsync().Returns(Task.CompletedTask);
+        var addStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseAdd = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var captured = new List<TaskItem>();
+        storage.AddTaskAsync(Arg.Any<TaskItem>()).Returns(call =>
+        {
+            captured.Add(TaskItem.Clone(call.Arg<TaskItem>()));
+            addStarted.TrySetResult();
+            return releaseAdd.Task;
+        });
+        var networkSync = Substitute.For<INetworkSyncService>();
+        var viewModel = new TasksViewModel(storage, _clock, networkSync, _settings)
+        {
+            QuickAddTitle = "Only once"
+        };
+
+        Task first = viewModel.QuickAddAsync();
+        await addStarted.Task;
+        await viewModel.QuickAddAsync();
+        releaseAdd.SetResult();
+        await first;
+
+        Assert.That(captured, Has.Count.EqualTo(1));
+        await storage.Received(1).AddTaskAsync(Arg.Any<TaskItem>());
+    }
+
+    [Test]
+    public async Task QuickAddAsync_LocalFailureRetainsInputAndRetryDoesNotDuplicate()
+    {
+        IStorageService storage = Substitute.For<IStorageService>();
+        storage.InitializeAsync().Returns(Task.CompletedTask);
+        storage.AddTaskAsync(Arg.Any<TaskItem>()).Returns(
+            Task.FromException(new IOException("Injected local failure.")),
+            Task.CompletedTask);
+        var networkSync = Substitute.For<INetworkSyncService>();
+        var viewModel = new TasksViewModel(storage, _clock, networkSync, _settings)
+        {
+            QuickAddTitle = "Retry me"
+        };
+
+        await viewModel.QuickAddAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.QuickAddTitle, Is.EqualTo("Retry me"));
+            Assert.That(viewModel.QuickAddOperationState.CanRetry, Is.True);
+            Assert.That(viewModel.QuickAddOperationState.LocalDataSaved, Is.False);
+        });
+
+        await viewModel.QuickAddOperationState.RetryCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Tasks, Has.Count.EqualTo(1));
+            Assert.That(viewModel.QuickAddTitle, Is.Empty);
+            Assert.That(viewModel.QuickAddOperationState.LocalDataSaved, Is.True);
+        });
+        await storage.Received(2).AddTaskAsync(Arg.Any<TaskItem>());
+        await networkSync.Received(1).PublishTaskUpsertAsync(Arg.Any<TaskItem>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task QuickAddAsync_DownstreamFailureReportsLocalSaveWithoutRetry()
+    {
+        var networkSync = Substitute.For<INetworkSyncService>();
+        networkSync.PublishTaskUpsertAsync(Arg.Any<TaskItem>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new IOException("Injected publish failure.")));
+        var viewModel = new TasksViewModel(_storage, _clock, networkSync, _settings)
+        {
+            QuickAddTitle = "Saved locally"
+        };
+
+        await viewModel.QuickAddAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Tasks, Has.Count.EqualTo(1));
+            Assert.That(viewModel.QuickAddOperationState.Message, Does.Contain("sync pending"));
+            Assert.That(viewModel.QuickAddOperationState.LocalDataSaved, Is.True);
+            Assert.That(viewModel.QuickAddOperationState.CanRetry, Is.False);
+        });
+    }
+
+    [Test]
+    public async Task QuickAddAsync_ActiveFilterExplainsWhenSavedTaskIsHidden()
+    {
+        _viewModel.SelectedRepeatFilter = "Repeating";
+        _viewModel.QuickAddTitle = "One-off hidden task";
+
+        await _viewModel.QuickAddAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_viewModel.Tasks, Is.Empty);
+            Assert.That(_viewModel.QuickAddOperationState.Message, Does.Contain("hidden by the current filters"));
+            Assert.That(_viewModel.QuickAddOperationState.LocalDataSaved, Is.True);
+        });
+        Assert.That(await _storage.GetTasksAsync(), Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task QuickAddAsync_StaleCompletionDoesNotClearNewerText()
+    {
+        IStorageService storage = Substitute.For<IStorageService>();
+        storage.InitializeAsync().Returns(Task.CompletedTask);
+        var addStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseAdd = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        storage.AddTaskAsync(Arg.Any<TaskItem>()).Returns(_ =>
+        {
+            addStarted.TrySetResult();
+            return releaseAdd.Task;
+        });
+        var viewModel = new TasksViewModel(storage, _clock, Substitute.For<INetworkSyncService>(), _settings)
+        {
+            QuickAddTitle = "First thought"
+        };
+
+        Task submission = viewModel.QuickAddAsync();
+        await addStarted.Task;
+        viewModel.QuickAddTitle = "Newer thought";
+        releaseAdd.SetResult();
+        await submission;
+
+        Assert.That(viewModel.QuickAddTitle, Is.EqualTo("Newer thought"));
+        await storage.Received(1).AddTaskAsync(Arg.Is<TaskItem>(task => task.Title == "First thought"));
+    }
+
+    [Test]
+    public async Task QuickAddAsync_ValidationRetainsFocusableInputStateWithoutSaving()
+    {
+        _viewModel.QuickAddTitle = "   ";
+
+        await _viewModel.QuickAddAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_viewModel.QuickAddTitle, Is.EqualTo("   "));
+            Assert.That(_viewModel.QuickAddOperationState.Kind, Is.EqualTo(OperationStateKind.Validation));
+            Assert.That(_viewModel.QuickAddOperationState.Message, Does.Contain("title"));
+            Assert.That(_viewModel.Tasks, Is.Empty);
         });
     }
 
