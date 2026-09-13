@@ -21,6 +21,15 @@ priority:
   - issue: 313
   - issue: 314
 
+  # M2.5 — Hierarchical scheduling for coherent bodies of executable work.
+  # TaskCollections are scheduling containers, not projects/workflow graphs:
+  # score the collection once at the top level, then score eligible members
+  # internally. Simple blockers gate schedulability only; richer dependency
+  # semantics remain Streamline-owned.
+  - issue: 353
+  - issue: 354
+  - issue: 355
+
   # M3 — Find, Act, and Scale the daily loop.
   - issue: 310
   - issue: 315
@@ -38,9 +47,8 @@ priority:
   - issue: 319
 
   # Release/build work remains important, but it no longer displaces the product
-  # loop merely because it is infrastructure. Build/sign/release correctness is
-  # addressed once the standalone daily-use surface is coherent and useful.
-  - issue: 338
+  # loop merely because it is infrastructure. #338 is already complete; the
+  # remaining Windows/release work follows once the daily-use surface is coherent.
   - issue: 336
   - issue: 333
 
@@ -55,9 +63,11 @@ priority:
 
   # M8 — Consume source-owned executable readiness without becoming a workflow
   # planner. #352 stays blocked until Streamline exposes a stable ready-work
-  # provider contract; ShuffleTask receives executable leaves only and continues
-  # to own scheduling, snooze, recurrence, and Now selection.
+  # provider contract. Once ready-work admission is stable, #356 groups one
+  # Streamline workflow into one TaskCollection without copying its dependency
+  # graph or allowing leaf count to inflate top-level scheduling probability.
   - issue: 352
+  - issue: 356
 
   # R2 — Distribution polish after the signed release path is stable.
   - issue: 339
