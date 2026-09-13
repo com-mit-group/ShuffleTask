@@ -25,7 +25,8 @@ priority:
   # TaskCollections are scheduling containers, not projects/workflow graphs:
   # score the collection once at the top level, then score eligible members
   # internally. Simple blockers gate schedulability only; richer dependency
-  # semantics remain Streamline-owned.
+  # semantics remain owned by their source planning product and never enter
+  # ShuffleTask directly.
   - issue: 353
   - issue: 354
   - issue: 355
@@ -61,11 +62,12 @@ priority:
   - issue: 328
   - issue: 329
 
-  # M8 — Consume source-owned executable readiness without becoming a workflow
-  # planner. #352 stays blocked until Streamline exposes a stable ready-work
-  # provider contract. Once ready-work admission is stable, #356 groups one
-  # Streamline workflow into one TaskCollection without copying its dependency
-  # graph or allowing leaf count to inflate top-level scheduling probability.
+  # M8 — Accept externally sourced executable work only through SecondBrain.
+  # #352 defines the source-neutral external-work behavior and #356 exposes the
+  # bounded SecondBrain-facing TaskCollection/member admission contract. Neither
+  # issue may reference or query Streamline (or another upstream planner)
+  # directly. The concrete Streamline -> SecondBrain -> ShuffleTask mediation is
+  # owned by SecondBrain#147 and remains blocked on Streamline alignment/contracts.
   - issue: 352
   - issue: 356
 
